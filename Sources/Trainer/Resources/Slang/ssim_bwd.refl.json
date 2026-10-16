@@ -1,0 +1,189 @@
+{
+    "parameters": [
+        {
+            "name": "img1",
+            "binding": {"kind": "constantBuffer", "index": 0},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float32"
+                }
+            }
+        },
+        {
+            "name": "img2",
+            "binding": {"kind": "constantBuffer", "index": 1},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float32"
+                }
+            }
+        },
+        {
+            "name": "dL_dmap",
+            "binding": {"kind": "constantBuffer", "index": 2},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float32"
+                }
+            }
+        },
+        {
+            "name": "dm_dmu1",
+            "binding": {"kind": "constantBuffer", "index": 3},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float16"
+                }
+            }
+        },
+        {
+            "name": "dm_dsigma1_sq",
+            "binding": {"kind": "constantBuffer", "index": 4},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float16"
+                }
+            }
+        },
+        {
+            "name": "dm_dsigma12",
+            "binding": {"kind": "constantBuffer", "index": 5},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float16"
+                }
+            }
+        },
+        {
+            "name": "gauss",
+            "binding": {"kind": "constantBuffer", "index": 6},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float32"
+                }
+            }
+        },
+        {
+            "name": "dims",
+            "binding": {"kind": "constantBuffer", "index": 7},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "int32"
+                }
+            }
+        },
+        {
+            "name": "lossParams",
+            "binding": {"kind": "constantBuffer", "index": 8},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float32"
+                }
+            }
+        },
+        {
+            "name": "dL_dimg1",
+            "binding": {"kind": "constantBuffer", "index": 9},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "access": "readWrite",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float32"
+                }
+            }
+        }
+    ],
+    "entryPoints": [
+        {
+            "name": "ssim_bwd",
+            "stage": "compute",
+            "parameters": [
+                {
+                    "name": "tid",
+                    "semanticName": "SV_DISPATCHTHREADID",
+                    "type": {
+                        "kind": "vector",
+                        "elementCount": 3,
+                        "elementType": {
+                            "kind": "scalar",
+                            "scalarType": "uint32"
+                        }
+                    }
+                }
+            ],
+            "threadGroupSize": [16, 16, 1],
+            "bindings": [
+                {
+                    "name": "img1",
+                    "binding": {"kind": "constantBuffer", "index": 0, "used": 1}
+                },
+                {
+                    "name": "img2",
+                    "binding": {"kind": "constantBuffer", "index": 1, "used": 1}
+                },
+                {
+                    "name": "dL_dmap",
+                    "binding": {"kind": "constantBuffer", "index": 2, "used": 1}
+                },
+                {
+                    "name": "dm_dmu1",
+                    "binding": {"kind": "constantBuffer", "index": 3, "used": 1}
+                },
+                {
+                    "name": "dm_dsigma1_sq",
+                    "binding": {"kind": "constantBuffer", "index": 4, "used": 1}
+                },
+                {
+                    "name": "dm_dsigma12",
+                    "binding": {"kind": "constantBuffer", "index": 5, "used": 1}
+                },
+                {
+                    "name": "gauss",
+                    "binding": {"kind": "constantBuffer", "index": 6, "used": 1}
+                },
+                {
+                    "name": "dims",
+                    "binding": {"kind": "constantBuffer", "index": 7, "used": 1}
+                },
+                {
+                    "name": "lossParams",
+                    "binding": {"kind": "constantBuffer", "index": 8, "used": 1}
+                },
+                {
+                    "name": "dL_dimg1",
+                    "binding": {"kind": "constantBuffer", "index": 9, "used": 1}
+                }
+            ]
+        }
+    ],
+    "bindlessSpaceIndex": 1
+}

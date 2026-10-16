@@ -1,0 +1,157 @@
+{
+    "parameters": [
+        {
+            "name": "depths",
+            "binding": {"kind": "constantBuffer", "index": 0},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float32"
+                }
+            }
+        },
+        {
+            "name": "frame_info",
+            "binding": {"kind": "constantBuffer", "index": 1},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float32"
+                }
+            }
+        },
+        {
+            "name": "frame_dims",
+            "binding": {"kind": "constantBuffer", "index": 2},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "int32"
+                }
+            }
+        },
+        {
+            "name": "targets",
+            "binding": {"kind": "constantBuffer", "index": 3},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "int32"
+                }
+            }
+        },
+        {
+            "name": "neighbors",
+            "binding": {"kind": "constantBuffer", "index": 4},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "int32"
+                }
+            }
+        },
+        {
+            "name": "params",
+            "binding": {"kind": "constantBuffer", "index": 5},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "int32"
+                }
+            }
+        },
+        {
+            "name": "rel_tol_buf",
+            "binding": {"kind": "constantBuffer", "index": 6},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float32"
+                }
+            }
+        },
+        {
+            "name": "out_depth",
+            "binding": {"kind": "constantBuffer", "index": 7},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "access": "readWrite",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float32"
+                }
+            }
+        }
+    ],
+    "entryPoints": [
+        {
+            "name": "mvs_fusion_consistency",
+            "stage": "compute",
+            "parameters": [
+                {
+                    "name": "tid",
+                    "semanticName": "SV_DISPATCHTHREADID",
+                    "type": {
+                        "kind": "vector",
+                        "elementCount": 3,
+                        "elementType": {
+                            "kind": "scalar",
+                            "scalarType": "uint32"
+                        }
+                    }
+                }
+            ],
+            "threadGroupSize": [16, 16, 1],
+            "bindings": [
+                {
+                    "name": "depths",
+                    "binding": {"kind": "constantBuffer", "index": 0, "used": 1}
+                },
+                {
+                    "name": "frame_info",
+                    "binding": {"kind": "constantBuffer", "index": 1, "used": 1}
+                },
+                {
+                    "name": "frame_dims",
+                    "binding": {"kind": "constantBuffer", "index": 2, "used": 1}
+                },
+                {
+                    "name": "targets",
+                    "binding": {"kind": "constantBuffer", "index": 3, "used": 1}
+                },
+                {
+                    "name": "neighbors",
+                    "binding": {"kind": "constantBuffer", "index": 4, "used": 1}
+                },
+                {
+                    "name": "params",
+                    "binding": {"kind": "constantBuffer", "index": 5, "used": 1}
+                },
+                {
+                    "name": "rel_tol_buf",
+                    "binding": {"kind": "constantBuffer", "index": 6, "used": 1}
+                },
+                {
+                    "name": "out_depth",
+                    "binding": {"kind": "constantBuffer", "index": 7, "used": 1}
+                }
+            ]
+        }
+    ],
+    "bindlessSpaceIndex": 1
+}

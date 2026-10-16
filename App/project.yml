@@ -1,0 +1,111 @@
+name: Splatelier
+options:
+  bundleIdPrefix: io.github.shuta-ochiai
+  developmentLanguage: ja
+  createIntermediateGroups: true
+  deploymentTarget:
+    iOS: "18.0"
+
+# xcodegen spec. `xcodegen generate` regenerates Splatelier.xcodeproj.
+# References the Swift Package itself (../Package.swift) as a local package and
+# links the Trainer library product.
+
+packages:
+  splatelier:
+    path: ..
+
+# Declare the App's shared scheme explicitly. Without it, `xcodegen generate` leaves no shared
+# scheme at all, and when Xcode recreates schemes automatically it **picks the local package's CLI
+# executable `splatelier` as the run target** → "The executable is not codesigned / not
+# of a type CoreDevice recognizes" and it cannot be installed on the device (the CLI is neither an
+# app bundle nor a signing target; hit on 2026-06-10). With a shared scheme in place,
+# Splatelier is always selected by default after regeneration.
+schemes:
+  Splatelier:
+    build:
+      targets:
+        Splatelier: all
+    run:
+      # Release, because speed and temperature are checked on device (Debug Swift is much slower on the CPU side).
+      # The generated .xcscheme is also Release, so keep them aligned so regeneration does not revert to Debug.
+      config: Release
+    profile:
+      config: Release
+    archive:
+      config: Release
+
+targets:
+  Splatelier:
+    type: application
+    platform: iOS
+    sources:
+      - Splatelier
+    info:
+      path: Splatelier/Info.plist
+      properties:
+        # Display name shown on the home screen, App Switcher, etc. Takes precedence over CFBundleName
+        # ($(PRODUCT_NAME)=Splatelier). Without it, regeneration exposes the internal name.
+        CFBundleDisplayName: Splatelier
+        # Game Mode (iOS 18+): an OS feature that gives the foreground app priority on CPU/GPU and
+        # suppresses background work to raise sustained performance. Enabled to run on-device training
+        # with focus. It only takes effect with both keys:
+        #   - GCSupportsGameMode: declares support
+        #   - LSApplicationCategoryType: games category (without it the OS does not treat the app as a
+        #     Game Mode target). It also makes the App Store list the app as a game.
+        # It cannot exceed the thermal ceiling itself (it only raises the sustained clock floor + reduces contention).
+        GCSupportsGameMode: true
+        LSApplicationCategoryType: public.app-category.games
+        # Input is RGB + coarse pose from ARKit. CameraUsageDescription is the text shown in the OS dialog
+        # when the ARSession starts. Unified as "Splatelier" to match the display name.
+        NSCameraUsageDescription: Splatelier uses the camera with ARKit to reconstruct scenes in 3D.
+        # For moving Documents (trained PLYs / logs) in and out via Files.app / iTunes.
+        # SplatLibraryView's import / ShareLink export rely on these two.
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+        UILaunchScreen:
+          # Full-screen background at launch. A near-black charcoal (Assets.xcassets/
+          # LaunchBackground.colorset) continuous with the dark UI, preventing a white flash.
+          # No logo splash (user request). The app icon carries the brand.
+          UIColorName: LaunchBackground
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UIRequiredDeviceCapabilities:
+          - arm64
+          - arkit
+    # Increased-memory entitlement. On-device training at 1440 × many gaussians (dense seed of
+    # hundreds of thousands of points + environment sphere) exceeds the default jetsam limit (~2-3GB)
+    # and gets OOM-killed, so com.apple.developer.kernel.increased-memory-limit raises the limit
+    # (greatly expanded on 8GB devices). It is a standard entitlement granted automatically by
+    # Automatic signing, with no special request needed. xcodegen generates the .entitlements and wires CODE_SIGN_ENTITLEMENTS.
+    entitlements:
+      path: Splatelier/Splatelier.entitlements
+      properties:
+        com.apple.developer.kernel.increased-memory-limit: true
+    settings:
+      base:
+        TARGETED_DEVICE_FAMILY: "1,2"     # iPhone + iPad
+        IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+        # Make the brand cyan (Assets.xcassets/AccentColor.colorset) the default for all tints.
+        # This switches .tint / .accentColor / borderedProminent / Toggle / ProgressView from the
+        # standard iOS blue to Splatelier's cyan.
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        SWIFT_VERSION: "6.0"
+        # Also state in project.yml the team baked into the committed .xcodeproj.
+        # If left empty, `xcodegen generate` resets the team to "" (the omission trap) and
+        # Automatic signing fails. People on a different team replace it with their own ID.
+        DEVELOPMENT_TEAM: Q7V45KS8Z5
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.shuta-ochiai.splatelier
+        CODE_SIGN_STYLE: Automatic
+        SWIFT_STRICT_CONCURRENCY: minimal
+    dependencies:
+      - package: splatelier
+        product: Trainer
+      - package: splatelier
+        product: Capture
+      # Viewer for trained PLYs (imported by TrainingView / SplatLibraryView).
+      # Without it, after `xcodegen generate` the app fails to build with
+      # "no such module 'SplatViewerKit'".
+      - package: splatelier
+        product: SplatViewerKit

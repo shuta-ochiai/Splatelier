@@ -1,0 +1,400 @@
+{
+    "parameters": [
+        {
+            "name": "Hpp_in",
+            "binding": {"kind": "constantBuffer", "index": 0},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float32"
+                }
+            }
+        },
+        {
+            "name": "hpp_dims",
+            "binding": {"kind": "constantBuffer", "index": 1},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "int32"
+                }
+            }
+        },
+        {
+            "name": "Hpp_inv",
+            "binding": {"kind": "constantBuffer", "index": 2},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "access": "readWrite",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float32"
+                }
+            }
+        },
+        {
+            "name": "Hpp_inv_in",
+            "binding": {"kind": "constantBuffer", "index": 3},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float32"
+                }
+            }
+        },
+        {
+            "name": "bp_in",
+            "binding": {"kind": "constantBuffer", "index": 4},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float32"
+                }
+            }
+        },
+        {
+            "name": "htp_blocks",
+            "binding": {"kind": "constantBuffer", "index": 5},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float32"
+                }
+            }
+        },
+        {
+            "name": "htp_cam_idx",
+            "binding": {"kind": "constantBuffer", "index": 6},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "int32"
+                }
+            }
+        },
+        {
+            "name": "sorted_obs_idx",
+            "binding": {"kind": "constantBuffer", "index": 7},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "int32"
+                }
+            }
+        },
+        {
+            "name": "point_obs_starts",
+            "binding": {"kind": "constantBuffer", "index": 8},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "int32"
+                }
+            }
+        },
+        {
+            "name": "point_obs_counts",
+            "binding": {"kind": "constantBuffer", "index": 9},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "int32"
+                }
+            }
+        },
+        {
+            "name": "schur_dims",
+            "binding": {"kind": "constantBuffer", "index": 10},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "int32"
+                }
+            }
+        },
+        {
+            "name": "redLHS",
+            "binding": {"kind": "constantBuffer", "index": 11},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "access": "readWrite",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float32"
+                }
+            }
+        },
+        {
+            "name": "redRHS",
+            "binding": {"kind": "constantBuffer", "index": 12},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "access": "readWrite",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float32"
+                }
+            }
+        },
+        {
+            "name": "Hpp_inv_bs",
+            "binding": {"kind": "constantBuffer", "index": 13},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float32"
+                }
+            }
+        },
+        {
+            "name": "bp_bs",
+            "binding": {"kind": "constantBuffer", "index": 14},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float32"
+                }
+            }
+        },
+        {
+            "name": "htp_blocks_bs",
+            "binding": {"kind": "constantBuffer", "index": 15},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float32"
+                }
+            }
+        },
+        {
+            "name": "htp_cam_idx_bs",
+            "binding": {"kind": "constantBuffer", "index": 16},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "int32"
+                }
+            }
+        },
+        {
+            "name": "sorted_obs_idx_bs",
+            "binding": {"kind": "constantBuffer", "index": 17},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "int32"
+                }
+            }
+        },
+        {
+            "name": "point_obs_starts_bs",
+            "binding": {"kind": "constantBuffer", "index": 18},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "int32"
+                }
+            }
+        },
+        {
+            "name": "point_obs_counts_bs",
+            "binding": {"kind": "constantBuffer", "index": 19},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "int32"
+                }
+            }
+        },
+        {
+            "name": "deltaCam_bs",
+            "binding": {"kind": "constantBuffer", "index": 20},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float32"
+                }
+            }
+        },
+        {
+            "name": "bs_dims",
+            "binding": {"kind": "constantBuffer", "index": 21},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "int32"
+                }
+            }
+        },
+        {
+            "name": "deltaPt_out",
+            "binding": {"kind": "constantBuffer", "index": 22},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "access": "readWrite",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float32"
+                }
+            }
+        }
+    ],
+    "entryPoints": [
+        {
+            "name": "ba_back_substitute",
+            "stage": "compute",
+            "parameters": [
+                {
+                    "name": "tid",
+                    "semanticName": "SV_DISPATCHTHREADID",
+                    "type": {
+                        "kind": "vector",
+                        "elementCount": 3,
+                        "elementType": {
+                            "kind": "scalar",
+                            "scalarType": "uint32"
+                        }
+                    }
+                }
+            ],
+            "threadGroupSize": [128, 1, 1],
+            "bindings": [
+                {
+                    "name": "Hpp_in",
+                    "binding": {"kind": "constantBuffer", "index": 0, "used": 0}
+                },
+                {
+                    "name": "hpp_dims",
+                    "binding": {"kind": "constantBuffer", "index": 1, "used": 0}
+                },
+                {
+                    "name": "Hpp_inv",
+                    "binding": {"kind": "constantBuffer", "index": 2, "used": 0}
+                },
+                {
+                    "name": "Hpp_inv_in",
+                    "binding": {"kind": "constantBuffer", "index": 3, "used": 0}
+                },
+                {
+                    "name": "bp_in",
+                    "binding": {"kind": "constantBuffer", "index": 4, "used": 0}
+                },
+                {
+                    "name": "htp_blocks",
+                    "binding": {"kind": "constantBuffer", "index": 5, "used": 0}
+                },
+                {
+                    "name": "htp_cam_idx",
+                    "binding": {"kind": "constantBuffer", "index": 6, "used": 0}
+                },
+                {
+                    "name": "sorted_obs_idx",
+                    "binding": {"kind": "constantBuffer", "index": 7, "used": 0}
+                },
+                {
+                    "name": "point_obs_starts",
+                    "binding": {"kind": "constantBuffer", "index": 8, "used": 0}
+                },
+                {
+                    "name": "point_obs_counts",
+                    "binding": {"kind": "constantBuffer", "index": 9, "used": 0}
+                },
+                {
+                    "name": "schur_dims",
+                    "binding": {"kind": "constantBuffer", "index": 10, "used": 0}
+                },
+                {
+                    "name": "redLHS",
+                    "binding": {"kind": "constantBuffer", "index": 11, "used": 0}
+                },
+                {
+                    "name": "redRHS",
+                    "binding": {"kind": "constantBuffer", "index": 12, "used": 0}
+                },
+                {
+                    "name": "Hpp_inv_bs",
+                    "binding": {"kind": "constantBuffer", "index": 13, "used": 1}
+                },
+                {
+                    "name": "bp_bs",
+                    "binding": {"kind": "constantBuffer", "index": 14, "used": 1}
+                },
+                {
+                    "name": "htp_blocks_bs",
+                    "binding": {"kind": "constantBuffer", "index": 15, "used": 1}
+                },
+                {
+                    "name": "htp_cam_idx_bs",
+                    "binding": {"kind": "constantBuffer", "index": 16, "used": 1}
+                },
+                {
+                    "name": "sorted_obs_idx_bs",
+                    "binding": {"kind": "constantBuffer", "index": 17, "used": 1}
+                },
+                {
+                    "name": "point_obs_starts_bs",
+                    "binding": {"kind": "constantBuffer", "index": 18, "used": 1}
+                },
+                {
+                    "name": "point_obs_counts_bs",
+                    "binding": {"kind": "constantBuffer", "index": 19, "used": 1}
+                },
+                {
+                    "name": "deltaCam_bs",
+                    "binding": {"kind": "constantBuffer", "index": 20, "used": 1}
+                },
+                {
+                    "name": "bs_dims",
+                    "binding": {"kind": "constantBuffer", "index": 21, "used": 1}
+                },
+                {
+                    "name": "deltaPt_out",
+                    "binding": {"kind": "constantBuffer", "index": 22, "used": 1}
+                }
+            ]
+        }
+    ],
+    "bindlessSpaceIndex": 1
+}

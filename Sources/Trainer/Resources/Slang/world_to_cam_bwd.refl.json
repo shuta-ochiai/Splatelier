@@ -1,0 +1,224 @@
+{
+    "parameters": [
+        {
+            "name": "means3d_world",
+            "binding": {"kind": "constantBuffer", "index": 0},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float32"
+                }
+            }
+        },
+        {
+            "name": "cov3ds_world",
+            "binding": {"kind": "constantBuffer", "index": 1},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float32"
+                }
+            }
+        },
+        {
+            "name": "viewmat",
+            "binding": {"kind": "constantBuffer", "index": 2},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float32"
+                }
+            }
+        },
+        {
+            "name": "means3d_cam",
+            "binding": {"kind": "constantBuffer", "index": 3},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "access": "readWrite",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float32"
+                }
+            }
+        },
+        {
+            "name": "cov3ds_cam",
+            "binding": {"kind": "constantBuffer", "index": 4},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "access": "readWrite",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float32"
+                }
+            }
+        },
+        {
+            "name": "means3d_world_bwd",
+            "binding": {"kind": "constantBuffer", "index": 5},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float32"
+                }
+            }
+        },
+        {
+            "name": "cov3ds_world_bwd",
+            "binding": {"kind": "constantBuffer", "index": 6},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float32"
+                }
+            }
+        },
+        {
+            "name": "viewmat_bwd",
+            "binding": {"kind": "constantBuffer", "index": 7},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float32"
+                }
+            }
+        },
+        {
+            "name": "cot_means3d_cam",
+            "binding": {"kind": "constantBuffer", "index": 8},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float32"
+                }
+            }
+        },
+        {
+            "name": "cot_cov3ds_cam",
+            "binding": {"kind": "constantBuffer", "index": 9},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float32"
+                }
+            }
+        },
+        {
+            "name": "grad_means3d_world",
+            "binding": {"kind": "constantBuffer", "index": 10},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "access": "readWrite",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float32"
+                }
+            }
+        },
+        {
+            "name": "grad_cov3ds_world",
+            "binding": {"kind": "constantBuffer", "index": 11},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "access": "readWrite",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float32"
+                }
+            }
+        }
+    ],
+    "entryPoints": [
+        {
+            "name": "world_to_cam_bwd",
+            "stage": "compute",
+            "parameters": [
+                {
+                    "name": "tid",
+                    "semanticName": "SV_DISPATCHTHREADID",
+                    "type": {
+                        "kind": "vector",
+                        "elementCount": 3,
+                        "elementType": {
+                            "kind": "scalar",
+                            "scalarType": "uint32"
+                        }
+                    }
+                }
+            ],
+            "threadGroupSize": [1, 1, 1],
+            "bindings": [
+                {
+                    "name": "means3d_world",
+                    "binding": {"kind": "constantBuffer", "index": 0, "used": 0}
+                },
+                {
+                    "name": "cov3ds_world",
+                    "binding": {"kind": "constantBuffer", "index": 1, "used": 0}
+                },
+                {
+                    "name": "viewmat",
+                    "binding": {"kind": "constantBuffer", "index": 2, "used": 0}
+                },
+                {
+                    "name": "means3d_cam",
+                    "binding": {"kind": "constantBuffer", "index": 3, "used": 0}
+                },
+                {
+                    "name": "cov3ds_cam",
+                    "binding": {"kind": "constantBuffer", "index": 4, "used": 0}
+                },
+                {
+                    "name": "means3d_world_bwd",
+                    "binding": {"kind": "constantBuffer", "index": 5, "used": 1}
+                },
+                {
+                    "name": "cov3ds_world_bwd",
+                    "binding": {"kind": "constantBuffer", "index": 6, "used": 1}
+                },
+                {
+                    "name": "viewmat_bwd",
+                    "binding": {"kind": "constantBuffer", "index": 7, "used": 1}
+                },
+                {
+                    "name": "cot_means3d_cam",
+                    "binding": {"kind": "constantBuffer", "index": 8, "used": 1}
+                },
+                {
+                    "name": "cot_cov3ds_cam",
+                    "binding": {"kind": "constantBuffer", "index": 9, "used": 1}
+                },
+                {
+                    "name": "grad_means3d_world",
+                    "binding": {"kind": "constantBuffer", "index": 10, "used": 1}
+                },
+                {
+                    "name": "grad_cov3ds_world",
+                    "binding": {"kind": "constantBuffer", "index": 11, "used": 1}
+                }
+            ]
+        }
+    ],
+    "bindlessSpaceIndex": 1
+}

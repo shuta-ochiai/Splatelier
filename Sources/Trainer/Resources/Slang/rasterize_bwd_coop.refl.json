@@ -1,0 +1,288 @@
+{
+    "parameters": [
+        {
+            "name": "means2d",
+            "binding": {"kind": "constantBuffer", "index": 0},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float32"
+                }
+            }
+        },
+        {
+            "name": "conics",
+            "binding": {"kind": "constantBuffer", "index": 1},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float32"
+                }
+            }
+        },
+        {
+            "name": "colors",
+            "binding": {"kind": "constantBuffer", "index": 2},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float16"
+                }
+            }
+        },
+        {
+            "name": "opacities",
+            "binding": {"kind": "constantBuffer", "index": 3},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float32"
+                }
+            }
+        },
+        {
+            "name": "flatten_ids",
+            "binding": {"kind": "constantBuffer", "index": 4},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "int32"
+                }
+            }
+        },
+        {
+            "name": "tile_offsets",
+            "binding": {"kind": "constantBuffer", "index": 5},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "int32"
+                }
+            }
+        },
+        {
+            "name": "dims",
+            "binding": {"kind": "constantBuffer", "index": 6},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "int32"
+                }
+            }
+        },
+        {
+            "name": "background",
+            "binding": {"kind": "constantBuffer", "index": 7},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float32"
+                }
+            }
+        },
+        {
+            "name": "render_alpha",
+            "binding": {"kind": "constantBuffer", "index": 8},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float32"
+                }
+            }
+        },
+        {
+            "name": "last_ids",
+            "binding": {"kind": "constantBuffer", "index": 9},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "int32"
+                }
+            }
+        },
+        {
+            "name": "v_render_color",
+            "binding": {"kind": "constantBuffer", "index": 10},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float32"
+                }
+            }
+        },
+        {
+            "name": "v_render_alpha",
+            "binding": {"kind": "constantBuffer", "index": 11},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float32"
+                }
+            }
+        },
+        {
+            "name": "v_means2d",
+            "binding": {"kind": "constantBuffer", "index": 12},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "access": "readWrite",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float32"
+                }
+            }
+        },
+        {
+            "name": "v_conics",
+            "binding": {"kind": "constantBuffer", "index": 13},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "access": "readWrite",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float32"
+                }
+            }
+        },
+        {
+            "name": "v_colors",
+            "binding": {"kind": "constantBuffer", "index": 14},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "access": "readWrite",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float32"
+                }
+            }
+        },
+        {
+            "name": "v_opacities",
+            "binding": {"kind": "constantBuffer", "index": 15},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "access": "readWrite",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float32"
+                }
+            }
+        }
+    ],
+    "entryPoints": [
+        {
+            "name": "rasterize_bwd_coop",
+            "stage": "compute",
+            "parameters": [
+                {
+                    "name": "tid",
+                    "semanticName": "SV_DISPATCHTHREADID",
+                    "type": {
+                        "kind": "vector",
+                        "elementCount": 3,
+                        "elementType": {
+                            "kind": "scalar",
+                            "scalarType": "uint32"
+                        }
+                    }
+                }
+            ],
+            "threadGroupSize": [16, 16, 1],
+            "bindings": [
+                {
+                    "name": "means2d",
+                    "binding": {"kind": "constantBuffer", "index": 0, "used": 1}
+                },
+                {
+                    "name": "conics",
+                    "binding": {"kind": "constantBuffer", "index": 1, "used": 1}
+                },
+                {
+                    "name": "colors",
+                    "binding": {"kind": "constantBuffer", "index": 2, "used": 1}
+                },
+                {
+                    "name": "opacities",
+                    "binding": {"kind": "constantBuffer", "index": 3, "used": 1}
+                },
+                {
+                    "name": "flatten_ids",
+                    "binding": {"kind": "constantBuffer", "index": 4, "used": 1}
+                },
+                {
+                    "name": "tile_offsets",
+                    "binding": {"kind": "constantBuffer", "index": 5, "used": 1}
+                },
+                {
+                    "name": "dims",
+                    "binding": {"kind": "constantBuffer", "index": 6, "used": 1}
+                },
+                {
+                    "name": "background",
+                    "binding": {"kind": "constantBuffer", "index": 7, "used": 1}
+                },
+                {
+                    "name": "render_alpha",
+                    "binding": {"kind": "constantBuffer", "index": 8, "used": 1}
+                },
+                {
+                    "name": "last_ids",
+                    "binding": {"kind": "constantBuffer", "index": 9, "used": 1}
+                },
+                {
+                    "name": "v_render_color",
+                    "binding": {"kind": "constantBuffer", "index": 10, "used": 1}
+                },
+                {
+                    "name": "v_render_alpha",
+                    "binding": {"kind": "constantBuffer", "index": 11, "used": 1}
+                },
+                {
+                    "name": "v_means2d",
+                    "binding": {"kind": "constantBuffer", "index": 12, "used": 1}
+                },
+                {
+                    "name": "v_conics",
+                    "binding": {"kind": "constantBuffer", "index": 13, "used": 1}
+                },
+                {
+                    "name": "v_colors",
+                    "binding": {"kind": "constantBuffer", "index": 14, "used": 1}
+                },
+                {
+                    "name": "v_opacities",
+                    "binding": {"kind": "constantBuffer", "index": 15, "used": 1}
+                }
+            ]
+        }
+    ],
+    "bindlessSpaceIndex": 1
+}

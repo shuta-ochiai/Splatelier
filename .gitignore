@@ -1,0 +1,41 @@
+# SwiftPM
+/.build
+/build/
+/.swiftpm
+/Packages
+*.xcodeproj
+xcuserdata/
+DerivedData/
+Package.resolved
+
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*~
+
+# Slang build outputs (regenerated)
+/Sources/Trainer/Resources/Slang/build/
+
+# Training output artifacts
+/checkpoints/
+*.ply.backup
+
+# External reference repositories (local clones, do not commit)
+/ref/
+
+# Downloaded toolchain binaries (run scripts/install_slang.sh to fetch)
+/tools/
+
+# Local datasets (COLMAP reconstructions, training images, etc.)
+/data/
+
+# Local experiment / training output artifacts at repo root (large binaries, do not commit)
+/*.ply
+/*.log
+/bear_*.png
+/pocket_studio_logo_*.png
+output/

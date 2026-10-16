@@ -1,0 +1,9 @@
+# Xcode build artifacts
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+
+# Allow .xcodeproj to be committed (xcodegen-generated, but newcomers without
+# xcodegen can still open the app in Xcode). Regenerate via `xcodegen generate`.
+!*.xcodeproj/
