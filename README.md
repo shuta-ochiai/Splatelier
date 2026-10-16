@@ -1,5 +1,12 @@
 # Splatelier
 
+<p align="center">
+  <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-blue"></a>
+  <a href="https://github.com/shuta-ochiai/Splatelier/tags"><img alt="Version" src="https://img.shields.io/github/v/tag/shuta-ochiai/Splatelier?label=version"></a>
+  <img alt="Platform: iOS 18+" src="https://img.shields.io/badge/platform-iOS%2018%2B-blue">
+  <img alt="Swift 6.0" src="https://img.shields.io/badge/Swift-6.0-orange?logo=swift&logoColor=white">
+</p>
+
 **Capture, train and view 3D Gaussian Splats entirely on your iPhone.**
 
 Splatelier (from *splat* + *atelier*) turns a short walk around an object or a room into a 3D
