@@ -55,4 +55,5 @@ jobs:
             -scheme Splatelier \
             -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath DerivedData \
+            ARCHS=arm64 \
             CODE_SIGNING_ALLOWED=NO

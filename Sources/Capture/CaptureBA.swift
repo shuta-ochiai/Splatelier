@@ -878,7 +878,12 @@ public enum CaptureBA {
 
     /// Row-major 16 elements → simd_double4x4.
     static func mat4(_ v: [Float]) -> simd_double4x4 {
-        simd_double4x4(rows: (0..<4).map { r in SIMD4(Double(v[r * 4]), Double(v[r * 4 + 1]), Double(v[r * 4 + 2]), Double(v[r * 4 + 3])) })
+        // Built row by row: the one-expression form takes Xcode 26's type checker too long.
+        func row(_ r: Int) -> SIMD4<Double> {
+            let b = r * 4
+            return SIMD4<Double>(Double(v[b]), Double(v[b + 1]), Double(v[b + 2]), Double(v[b + 3]))
+        }
+        return simd_double4x4(rows: [row(0), row(1), row(2), row(3)])
     }
     static func rowMajor(_ m: simd_double4x4) -> [Float] {
         (0..<4).flatMap { r in (0..<4).map { c in Float(m[c][r]) } }
