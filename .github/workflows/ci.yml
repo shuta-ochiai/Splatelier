@@ -1,0 +1,58 @@
+# Builds the Swift package and the iOS app, and checks that the generated Metal kernels match
+# their Slang sources. Tests are not run here: most of them need a Metal GPU, which the hosted
+# macOS runners do not provide, so run `make test` locally.
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  slang:
+    name: Slang outputs are up to date
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: tools
+          key: slang-${{ runner.os }}-${{ hashFiles('scripts/install_slang.sh') }}
+      - run: ./scripts/install_slang.sh
+      - run: ./scripts/compile_slang.sh --check
+
+  build:
+    name: Build package and iOS app
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select the newest Xcode
+        run: |
+          xcode="$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
+          sudo xcode-select -s "$xcode"
+          xcodebuild -version
+      - uses: actions/cache@v4
+        with:
+          path: .build
+          key: spm-${{ runner.os }}-${{ hashFiles('Package.swift') }}
+          restore-keys: spm-${{ runner.os }}-
+      - name: Build the Swift package
+        run: swift build
+      - name: Build the iOS app for the simulator
+        run: |
+          xcodebuild build -quiet \
+            -project App/Splatelier.xcodeproj \
+            -scheme Splatelier \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath DerivedData \
+            CODE_SIGNING_ALLOWED=NO

@@ -1,0 +1,53 @@
+name: Bug report
+description: Something in the app or the command-line tool does not work as expected.
+labels: [bug]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you see, and what did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Capture a scene of ...
+        2. Train with ... iterations
+        3. ...
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Device
+      placeholder: iPhone 16 Pro
+    validations:
+      required: true
+  - type: input
+    id: ios
+    attributes:
+      label: iOS version
+      placeholder: "18.6"
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Splatelier version or commit
+      placeholder: v0.0.0 or a commit hash
+    validations:
+      required: true
+  - type: textarea
+    id: scene
+    attributes:
+      label: Scene
+      description: What you captured, indoors or outdoors, the lighting, and roughly how long the capture was.
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: After training, tap **Log** and paste it here. Remove anything you do not want to share.
+      render: text
