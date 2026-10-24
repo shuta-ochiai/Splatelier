@@ -46,6 +46,10 @@ targets:
         # Display name shown on the home screen, App Switcher, etc. Takes precedence over CFBundleName
         # ($(PRODUCT_NAME)=Splatelier). Without it, regeneration exposes the internal name.
         CFBundleDisplayName: Splatelier
+        # The release version, kept equal to the git tag and to Splatelier.version
+        # (Sources/Trainer/Splatelier.swift). CFBundleVersion is the build number.
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
         # Game Mode (iOS 18+): an OS feature that gives the foreground app priority on CPU/GPU and
         # suppresses background work to raise sustained performance. Enabled to run on-device training
         # with focus. It only takes effect with both keys:

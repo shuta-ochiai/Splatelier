@@ -43,6 +43,7 @@
 		222B06897FC2E276AB4462F4 /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
 		32632ECDB986EBB1F4C83F97 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		381CC46EA36AC4A9AF165BEC /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		5255952A58A7D197B00C4F61 /* splatelier */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "splatelier"; path = ..; sourceTree = SOURCE_ROOT; };
 		44D60E52950B5F46D58C659D /* Splatelier.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Splatelier.entitlements; sourceTree = "<group>"; };
 		4F5BA88DADD619751FBB57AD /* guide_pivot.mp4 */ = {isa = PBXFileReference; path = guide_pivot.mp4; sourceTree = "<group>"; };
 		6415796D99C0BA08F2A7C122 /* CaptureViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureViewModel.swift; sourceTree = "<group>"; };
@@ -56,7 +57,6 @@
 		B8797B29940BF5CBEF3B92DC /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		CC9ECD3EFACEFC22C2C11415 /* guide_subjects.mp4 */ = {isa = PBXFileReference; path = guide_subjects.mp4; sourceTree = "<group>"; };
 		D08F13DBF1F74C9DD78CBFE7 /* guide_slow.mp4 */ = {isa = PBXFileReference; path = guide_slow.mp4; sourceTree = "<group>"; };
-		D70086D22254D77E07FEEC5D /* spl-viewer-ui */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "spl-viewer-ui"; path = ..; sourceTree = SOURCE_ROOT; };
 		DADE075C65792EE63CAD5B27 /* CaptureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureView.swift; sourceTree = "<group>"; };
 		DBF730EC4E24862592C75822 /* TrainingViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainingViewModel.swift; sourceTree = "<group>"; };
 		DCE0FA924591D2503221DD4C /* LaunchVideoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchVideoView.swift; sourceTree = "<group>"; };
@@ -127,7 +127,7 @@
 		AEFA5A2F95EBA9F696C42B6E /* Packages */ = {
 			isa = PBXGroup;
 			children = (
-				D70086D22254D77E07FEEC5D /* spl-viewer-ui */,
+				5255952A58A7D197B00C4F61 /* splatelier */,
 			);
 			name = Packages;
 			sourceTree = "<group>";
