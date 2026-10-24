@@ -41,13 +41,27 @@ jobs:
           xcode="$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
           sudo xcode-select -s "$xcode"
           xcodebuild -version
+      # The runner image changes every week or two. A build cache made on an older image is mostly
+      # unusable on a newer one (a re-run on a newer image recompiled 326 steps instead of 127), and
+      # a cache that hit is never saved again, so the stale one would be restored for good. Putting
+      # the image version in the key makes each image get its own cache.
+      - id: image
+        run: echo "version=$ImageVersion" >> "$GITHUB_OUTPUT"
       - uses: actions/cache@v4
         with:
           path: .build
-          key: spm-${{ runner.os }}-${{ hashFiles('Package.swift') }}
+          key: spm-${{ runner.os }}-${{ steps.image.outputs.version }}-${{ hashFiles('Package.swift') }}
           restore-keys: spm-${{ runner.os }}-
       - name: Build the Swift package
         run: swift build
+      # The iOS app builds into its own DerivedData, so the .build cache above does not help it. Most
+      # of its time is compiling mlx-swift (C++ and Metal), which is the same every run, so keep
+      # DerivedData too. Without it that took about 5 minutes of the 6.5 the app build needed.
+      - uses: actions/cache@v4
+        with:
+          path: DerivedData
+          key: ios-${{ runner.os }}-${{ steps.image.outputs.version }}-${{ hashFiles('Package.swift') }}
+          restore-keys: ios-${{ runner.os }}-
       - name: Build the iOS app for the simulator
         run: |
           xcodebuild build -quiet \
@@ -56,4 +70,5 @@ jobs:
             -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath DerivedData \
             ARCHS=arm64 \
-            CODE_SIGNING_ALLOWED=NO
+            CODE_SIGNING_ALLOWED=NO \
+            COMPILER_INDEX_STORE_ENABLE=NO
