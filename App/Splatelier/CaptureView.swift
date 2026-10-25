@@ -31,6 +31,7 @@ struct CaptureView: View {
     /// Preserved dataset (*.dataset) left over from a previous crash. Detected at launch.
     @State private var pendingDatasetURL: URL?
     @State private var showResumePrompt = false
+    @State private var showAbout = false
     @State private var didCheckRecovery = false
     @State private var recoveryError: String?
 
@@ -75,6 +76,16 @@ struct CaptureView: View {
         
         .navigationTitle("Capture")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            // About is on the start screen only; during capture and training the bar stays clean.
+            if trainer == nil, vm.capturedScene == nil, !isLive {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { showAbout = true } label: { Image(systemName: "info.circle") }
+                        .accessibilityLabel("About")
+                }
+            }
+        }
+        .sheet(isPresented: $showAbout) { AboutView() }
         .onAppear {
             checkForRecoverableDataset()
             refreshValidationSets()
@@ -528,8 +539,8 @@ struct CaptureView: View {
                     Label("Stop", systemImage: "stop.circle.fill")
                         .frame(maxWidth: .infinity)
                 }
+                // No tint: the destructive role makes it red, so it differs from Start capture.
                 .buttonStyle(.borderedProminent)
-                .tint(Color.kikyoFill)
                 .controlSize(.large)
             case .stopping:
                 ProgressView("Finalising…")

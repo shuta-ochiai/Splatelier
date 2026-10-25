@@ -21,6 +21,7 @@ struct RootView: View {
     /// What the app prepares at launch is done (the animation can be skipped).
     @State private var launchReady = false
     @State private var launchVideoEnded = false
+    @State private var showLaunchVersion = false
 
     var body: some View {
         ZStack {
@@ -46,12 +47,34 @@ struct RootView: View {
                 launchVideoEnded = true
                 if launchReady { endLaunch() }
             }
+            launchVersionLabel
         }
         .ignoresSafeArea()
         .contentShape(Rectangle())
         // Before the app is ready the tap does nothing: the animation covers the wait.
         .onTapGesture { if launchReady { endLaunch() } }
         .transition(.opacity)
+    }
+
+    /// The version under the wordmark, fading in as the wordmark finishes. The video is shown aspect
+    /// fill (1080×1920), and the wordmark's baseline sits at y≈1474 px in it.
+    private var launchVersionLabel: some View {
+        GeometryReader { geo in
+            let scale = max(geo.size.width / 1080, geo.size.height / 1920)
+            let top = (geo.size.height - 1920 * scale) / 2
+            Text(AppVersion.full)
+                .font(.system(size: 15, design: .serif))
+                .tracking(1.5)
+                .foregroundStyle(Color(red: 0.96, green: 0.93, blue: 0.86).opacity(0.7))
+                .position(x: geo.size.width / 2, y: top + (1474 + 110) * scale)
+                .opacity(showLaunchVersion ? 1 : 0)
+                .animation(.easeIn(duration: 0.8), value: showLaunchVersion)
+        }
+        .allowsHitTesting(false)
+        .task {
+            try? await Task.sleep(for: .seconds(2.8))
+            showLaunchVersion = true
+        }
     }
 
     /// Builds the tabs under the animation, then fades the animation out.

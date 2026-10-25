@@ -41,6 +41,8 @@ struct TrainingSettingsRecord: Codable {
     let enableMVS: Bool?
     let opticalFlowWeighting: Bool?
     let maxShDegree: Int?
+    /// App version that trained it, e.g. "0.1.0 (1)". nil in records from before it was added.
+    let appVersion: String?
 
     private var replayCacheText: String {
         // "thermal" (switching by thermal state) is no longer a mode, but older records may have it.
@@ -57,6 +59,7 @@ struct TrainingSettingsRecord: Codable {
         func onOff(_ b: Bool) -> String { b ? "ON" : "OFF" }
         return [
             ("Basics", [
+                ("App version", appVersion ?? "-"),
                 ("Frames", "\(frameCount)"),
                 ("Iterations", "\(iterations)"),
                 ("Gaussian cap", gaussianCap >= 1000 ? "\(gaussianCap / 1000)k" : "\(gaussianCap)"),
@@ -323,7 +326,8 @@ final class TrainingViewModel: ObservableObject {
                 enableAnchorReg: false,
                 enableMVS: true,
                 opticalFlowWeighting: true,
-                maxShDegree: GaussianModel.maxShDegree
+                maxShDegree: GaussianModel.maxShDegree,
+                appVersion: AppVersion.plain
             ),
             for: plyURL
         )
@@ -342,7 +346,7 @@ final class TrainingViewModel: ObservableObject {
         FileManager.default.createFile(atPath: logURL.path, contents: nil)
         let logHandle = try? FileHandle(forWritingTo: logURL)
         if let h = logHandle {
-            let header = "=== splatelier log @\(timestamp), \(effectiveIterations) iter ===\n"
+            let header = "=== splatelier \(AppVersion.full) log @\(timestamp), \(effectiveIterations) iter ===\n"
             if let d = header.data(using: .utf8) { h.write(d) }
         }
 
