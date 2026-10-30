@@ -12,7 +12,6 @@ import Capture
 
 struct CaptureView: View {
     @StateObject private var vm = CaptureViewModel()
-    @State private var showDiscardConfirm = false
     @State private var showFrameReview = false
     /// LiDAR depth during capture (LiDAR devices only). Still experimental, so off by default.
     @AppStorage("capture.useLiDAR") private var useLiDAR = false
@@ -117,17 +116,6 @@ struct CaptureView: View {
             Text(recoveryError ?? "")
         }
         .onDisappear { vm.cancel() }
-        // A captured scene is not saved until it is trained, so confirm before discarding it.
-        .confirmationDialog(
-            "Discard this capture?",
-            isPresented: $showDiscardConfirm,
-            titleVisibility: .visible
-        ) {
-            Button("Discard and go back", role: .destructive) { endTraining() }
-            Button("Cancel", role: .cancel) { }
-        } message: {
-            Text("If you haven't trained it or used \"Save for validation\", the capture data will be lost. This can't be undone.")
-        }
     }
 
     private var isLive: Bool {
@@ -141,7 +129,7 @@ struct CaptureView: View {
     private var setupView: some View {
         if let trainer {
             TrainingView(
-                vm: trainer, header: trainingHeader, onClose: closeTraining,
+                vm: trainer, header: trainingHeader, onClose: endTraining,
                 closeDiscards: trainerIsFreshCapture)
         } else if vm.capturedScene != nil {
             // The capture just finished; the training panel appears on the next update.
@@ -193,23 +181,9 @@ struct CaptureView: View {
         )
     }
 
-    /// The button at the bottom of the training panel. A fresh capture that was not trained yet
-    /// asks first; everything else just goes back to the start screen.
-    private func closeTraining() {
-        if trainerIsFreshCapture, let trainer, !isTrained(trainer) {
-            showDiscardConfirm = true
-        } else {
-            endTraining()
-        }
-    }
-
-    private func isTrained(_ trainer: TrainingViewModel) -> Bool {
-        if case .completed = trainer.phase { return true }
-        return false
-    }
-
-    /// Back to the start screen. A fresh capture is released here (it is saved by training, or
-    /// the user chose to discard it).
+    /// Back to the start screen (the button at the bottom of the training panel; TrainingView
+    /// confirms first when that discards a capture that was not trained yet). A fresh capture is
+    /// released here (it is saved by training, or the user chose to discard it).
     private func endTraining() {
         if trainerIsFreshCapture { vm.discardCapturedScene() }
         trainer = nil
@@ -461,23 +435,6 @@ struct CaptureView: View {
         } message: { entry in
             Text(entry.displayDate)
         }
-        .confirmationDialog(
-            "Delete this validation dataset?",
-            isPresented: Binding(
-                get: { deletingValset != nil },
-                set: { if !$0 { deletingValset = nil } }
-            ),
-            titleVisibility: .visible,
-            presenting: deletingValset
-        ) { entry in
-            Button("Delete", role: .destructive) {
-                deleteValidationDataset(entry.url)
-                deletingValset = nil
-            }
-            Button("Cancel", role: .cancel) { deletingValset = nil }
-        } message: { entry in
-            Text("\(entry.displayTitle) will be permanently deleted. This can't be undone.")
-        }
         .sheet(item: $valsetShareItem) { item in
             ShareSheet(items: [item.url])
         }
@@ -539,6 +496,24 @@ struct CaptureView: View {
                         }
                     }
                     if entry.id != validationSets.last?.id { Divider() }
+                }
+                // On the row, not the list: the dialog appears next to the view it is attached
+                // to, so it shows beside the "…" that was tapped.
+                .confirmationDialog(
+                    "Delete this validation dataset?",
+                    isPresented: Binding(
+                        get: { deletingValset?.id == entry.id },
+                        set: { if !$0 { deletingValset = nil } }
+                    ),
+                    titleVisibility: .visible
+                ) {
+                    Button("Delete", role: .destructive) {
+                        deleteValidationDataset(entry.url)
+                        deletingValset = nil
+                    }
+                    Button("Cancel", role: .cancel) { deletingValset = nil }
+                } message: {
+                    Text("\(entry.displayTitle) will be permanently deleted. This can't be undone.")
                 }
             }
         }

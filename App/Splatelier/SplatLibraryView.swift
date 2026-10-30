@@ -40,6 +40,8 @@ struct SplatLibraryView: View {
     @State private var selectMode = false
     @State private var selection = Set<String>()
     @State private var confirmingBatchDelete = false
+    /// The capture a single Delete (swipe or menu) asks about.
+    @State private var deletingItem: CaptureItem?
     @State private var renamingItem: CaptureItem?
     @State private var renameText = ""
     @State private var settingsSheet: SettingsSheetData?
@@ -58,6 +60,24 @@ struct SplatLibraryView: View {
                 List {
                     ForEach(items) { item in
                         rowContainer(item)
+                            // On the row, not the list: the dialog appears next to the view it
+                            // is attached to, so on the list it showed at the top of the screen.
+                            .confirmationDialog(
+                                "Delete this capture?",
+                                isPresented: Binding(
+                                    get: { deletingItem?.id == item.id },
+                                    set: { if !$0 { deletingItem = nil } }
+                                ),
+                                titleVisibility: .visible
+                            ) {
+                                Button("Delete", role: .destructive) {
+                                    delete(item)
+                                    deletingItem = nil
+                                }
+                                Button("Cancel", role: .cancel) { deletingItem = nil }
+                            } message: {
+                                Text("\(item.displayName) and all its files (PLY, mesh, logs, etc.) will be deleted. This can't be undone.")
+                            }
                             // The rows would draw a black group box behind each card; let the
                             // indigo show through and space the cards instead of ruling them off.
                             .listRowBackground(Color.clear)
@@ -95,16 +115,6 @@ struct SplatLibraryView: View {
             Button("OK", role: .cancel) { errorMessage = nil }
         } message: {
             Text(errorMessage ?? "")
-        }
-        .confirmationDialog(
-            "Delete \(selection.count) captures?",
-            isPresented: $confirmingBatchDelete,
-            titleVisibility: .visible
-        ) {
-            Button("Delete", role: .destructive) { batchDelete() }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("All related files (PLY, mesh, logs, etc.) will also be deleted. This can't be undone.")
         }
         .alert("Rename", isPresented: Binding(
             get: { renamingItem != nil },
@@ -230,6 +240,12 @@ struct SplatLibraryView: View {
         } label: {
             Label("Rename", systemImage: "pencil")
         }
+        // Opens the sheet where the splats (and their format) and the mesh are chosen.
+        Button {
+            shareRequest = ShareRequest(entries: [shareEntry(for: item)])
+        } label: {
+            Label("Share", systemImage: "square.and.arrow.up")
+        }
         if let record = item.settings {
             Button {
                 settingsSheet = SettingsSheetData(
@@ -238,14 +254,8 @@ struct SplatLibraryView: View {
                 Label("View training settings", systemImage: "slider.horizontal.3")
             }
         }
-        // Opens the sheet where the splats (and their format) and the mesh are chosen.
-        Button {
-            shareRequest = ShareRequest(entries: [shareEntry(for: item)])
-        } label: {
-            Label("Share", systemImage: "square.and.arrow.up")
-        }
         Button(role: .destructive) {
-            delete(item)
+            deletingItem = item
         } label: {
             Label("Delete", systemImage: "trash")
         }
@@ -348,6 +358,17 @@ struct SplatLibraryView: View {
                     Label("Delete", systemImage: "trash")
                 }
                 .disabled(selection.isEmpty)
+                // On the button, so the dialog appears next to it at the bottom.
+                .confirmationDialog(
+                    "Delete \(selection.count) captures?",
+                    isPresented: $confirmingBatchDelete,
+                    titleVisibility: .visible
+                ) {
+                    Button("Delete", role: .destructive) { batchDelete() }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("All related files (PLY, mesh, logs, etc.) will also be deleted. This can't be undone.")
+                }
             }
             .padding(.horizontal)
             .padding(.vertical, 10)
@@ -507,11 +528,10 @@ struct SplatLibraryView: View {
         }
     }
 
+    /// Swipe to delete: asks first (a swipe deletes one row at a time).
     private func deleteAt(_ offsets: IndexSet) {
-        for index in offsets {
-            removeCapture(items[index])
-        }
-        reload()
+        guard let index = offsets.first else { return }
+        deletingItem = items[index]
     }
 
     private func delete(_ item: CaptureItem) {

@@ -33,6 +33,7 @@ struct TrainingView: View {
     /// stored dataset stays where it is, so closing is harmless.
     let closeDiscards: Bool
     @State private var activeHelp: TrainingHelp?
+    @State private var showDiscardConfirm = false
 
     /// Thermal banner. critical (thermalPaused) means paused, serious (thermalThrottled) means
     /// slowed down. critical takes display priority; the banner disappears once the device cools
@@ -427,13 +428,25 @@ struct TrainingView: View {
         return Group {
             if destructive {
                 // Plain red text, set apart from Start training so the two are not mixed up.
-                Button(role: .destructive, action: onClose) {
+                Button(role: .destructive) { showDiscardConfirm = true } label: {
                     Label(title, systemImage: symbol)
                         .font(.subheadline)
                         .padding(.horizontal, 12).padding(.vertical, 8)
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.red)
+                // The capture is not saved until it is trained, so confirm before discarding it.
+                // On the button, so the dialog appears next to it at the bottom.
+                .confirmationDialog(
+                    "Discard this capture?",
+                    isPresented: $showDiscardConfirm,
+                    titleVisibility: .visible
+                ) {
+                    Button("Discard and go back", role: .destructive, action: onClose)
+                    Button("Cancel", role: .cancel) { }
+                } message: {
+                    Text("If you haven't trained it or used \"Save for validation\", the capture data will be lost. This can't be undone.")
+                }
             } else {
                 Button(action: onClose) {
                     Label(title, systemImage: symbol)
