@@ -237,6 +237,10 @@ struct CaptureView: View {
             #endif
             VStack {
                 liveHUD
+                if showKeepMovingWarning {
+                    keepMovingWarning
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
                 Spacer()
                 controlRow
                     .padding()
@@ -244,7 +248,25 @@ struct CaptureView: View {
                     .padding(.horizontal)
                     .padding(.bottom)
             }
+            .animation(.easeInOut(duration: 0.25), value: showKeepMovingWarning)
         }
+        .sensoryFeedback(.warning, trigger: showKeepMovingWarning) { _, shown in shown }
+    }
+
+    /// The capturer stood still while frames can still be added. Once the frame cap is reached,
+    /// moving no longer adds anything, so the warning stays off.
+    private var showKeepMovingWarning: Bool {
+        vm.state == .running && vm.diagnostics.cameraStill
+            && vm.diagnostics.keptFrameCount < vm.maxFrames
+    }
+
+    private var keepMovingWarning: some View {
+        Label("Keep moving around the subject", systemImage: "figure.walk.motion")
+            .font(.subheadline.bold())
+            .foregroundStyle(.orange)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(.ultraThinMaterial, in: Capsule())
     }
 
     private var liveHUD: some View {
