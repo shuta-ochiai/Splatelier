@@ -193,6 +193,9 @@ public struct CaptureDiagnostics: Sendable {
     /// Processing stats of the `.mvs` live point cloud (frames processed, time per frame, frames
     /// skipped while busy). nil for other modes.
     public var liveMVSSummary: String?
+    /// The camera has barely moved for a while during capture (`CaptureStillnessDetector`).
+    /// Only set while tracking is `.normal`.
+    public var cameraStill: Bool
 
     public init(
         keptFrameCount: Int = 0,
@@ -209,7 +212,8 @@ public struct CaptureDiagnostics: Sendable {
         qualityRejectedExposureCount: Int = 0,
         exposureLocked: Bool = false,
         pixelBufferColorTags: String? = nil,
-        liveMVSSummary: String? = nil
+        liveMVSSummary: String? = nil,
+        cameraStill: Bool = false
     ) {
         self.keptFrameCount = keptFrameCount
         self.trackingStateDescription = trackingStateDescription
@@ -226,6 +230,7 @@ public struct CaptureDiagnostics: Sendable {
         self.exposureLocked = exposureLocked
         self.pixelBufferColorTags = pixelBufferColorTags
         self.liveMVSSummary = liveMVSSummary
+        self.cameraStill = cameraStill
     }
 }
 
@@ -394,6 +399,7 @@ public final class ARKitCaptureSession {
         case .lidarFrame(let n): _diagnostics.lidarFrameCount = n
         case .lidarPoints(let n): _diagnostics.lidarPointCount = n
         case .exposureLocked(let b): _diagnostics.exposureLocked = b
+        case .cameraStill(let b): _diagnostics.cameraStill = b
         case .qualityCandidate: _diagnostics.qualityCandidateFrameCount += 1
         case .qualityRejected(let reasons):
             _diagnostics.qualityRejectedFrameCount += 1
@@ -422,6 +428,7 @@ fileprivate enum DiagnosticsUpdate {
     case qualityCandidate
     case qualityRejected([CaptureRealtimeFrameSelector.RejectReason])
     case exposureLocked(Bool)
+    case cameraStill(Bool)
 }
 
 // MARK: - iOS implementation
@@ -511,6 +518,8 @@ private final class IOSImpl: NSObject, ARSessionDelegate {
     private var hasKeptFirst = false
     private var anchorUpdateCount = 0
     private var relocalizationObserved = false
+    private var stillnessDetector = CaptureStillnessDetector()
+    private var cameraStill = false
     private var stateChange: ((DiagnosticsUpdate) -> Void)?
     // AE/AWB lock: arm the timer once on the first .normal frame and lock once when it fires
     private var exposureLockScheduled = false
@@ -559,6 +568,8 @@ private final class IOSImpl: NSObject, ARSessionDelegate {
             self.hasKeptFirst = false
             self.anchorUpdateCount = 0
             self.relocalizationObserved = false
+            self.stillnessDetector.reset()
+            self.cameraStill = false
             self.exposureLockScheduled = false
             self.exposureLockDone = false
             self.stateChange = onStateChange
@@ -618,6 +629,10 @@ private final class IOSImpl: NSObject, ARSessionDelegate {
             delegateQueue.async {
                 self.capturing = false
                 self.stopContinuation = cont
+                if self.cameraStill {
+                    self.cameraStill = false
+                    self.stateChange?(.cameraStill(false))
+                }
             }
             let deadline: DispatchTime = .now() + configuration.settleSeconds
             delegateQueue.asyncAfter(deadline: deadline) { [weak self] in
@@ -791,6 +806,20 @@ private final class IOSImpl: NSObject, ARSessionDelegate {
         stateChange?(.trackingState(stateString))
 
         guard capturing else { return }
+
+        // Stillness is judged only on reliable poses; other tracking states have their own HUD.
+        let still: Bool
+        if case .normal = frame.camera.trackingState {
+            still = stillnessDetector.update(cameraToWorld: frame.camera.transform,
+                                             timestamp: frame.timestamp)
+        } else {
+            stillnessDetector.reset()
+            still = false
+        }
+        if still != cameraStill {
+            cameraStill = still
+            stateChange?(.cameraStill(still))
+        }
 
         if configuration.lockExposureAndWhiteBalance,
            !exposureLockScheduled,
