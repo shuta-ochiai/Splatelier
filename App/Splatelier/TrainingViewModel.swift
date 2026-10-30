@@ -41,7 +41,8 @@ struct TrainingSettingsRecord: Codable {
     let enableMVS: Bool?
     let opticalFlowWeighting: Bool?
     let maxShDegree: Int?
-    /// App version that trained it, e.g. "0.1.0 (1)". nil in records from before it was added.
+    /// App version that trained it, e.g. "0.1.0" ("0.1.0 (1)" in older records, with the build
+    /// number). nil in records from before it was added.
     let appVersion: String?
 
     private var replayCacheText: String {

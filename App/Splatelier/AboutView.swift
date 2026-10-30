@@ -6,21 +6,16 @@
 import SwiftUI
 import Trainer
 
-/// The version the app shows, read from Info.plist (the release version and the build number).
+/// The version the app shows, read from Info.plist (the release version). The build number
+/// (CFBundleVersion) is left out: it stays 1, so it tells nothing.
 enum AppVersion {
-    static var short: String {
+    /// "0.1.0"
+    static var plain: String {
         (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String)
             ?? Splatelier.version
     }
 
-    static var build: String? {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
-    }
-
-    /// "0.1.0 (1)"
-    static var plain: String { short + (build.map { " (\($0))" } ?? "") }
-
-    /// "v0.1.0 (1)"
+    /// "v0.1.0"
     static var full: String { "v" + plain }
 }
 
