@@ -50,15 +50,6 @@ targets:
         # (Sources/Trainer/Splatelier.swift). CFBundleVersion is the build number.
         CFBundleShortVersionString: "0.1.0"
         CFBundleVersion: "1"
-        # Game Mode (iOS 18+): an OS feature that gives the foreground app priority on CPU/GPU and
-        # suppresses background work to raise sustained performance. Enabled to run on-device training
-        # with focus. It only takes effect with both keys:
-        #   - GCSupportsGameMode: declares support
-        #   - LSApplicationCategoryType: games category (without it the OS does not treat the app as a
-        #     Game Mode target). It also makes the App Store list the app as a game.
-        # It cannot exceed the thermal ceiling itself (it only raises the sustained clock floor + reduces contention).
-        GCSupportsGameMode: true
-        LSApplicationCategoryType: public.app-category.games
         # Input is RGB + coarse pose from ARKit. CameraUsageDescription is the text shown in the OS dialog
         # when the ARSession starts. Unified as "Splatelier" to match the display name.
         NSCameraUsageDescription: Splatelier uses the camera with ARKit to reconstruct scenes in 3D.
