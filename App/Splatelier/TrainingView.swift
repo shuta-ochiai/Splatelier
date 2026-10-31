@@ -54,6 +54,21 @@ struct TrainingView: View {
         }
     }
 
+    /// Whether Low Power Mode is on; it follows the setting if it is switched meanwhile.
+    @State private var lowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled
+
+    /// Low Power Mode slows the CPU and GPU down, and training with them. Shown before it starts and
+    /// while it runs.
+    private var lowPowerNotice: some View {
+        Label("Low Power Mode is on, which slows training down. Turn it off in Settings > Battery.",
+              systemImage: "battery.25percent")
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(.yellow)
+            .padding()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .cardBackground()
+    }
+
     private func thermalBanner(icon: String, text: String, tint: Color) -> some View {
         HStack(spacing: 8) {
             Image(systemName: icon)
@@ -82,6 +97,7 @@ struct TrainingView: View {
                     VStack(spacing: 16) {
                         header
                         AnyView(trainingSettingsCard)
+                        if lowPowerMode { AnyView(lowPowerNotice) }
                         AnyView(startButton)
                     }
                     .padding(.horizontal)
@@ -94,6 +110,7 @@ struct TrainingView: View {
                 // the measurements.
                 VStack(spacing: 16) {
                     AnyView(previewCard).frame(maxHeight: .infinity)
+                    if lowPowerMode && vm.isBusy { AnyView(lowPowerNotice) }
                     AnyView(phaseCard)
                     AnyView(metricsCard)
                 }
@@ -103,6 +120,9 @@ struct TrainingView: View {
             }
         }
         .overlay(alignment: .top) { thermalPausedBanner }
+        .onReceive(NotificationCenter.default.publisher(for: .NSProcessInfoPowerStateDidChange)) { _ in
+            lowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled
+        }
         .animation(.easeInOut(duration: 0.25), value: vm.thermalPaused)
         .animation(.easeInOut(duration: 0.25), value: vm.thermalThrottled)
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -353,6 +373,9 @@ struct TrainingView: View {
                     }
                     Text("\(Int(vm.overallProgress * 100))%").font(.body.monospacedDigit())
                 }
+                // Training runs on the GPU, which iOS does not give to an app that is not on screen.
+                Label("Keep Splatelier open on screen until it finishes.", systemImage: "iphone")
+                    .font(.caption).foregroundStyle(.secondary)
             } else { switch vm.phase {
             case .idle:
                 EmptyView()
