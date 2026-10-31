@@ -440,22 +440,27 @@ extension TrainingDriver {
         }
 
         if let thumbnailPNG, !views.isEmpty {
-            // Render up to 8 views and use the one with the largest mean alpha (how much of the
-            // frame the subject fills) as the thumbnail.
-            let step = Swift.max(1, views.count / 8)
+            // Render every view and use the one the render matches best (highest PSNR against its
+            // photo) as the thumbnail and the viewer's initial pose.
             var bestColor: MLXArray?
             var bestView: TrainView?
-            var bestCoverage: Float = -1
-            for idx in Swift.stride(from: 0, to: views.count, by: step) {
-                let out = renderer.forward(model: exportModel, camera: views[idx].camera, shDegree: 3)
+            var bestPSNR = -Float.infinity
+            var bestCoverage: Float = 0
+            for view in views {
+                let out = renderer.forward(model: exportModel, camera: view.camera, shDegree: 3)
+                let diff = out.renderColor - view.imageFloat
+                let mse = (diff * diff).mean()
                 let cov = out.renderAlpha.mean()
-                eval(cov)
-                let covVal = cov.item(Float.self)
-                if covVal > bestCoverage {
+                eval(mse, cov)
+                let mseHost = mse.item(Float.self)
+                guard mseHost.isFinite else { continue }
+                let psnr: Float = mseHost > 1e-12 ? -10 * Foundation.log10(mseHost) : 200
+                if psnr > bestPSNR {
                     eval(out.renderColor)
-                    bestCoverage = covVal
+                    bestPSNR = psnr
+                    bestCoverage = cov.item(Float.self)
                     bestColor = out.renderColor
-                    bestView = views[idx]
+                    bestView = view
                 }
             }
             if let bestColor {
@@ -464,13 +469,14 @@ extension TrainingDriver {
                     if let bestView {
                         try writePreviewCameraMetadata(
                             view: bestView,
+                            psnr: bestPSNR,
                             coverage: bestCoverage,
                             to: thumbnailPNG.deletingPathExtension()
                                 .appendingPathExtension("preview.json")
                         )
                     }
-                    log(String(format: "wrote thumbnail (coverage %.3f) to %@",
-                               bestCoverage, thumbnailPNG.path))
+                    log(String(format: "wrote thumbnail (%@, PSNR %.2f dB) to %@",
+                               bestView?.name ?? "-", bestPSNR, thumbnailPNG.path))
                 } catch {
                     log("thumbnail render failed: \(error)")
                 }
@@ -572,6 +578,7 @@ extension TrainingDriver {
     private struct PreviewCameraMetadata: Codable {
         let version: Int
         let sourceViewName: String
+        let psnr: Float
         let coverage: Float
         let width: Int
         let height: Int
@@ -581,6 +588,7 @@ extension TrainingDriver {
 
     private static func writePreviewCameraMetadata(
         view: TrainView,
+        psnr: Float,
         coverage: Float,
         to url: URL
     ) throws {
@@ -588,6 +596,7 @@ extension TrainingDriver {
         let metadata = PreviewCameraMetadata(
             version: 1,
             sourceViewName: view.name,
+            psnr: psnr,
             coverage: coverage,
             width: view.camera.width,
             height: view.camera.height,
