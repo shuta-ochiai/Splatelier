@@ -22,8 +22,8 @@ jobs:
     name: Slang outputs are up to date
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/cache@v4
+      - uses: actions/checkout@v5
+      - uses: actions/cache@v5
         with:
           path: tools
           key: slang-${{ runner.os }}-${{ hashFiles('scripts/install_slang.sh') }}
@@ -35,7 +35,7 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Select the newest Xcode
         run: |
           xcode="$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
@@ -47,7 +47,7 @@ jobs:
       # the image version in the key makes each image get its own cache.
       - id: image
         run: echo "version=$ImageVersion" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: .build
           key: spm-${{ runner.os }}-${{ steps.image.outputs.version }}-${{ hashFiles('Package.swift') }}
@@ -57,7 +57,7 @@ jobs:
       # The iOS app builds into its own DerivedData, so the .build cache above does not help it. Most
       # of its time is compiling mlx-swift (C++ and Metal), which is the same every run, so keep
       # DerivedData too. Without it that took about 5 minutes of the 6.5 the app build needed.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: DerivedData
           key: ios-${{ runner.os }}-${{ steps.image.outputs.version }}-${{ hashFiles('Package.swift') }}
