@@ -10,6 +10,57 @@ import Trainer
 import Capture
 import SplatViewerKit
 
+/// The captured frames, one after another with a cross-fade.
+private struct FrameSlideshow: View {
+    let images: [UIImage]
+    @State private var index = 0
+
+    var body: some View {
+        ZStack {
+            Image(uiImage: images[index % images.count])
+                .resizable()
+                .scaledToFit()
+                .clipShape(RoundedRectangle(cornerRadius: DesignSystem.cardRadius, style: .continuous))
+                .id(index)
+                .transition(.opacity)
+        }
+        // Says what the pictures are: they are not the model yet.
+        .overlay(alignment: .top) {
+            Label("Your captured frames", systemImage: "photo.on.rectangle")
+                .font(.caption.weight(.semibold))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(.ultraThinMaterial, in: Capsule())
+                .padding(.top, 10)
+        }
+        // On the ZStack, not the image: the image is rebuilt on every change (its id), which would
+        // restart the loop.
+        .task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(2.6))
+                withAnimation(.easeInOut(duration: 1.0)) { index += 1 }
+            }
+        }
+    }
+}
+
+/// A soft band of light sweeping over the picture from left to right, again and again.
+private struct MeshShimmer: View {
+    var body: some View {
+        TimelineView(.animation) { context in
+            GeometryReader { geo in
+                let t = context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.8) / 1.8
+                LinearGradient(colors: [.clear, .white.opacity(0.3), .clear],
+                               startPoint: .leading, endPoint: .trailing)
+                    .frame(width: geo.size.width * 0.5)
+                    .offset(x: geo.size.width * (-0.5 + 1.5 * t))
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: DesignSystem.cardRadius, style: .continuous))
+        .allowsHitTesting(false)
+    }
+}
+
 private struct TrainingHelp: Identifiable {
     let id: String
     let title: String
@@ -205,14 +256,33 @@ struct TrainingView: View {
                     .resizable()
                     .scaledToFit()
                     .clipShape(RoundedRectangle(cornerRadius: DesignSystem.cardRadius, style: .continuous))
+                    // While the mesh is made the picture stops changing; a light sweeps over it.
+                    .overlay { if vm.isGeneratingMesh { MeshShimmer() } }
                     .id(vm.previewCount)
                     .transition(.opacity)
+            } else if !vm.frameSlides.isEmpty {
+                // The frames are being prepared: show them, so the card is not empty.
+                FrameSlideshow(images: vm.frameSlides)
             } else {
                 VStack(spacing: 10) {
                     Image(systemName: "sparkles").font(.title2)
                     Text("The picture appears when training starts").font(.footnote)
                 }
                 .foregroundStyle(.secondary)
+            }
+        }
+        // Training runs on the GPU, which iOS does not give to an app that is not on screen, so
+        // leaving the app stops it. A chip on the picture, in the same shape as the one at the
+        // top of the frames.
+        .overlay(alignment: .bottom) {
+            if vm.isBusy {
+                Label("Keep the app open", systemImage: "iphone")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.orange)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .padding(.bottom, 10)
             }
         }
         .animation(.easeInOut(duration: 0.5), value: vm.previewCount)
@@ -373,9 +443,6 @@ struct TrainingView: View {
                     }
                     Text("\(Int(vm.overallProgress * 100))%").font(.body.monospacedDigit())
                 }
-                // Training runs on the GPU, which iOS does not give to an app that is not on screen.
-                Label("Keep Splatelier open on screen until it finishes.", systemImage: "iphone")
-                    .font(.caption).foregroundStyle(.secondary)
             } else { switch vm.phase {
             case .idle:
                 EmptyView()

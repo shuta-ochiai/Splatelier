@@ -223,7 +223,7 @@ private struct EnlargedFramePage: View {
 }
 
 /// Thumbnail of one frame. Dropped frames are dimmed + red border + reason badge.
-private struct FrameThumbnail: View {
+struct FrameThumbnail: View {
     let frame: CapturedFrame
     let index: Int
     let dropped: Bool
