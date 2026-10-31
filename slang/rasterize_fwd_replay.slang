@@ -78,7 +78,7 @@ void rasterize_fwd_replay(uint3 tid : SV_DispatchThreadID)
 
         float opac = opacities[gi];
         float alpha = min(0.99, opac * exp(-sigma));
-        if (alpha < 0.00392157) { continue; }  // 1/255
+        if (alpha < 0.01568627) { continue; }  // 4/255
 
         float next_T = T * (1.0 - alpha);
         if (next_T < 1e-4) {

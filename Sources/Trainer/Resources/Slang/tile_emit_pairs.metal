@@ -4,7 +4,7 @@
 using namespace metal;
 float ellipse_rr_0(float opac_0)
 {
-    float _S1 = min(3.32999992370605469, sqrt(2.0 * log(opac_0 * 255.0)));
+    float _S1 = min(3.32999992370605469, sqrt(2.0 * log(opac_0 * 63.75)));
     return _S1 * _S1;
 }
 

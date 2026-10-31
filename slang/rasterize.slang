@@ -3,8 +3,9 @@
 //
 // Per-tile forward rasterize (1 thread / pixel). Alpha-blends the tile's Gaussian list front to
 // back and stops once transmittance drops below 1e-4. Follows gsplat RasterizeToPixels3DGSFwd.cu
-// (Apache-2.0). The thresholds 0.99 / 1/255 / 1e-4 are also gsplat's. Backward reconstructs
-// gradients by hand from last_ids and T_final.
+// (Apache-2.0). The thresholds 0.99 / 1e-4 are also gsplat's; the contribution cutoff is 4/255
+// rather than gsplat's 1/255 (`ALPHA_THRESHOLD` in project_to_screen.slang). Backward
+// reconstructs gradients by hand from last_ids and T_final.
 
 StructuredBuffer<float> means2d;          // [N, 2]
 StructuredBuffer<float> conics;           // [N, 3]  (a, b, c) of Σ_2d⁻¹
@@ -66,7 +67,7 @@ void rasterize_fwd(uint3 tid : SV_DispatchThreadID)
 
         float opac = opacities[gi];
         float alpha = min(0.99, opac * exp(-sigma));
-        if (alpha < 0.00392157) { continue; }  // 1/255
+        if (alpha < 0.01568627) { continue; }  // 4/255
 
         float next_T = T * (1.0 - alpha);
         if (next_T < 1e-4) {

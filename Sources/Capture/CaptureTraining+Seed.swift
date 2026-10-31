@@ -159,8 +159,9 @@ extension CaptureTraining {
 
     /// Returns the seed fusing the capture's LiDAR points (mid-grey unless `lidarColors`) with extraSeedClouds. If there
     /// are none, synthesizes a spherical random seed. Sparse (BA / ARKit triangulated) points stay
-    /// out of the seed as outlier / floater sources; they still serve for poses and the MVS depth
-    /// range.
+    /// out of the seed as outlier / floater sources, except with `sparseGapFill`: the BA points
+    /// where the other clouds left a gap (`sparseGapPoints`) join it, outside `maxPoints`'s
+    /// thinning so the gaps keep them.
     static func captureLiDAROrSyntheticSeed(
         scene: CapturedScene, sceneScale: Float,
         syntheticSparseCount: Int, seed: UInt64,
@@ -170,9 +171,10 @@ extension CaptureTraining {
         maxPoints: Int? = nil,
         // Color the LiDAR points from the frame images (mid-grey otherwise).
         lidarColors: Bool = true,
+        sparseGapFill: Bool = false,
         log: (String) -> Void
     ) -> (positions: MLXArray, colors: MLXArray) {
-        log("seed sparse source: excluded (the seed is MVS + LiDAR only)")
+        if !sparseGapFill { log("seed sparse source: excluded (the seed is MVS + LiDAR only)") }
         // Each LiDAR point's fusion confidence is its samples' (`LiDARSample.confidence`).
         var seedClouds: [SeedCloud] = []
         let lidarSamples = scene.lidarWorldSamples(colors: lidarColors)
@@ -213,7 +215,26 @@ extension CaptureTraining {
         if lidarCloud.count > 0 { seedClouds.append(seedCloud(label: "lidar", lidarCloud)) }
         seedClouds += others.filter { $0.count > 0 }
         if !seedClouds.isEmpty {
-            return concatenateSeedClouds(seedClouds, voxelSize: fusionVoxelSize, log: log)
+            let fused = concatenateSeedClouds(seedClouds, voxelSize: fusionVoxelSize, log: log)
+            guard sparseGapFill, let ba = scene.baRefinedPoints else { return fused }
+            let candidates = farClipped(ba, frames: scene.frames, sceneScale: sceneScale)
+            let gaps = sparseGapPoints(candidates, covered: seedClouds, voxelSize: sparseGapVoxelSize)
+            log(String(format: "[seed] sparse gap fill: %d BA points → %d with no MVS / LiDAR point in their %.0f cm voxel",
+                       candidates.count, gaps.count, sparseGapVoxelSize * 100))
+            guard !gaps.isEmpty else { return fused }
+            // Thin the fused clouds to make room, as `GaussianModel.fromPointCloudDisc` would
+            // (evenly), so its own cap leaves the gap points alone.
+            var (positions, colors) = fused
+            let total = positions.shape[0]
+            if let maxPoints, total + gaps.count > maxPoints, maxPoints > gaps.count {
+                let count = maxPoints - gaps.count
+                let idx = MLXArray((0..<count).map { Int32(Int64($0) * Int64(total) / Int64(count)) }, [count])
+                positions = positions[idx]
+                colors = colors[idx]
+            }
+            // Mid-grey: the colors converge in training.
+            return (MLX.concatenated([positions, MLXArray(gaps.flatMap { [$0.x, $0.y, $0.z] }, [gaps.count, 3])]),
+                    MLX.concatenated([colors, MLXArray.full([gaps.count, 3], values: MLXArray(Float(0.5)))]))
         }
         log("no sparse/LiDAR points → synthesising \(syntheticSparseCount)-pt spherical seed (radius=\(sceneScale))")
         return randomSphericalSeed(
@@ -238,6 +259,49 @@ extension CaptureTraining {
             colors: MLXArray(c.colors.flatMap { [$0.x, $0.y, $0.z] }, [c.count, 3]),
             confidences: MLXArray(c.confidences, [c.count]),
             observedDepths: MLXArray(c.depths, [c.count]))
+    }
+
+    /// Voxel for `sparseGapPoints`: a BA point counts as covered when an MVS / LiDAR point shares
+    /// its voxel. Well above the MVS point spacing (3 mm), so only real gaps stay uncovered.
+    static let sparseGapVoxelSize: Float = 0.02
+
+    /// The `points` whose `voxelSize` voxel holds no point of `covered`: surfaces MVS did not
+    /// reconstruct (repeating or plain-ish texture where the views did not agree) but feature
+    /// tracking did.
+    static func sparseGapPoints(_ points: [SIMD3<Float>], covered clouds: [SeedCloud], voxelSize: Float) -> [SIMD3<Float>] {
+        let scale = 1 / voxelSize
+        func key(_ x: Float, _ y: Float, _ z: Float) -> Int64 {
+            let ix = Int64((x * scale).rounded(.down)) & 0x1F_FFFF
+            let iy = Int64((y * scale).rounded(.down)) & 0x1F_FFFF
+            let iz = Int64((z * scale).rounded(.down)) & 0x1F_FFFF
+            return ix | iy << 21 | iz << 42
+        }
+        // Index the few sparse points and look the many cloud points up, rather than hashing
+        // millions of MVS voxels.
+        var byVoxel: [Int64: [Int]] = [:]
+        for (i, p) in points.enumerated() { byVoxel[key(p.x, p.y, p.z), default: []].append(i) }
+        var covered = [Bool](repeating: false, count: points.count)
+        for cloud in clouds {
+            let p = cloud.positions.asArray(Float.self)
+            // Every 4th point: the clouds are far denser than the voxel.
+            for j in Swift.stride(from: 0, to: cloud.count, by: 4) {
+                guard let ids = byVoxel[key(p[j * 3], p[j * 3 + 1], p[j * 3 + 2])] else { continue }
+                for i in ids { covered[i] = true }
+            }
+        }
+        return points.indices.filter { !covered[$0] }.map { points[$0] }
+    }
+
+    /// `points` within `factor` × sceneScale of the camera-center centroid, the dense seed's far
+    /// clip (`SeedFarClip`).
+    static func farClipped(
+        _ points: [SIMD3<Float>], frames: [CapturedFrame], sceneScale: Float, factor: Float = 6
+    ) -> [SIMD3<Float>] {
+        let centers = cameraCenters(frames)
+        guard !centers.isEmpty else { return points }
+        let c = centers.reduce(SIMD3<Float>.zero, +) / Float(centers.count)
+        let r = factor * sceneScale
+        return points.filter { simd_length_squared($0 - c) <= r * r }
     }
 
     /// Sparse points bounding the MVS depth range when there is no LiDAR. ARKit raw points include

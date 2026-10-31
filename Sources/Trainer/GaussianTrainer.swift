@@ -45,6 +45,9 @@ public final class GaussianTrainer: GaussianParamStore {
     /// Weight of the alpha loss (splatfacto-w uses 0.15). Pushes foreground alpha to 0 on pixels
     /// the background alone explains, suppressing floaters/haze.
     public let alphaLossWeight: Float
+    /// Weight of the loss pulling foreground alpha to 1 on `TrainView.opaqueMask` pixels (inside
+    /// measured surfaces), so the background never stands in for a surface. 0 disables it.
+    public let surfaceAlphaWeight: Float
     /// Learned background SH coefficients [bands, 3]. An unused [1, 3] when bg-SH is disabled.
     public var bgCoeffs: MLXArray
     public let optBgCoeffs: AdamOptimizer
@@ -84,7 +87,8 @@ public final class GaussianTrainer: GaussianParamStore {
         enableBackgroundSH: Bool = false,
         backgroundSHDegree: Int = 3,
         bgCoeffsLR: Float = 2.5e-3,
-        alphaLossWeight: Float = 0.15
+        alphaLossWeight: Float = 0.15,
+        surfaceAlphaWeight: Float = 0
     ) throws {
         self.model = model
         self.renderer = renderer
@@ -97,6 +101,7 @@ public final class GaussianTrainer: GaussianParamStore {
         self.enableBackgroundSH = enableBackgroundSH
         self.backgroundSHDegree = backgroundSHDegree
         self.alphaLossWeight = alphaLossWeight
+        self.surfaceAlphaWeight = surfaceAlphaWeight
         self.bgCoeffs = BackgroundSH.initialCoeffs(degree: enableBackgroundSH ? backgroundSHDegree : 0)
         self.optBgCoeffs = AdamOptimizer(lr: bgCoeffsLR)
         self.stateBgCoeffs = optBgCoeffs.newState(like: bgCoeffs)
@@ -181,10 +186,11 @@ public final class GaussianTrainer: GaussianParamStore {
     public func step(
         camera: Camera, targetImage: MLXArray, shDegree: Int = 3,
         geometry: GeometryRegularization? = nil, mvsDepth: DepthTarget? = nil,
-        surfaceMask: MLXArray? = nil
+        surfaceMask: MLXArray? = nil, opaqueMask: MLXArray? = nil
     ) -> Float {
         stepWithCache(camera: camera, targetImage: targetImage, shDegree: shDegree,
-                      geometry: geometry, mvsDepth: mvsDepth, surfaceMask: surfaceMask).loss
+                      geometry: geometry, mvsDepth: mvsDepth, surfaceMask: surfaceMask,
+                      opaqueMask: opaqueMask).loss
     }
 
     /// Renders the current model for evaluation and returns [H,W,3], compositing the background as
@@ -210,8 +216,10 @@ public final class GaussianTrainer: GaussianParamStore {
         shDegree: Int = 3,
         geometry: GeometryRegularization? = nil,
         mvsDepth: DepthTarget? = nil,
-        // [gh, gw] 1 where a depth sensor measured a surface (`TrainView.surfaceMask`).
-        surfaceMask: MLXArray? = nil
+        // [gh, gw] 1 where LiDAR or MVS measured a surface (`TrainView.surfaceMask`).
+        surfaceMask: MLXArray? = nil,
+        // [gh, gw] 1 where alpha is pulled to 1 (`TrainView.opaqueMask`).
+        opaqueMask: MLXArray? = nil
     ) -> StepOutput {
         let (render, renderAlpha, cache) = renderer.forward(model: model, camera: camera, shDegree: shDegree)
         let h = camera.height
@@ -302,10 +310,12 @@ public final class GaussianTrainer: GaussianParamStore {
         var dBgCoeffs: MLXArray? = nil
         var lossArrayFinal = lossArray
         if enableBackgroundSH, let bg = bgImage, let bgK = bgKernels {
-            if alphaLossWeight > 0 {
+            if alphaLossWeight > 0 || surfaceAlphaWeight > 0 {
                 let surface = surfaceMask.map { Self.upsampleNearest($0, height: h, width: w) }
                     ?? MLXArray.zeros([h, w])
-                let terms = compiledAlphaTerms([vRender, bg, target, renderAlpha, surface])
+                let opaque = opaqueMask.map { Self.upsampleNearest($0, height: h, width: w) }
+                    ?? MLXArray.zeros([h, w])
+                let terms = compiledAlphaTerms([vRender, bg, target, renderAlpha, surface, opaque])
                 vAlpha = terms[0]
                 lossArrayFinal = lossArrayFinal + terms[1]
             } else {
@@ -404,12 +414,12 @@ public final class GaussianTrainer: GaussianParamStore {
     }
 
     /// With bg-SH: dL/dalpha = -Σ_c(vRender·bg) [H,W] plus the alpha loss (which penalizes alpha on
-    /// background pixels) and its term in vAlpha. As separate MLX ops; `compiledAlphaTerms` runs
-    /// them through `compile`, which fuses the ~30 full-image ops and gives the same bits at lower
-    /// GPU energy per step.
+    /// background pixels, and `opaqueWeight`·(1-alpha) on the `opaque` pixels) and its terms in
+    /// vAlpha. As separate MLX ops; `compiledAlphaTerms` runs them through `compile`, which fuses
+    /// the ~30 full-image ops and gives the same bits at lower GPU energy per step.
     static func alphaTerms(
         vRender: MLXArray, bg: MLXArray, target: MLXArray, renderAlpha: MLXArray, weight: Float,
-        surface: MLXArray? = nil
+        surface: MLXArray? = nil, opaque: MLXArray? = nil, opaqueWeight: Float = 0
     ) -> (vAlpha: MLXArray, loss: MLXArray) {
         let h = vRender.shape[0], w = vRender.shape[1]
         let bgErr = MLX.abs(target - bg).mean(axis: 2)         // [H,W]
@@ -426,8 +436,17 @@ public final class GaussianTrainer: GaussianParamStore {
         if let surface { mask = mask * (1 - surface) }
         let mSum = MLX.maximum(mask.sum(), MLXArray(1.0 as Float))
         let alpha2d = renderAlpha.reshaped([h, w])
-        let vAlpha = -(vRender * bg).sum(axis: 2) + weight * mask / mSum
-        return (vAlpha, weight * (alpha2d * mask).sum() / mSum)
+        var vAlpha = -(vRender * bg).sum(axis: 2) + weight * mask / mSum
+        var loss = weight * (alpha2d * mask).sum() / mSum
+        // Not in splatfacto-w: where a measured surface lies, the foreground has to cover it by
+        // itself, or hiding the background in the viewer leaves holes where the background had
+        // imitated it.
+        if let opaque, opaqueWeight > 0 {
+            let oSum = MLX.maximum(opaque.sum(), MLXArray(1.0 as Float))
+            vAlpha = vAlpha - opaqueWeight * opaque / oSum
+            loss = loss + opaqueWeight * ((1 - alpha2d) * opaque).sum() / oSum
+        }
+        return (vAlpha, loss)
     }
 
     /// `grid` [gh, gw] resampled to [height, width] by nearest cell (both span the same field of
@@ -440,11 +459,11 @@ public final class GaussianTrainer: GaussianParamStore {
     }
 
     /// `alphaTerms` compiled (one trace per step resolution: coarse and fine).
-    private lazy var compiledAlphaTerms = { [alphaLossWeight] in
+    private lazy var compiledAlphaTerms = { [alphaLossWeight, surfaceAlphaWeight] in
         compile { (x: [MLXArray]) -> [MLXArray] in
             let t = GaussianTrainer.alphaTerms(
                 vRender: x[0], bg: x[1], target: x[2], renderAlpha: x[3], weight: alphaLossWeight,
-                surface: x[4])
+                surface: x[4], opaque: x[5], opaqueWeight: surfaceAlphaWeight)
             return [t.vAlpha, t.loss]
         }
     }()

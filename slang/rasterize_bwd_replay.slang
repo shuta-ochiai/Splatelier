@@ -100,7 +100,7 @@ void rasterize_bwd_replay(uint3 tid : SV_DispatchThreadID)
         float sigma = 0.5 * (ca * dx * dx + cc * dy * dy) + cb * dx * dy;
         float vis = exp(-sigma);
         float raw_alpha = opac * vis;
-        // Same formula as forward. Anything cached already passed the sigma / 1/255 cull, so no
+        // Same formula as forward. Anything cached already passed the sigma / 4/255 cull, so no
         // retest
         float alpha = min(0.99, raw_alpha);
 

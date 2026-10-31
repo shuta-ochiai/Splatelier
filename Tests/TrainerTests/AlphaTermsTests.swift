@@ -52,6 +52,23 @@ import Testing
     #expect(MLX.abs(marked.vAlpha).max().item(Float.self) == 0)
 }
 
+/// On opaque pixels the alpha loss is the mean of (1 - alpha) there, and its gradient pulls alpha
+/// up on those pixels only.
+@Test func alphaTermsPullOpaquePixelsToOne() {
+    let h = 4, w = 4
+    let bg = MLXArray.zeros([h, w, 3])
+    let target = MLXArray.ones([h, w, 3])   // nowhere background
+    let vRender = MLXArray.zeros([h, w, 3])
+    let alpha = MLXArray([Float](repeating: 0.25, count: h * w))
+    let opaque = MLXArray((0..<(h * w)).map { Float($0 < w ? 1 : 0) }, [h, w])   // the top row
+    let t = GaussianTrainer.alphaTerms(vRender: vRender, bg: bg, target: target, renderAlpha: alpha,
+                                       weight: 0.15, opaque: opaque, opaqueWeight: 0.2)
+    #expect(abs(t.loss.item(Float.self) - 0.2 * 0.75) < 1e-6)
+    let v = t.vAlpha.asArray(Float.self)
+    #expect(v[0 ..< w].allSatisfy { abs($0 + 0.2 / Float(w)) < 1e-7 })
+    #expect(v[w...].allSatisfy { $0 == 0 })
+}
+
 /// The nearest-cell upsampling keeps each grid cell's value over its share of the image.
 @Test func surfaceMaskUpsamplesByNearestCell() {
     let grid = MLXArray([Float(1), 0, 0, 1], [2, 2])

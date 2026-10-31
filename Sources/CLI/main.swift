@@ -403,9 +403,18 @@ case "train-capture":
             // LIDAR_COLOR=0: leave the LiDAR seed points mid-grey (colored from the images as in the
             // app).
             lidarColors: env["LIDAR_COLOR"] != "0",
-            // LIDAR_SURFACE=0: pixels where LiDAR measured a surface may be background again (they
-            // are kept out of the background mask as in the app).
+            // SURFACE_MASK=0: pixels where LiDAR or MVS measured a surface may be background again
+            // (as in the app they are kept out of the background mask and their alpha is pulled to
+            // 1). MVS_SURFACE=0 / LIDAR_SURFACE=0: LiDAR / MVS alone marks them. SURFACE_ALPHA=<w>:
+            // weight of the pull to 1 (0 disables it).
+            surfaceMask: env["SURFACE_MASK"] != "0",
+            mvsSurfaceMask: env["MVS_SURFACE"] != "0",
             lidarSurfaceMask: env["LIDAR_SURFACE"] != "0",
+            // SPARSE_SURFACE=0: the sparse points do not mark measured surface.
+            sparseSurfaceMask: env["SPARSE_SURFACE"] != "0",
+            // SPARSE_SEED=0: no BA points fill the seed's MVS / LiDAR gaps.
+            sparseSeed: env["SPARSE_SEED"] != "0",
+            surfaceAlphaWeight: env["SURFACE_ALPHA"].flatMap { Float($0) } ?? 0.15,
             // C2F=<fraction>: share of iterations at 1/C2F_FACTOR of the captured resolution.
             // FINE_RES=<num>/<den> | full: resolution of the rest. The defaults are the app's (0.5,
             // 1/3 and 2/3: the coarse phase is half the fine resolution); with FINE_RES the coarse

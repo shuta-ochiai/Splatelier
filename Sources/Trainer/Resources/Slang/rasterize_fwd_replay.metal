@@ -92,7 +92,7 @@ struct KernelContext_0
             continue;
         }
         float _S10 = min(0.99000000953674316, (&kernelContext_0)->opacities_0[gi_0] * exp(- sigma_0));
-        if(_S10 < 0.00392156979069114)
+        if(_S10 < 0.0156862698495388)
         {
             k_0 = k_0 + int(1);
             continue;

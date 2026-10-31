@@ -25,6 +25,7 @@ extension TrainingDriver {
         enableBackgroundSH: Bool = false,
         backgroundSHDegree: Int = 3,
         alphaLossWeight: Float = 0.15,
+        surfaceAlphaWeight: Float = 0,
         // Maximum foreground SH degree (lower means less sh_eval bandwidth and heat). Capped by
         // `GaussianModel.maxShDegree`.
         maxShDegree maxShDegreeParam: Int = GaussianModel.maxShDegree,
@@ -67,10 +68,11 @@ extension TrainingDriver {
             maxScale: maxScale,
             enableBackgroundSH: enableBackgroundSH,
             backgroundSHDegree: backgroundSHDegree,
-            alphaLossWeight: alphaLossWeight
+            alphaLossWeight: alphaLossWeight,
+            surfaceAlphaWeight: surfaceAlphaWeight
         )
         if enableBackgroundSH {
-            log("rasterizer: background SH env-map enabled (degree=\(backgroundSHDegree), alphaLoss=\(alphaLossWeight))")
+            log("rasterizer: background SH env-map enabled (degree=\(backgroundSHDegree), alphaLoss=\(alphaLossWeight), surfaceAlpha=\(surfaceAlphaWeight))")
         }
         // gsplat's means lr: exponential decay from scene-scale times to 1/100. MCMC's Langevin
         // noise (lr·noiseLR) also follows this decay, so it does not disturb and diverge an already
@@ -232,14 +234,16 @@ extension TrainingDriver {
                 if needsCache {
                     let output = trainer.stepWithCache(
                         camera: stepCamera, targetImage: stepTarget, shDegree: shDegree,
-                        geometry: geometry, mvsDepth: v.mvsDepth, surfaceMask: v.surfaceMask
+                        geometry: geometry, mvsDepth: v.mvsDepth, surfaceMask: v.surfaceMask,
+                        opaqueMask: v.opaqueMask
                     )
                     return (output.loss, output.cache)
                 } else {
                     return (
                         trainer.step(
                             camera: stepCamera, targetImage: stepTarget, shDegree: shDegree,
-                            geometry: geometry, mvsDepth: v.mvsDepth, surfaceMask: v.surfaceMask
+                            geometry: geometry, mvsDepth: v.mvsDepth, surfaceMask: v.surfaceMask,
+                            opaqueMask: v.opaqueMask
                         ),
                         nil
                     )
@@ -522,7 +526,8 @@ extension TrainingDriver {
                 let v = views[session.viewSampler.sample(using: &rng)]
                 // The scale cap is applied inside trainer.step.
                 return trainer.step(camera: v.camera, targetImage: v.imageFloat, shDegree: shDegree,
-                                    geometry: geometry, mvsDepth: v.mvsDepth, surfaceMask: v.surfaceMask)
+                                    geometry: geometry, mvsDepth: v.mvsDepth, surfaceMask: v.surfaceMask,
+                                    opaqueMask: v.opaqueMask)
             }
             lastStepSeconds = Date().timeIntervalSince(t0)
             history.append(loss)
