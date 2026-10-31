@@ -32,6 +32,12 @@ public final class CaptureSurfelRenderer: @unchecked Sendable {
     /// Half width of the square (in σ). The training renderer also cuts off at 3σ.
     public static let extentSigmas: Float = 3
 
+    /// Least cosine between a square's plane normal and the direction to the camera: a square seen
+    /// more edge-on is tilted toward the camera, so it shows at least this share of its width. Flat
+    /// squares seen at a grazing angle, or with the normal a little off (the normals come from a
+    /// low-resolution depth map), otherwise thin into slivers that read as scattered leaves.
+    public static let minFacingCosine: Float = 0.9
+
     /// Surfel sent to the GPU (32 bytes, same as `Splat` on the Metal side). Color is 8-bit sRGB,
     /// a = opacity.
     private struct GPUSplat {
@@ -45,7 +51,9 @@ public final class CaptureSurfelRenderer: @unchecked Sendable {
         var extent: Float
         /// 1: the render target has no sRGB conversion, so output colors in sRGB as is.
         var outputSRGB: UInt32
-        var pad = SIMD2<Float>.zero
+        var minFacing: Float
+        var pad: Float = 0
+        var cameraPosition: SIMD4<Float>
     }
 
     private struct PipelineKey: Hashable {
@@ -134,7 +142,9 @@ public final class CaptureSurfelRenderer: @unchecked Sendable {
         var uniforms = Uniforms(
             viewProjection: simd_float4x4(camera.projectionTransform) * pov.simdWorldTransform.inverse,
             extent: Self.extentSigmas,
-            outputSRGB: Self.isSRGBEncoded(target.pixelFormat) ? 0 : 1)
+            outputSRGB: Self.isSRGBEncoded(target.pixelFormat) ? 0 : 1,
+            minFacing: Self.minFacingCosine,
+            cameraPosition: SIMD4(pov.simdWorldPosition, 1))
         encoder.setRenderPipelineState(pipeline)
         encoder.setDepthStencilState(depthState)
         encoder.setCullMode(.none)
@@ -272,7 +282,9 @@ public final class CaptureSurfelRenderer: @unchecked Sendable {
         float4x4 viewProjection;
         float extent;
         uint outputSRGB;
-        float2 pad;
+        float minFacing;
+        float pad;
+        float4 cameraPosition;
     };
 
     struct VOut {
@@ -290,6 +302,18 @@ public final class CaptureSurfelRenderer: @unchecked Sendable {
                               constant Uniforms& u [[buffer(1)]]) {
         Splat s = splats[iid];
         float3 n = float3(s.normal);
+        // Tilt a square seen more edge-on than minFacing toward the camera (keeping the side it
+        // leans to), so it does not thin into a sliver.
+        float3 v = normalize(u.cameraPosition.xyz - float3(s.position));
+        float facing = dot(n, v);
+        if (facing < 0.0) { n = -n; facing = -facing; }
+        if (facing < u.minFacing) {
+            float3 side = n - facing * v;
+            float len = length(side);
+            if (len > 1e-6) {
+                n = u.minFacing * v + sqrt(1.0 - u.minFacing * u.minFacing) * (side / len);
+            }
+        }
         float3 helper = abs(n.x) < 0.9 ? float3(1, 0, 0) : float3(0, 1, 0);
         float3 t1 = normalize(cross(n, helper));
         float3 t2 = cross(n, t1);
