@@ -277,6 +277,7 @@ final class TrainingViewModel: ObservableObject {
         resumableSession = nil
         beginProgress(includesPreprocessing: true)
         previewImage = nil
+        loadFrameSlides()
 
         // GPU training stops if the app is suspended by screen lock, so disable auto-lock during
         // training. Always set it back to false on completion/failure.
@@ -781,6 +782,20 @@ final class TrainingViewModel: ObservableObject {
     /// Counts the pictures (changes with each new one, so the screen can animate the swap).
     @Published private(set) var previewCount = 0
 
+    /// A few of the captured frames, evenly spread over the capture. The preview shows them one
+    /// after another while the frames are prepared, before the first picture of the model exists;
+    /// they are dropped when that arrives.
+    @Published private(set) var frameSlides: [UIImage] = []
+
+    private func loadFrameSlides(count: Int = 12) {
+        let frames = scene.frames
+        let n = Swift.min(count, frames.count)
+        guard n > 0 else { frameSlides = []; return }
+        frameSlides = (0..<n).compactMap { i in
+            FrameThumbnail.makeThumbnail(frames[i * frames.count / n].originalImage, maxDim: 480)
+        }
+    }
+
     /// Handler for the pictures the training loop produces (on the training thread). The frames are
     /// in sensor orientation, so the image is marked rotated for a portrait screen.
     private func makePreviewHandler() -> (TrainingPreviewFrame) -> Void {
@@ -798,6 +813,7 @@ final class TrainingViewModel: ObservableObject {
                 guard let self else { return }
                 self.previewImage = image
                 self.previewCount += 1
+                self.frameSlides = []
             }
         }
     }
