@@ -28,6 +28,17 @@ case "$ARCH" in
 esac
 
 ARCHIVE="slang-${SLANG_VERSION}-macos-${SLANG_ARCH}.tar.gz"
+
+# SHA256 of the release archives, so a swapped or corrupted download is never extracted.
+# When bumping SLANG_VERSION, add the new digests here (`shasum -a 256 <archive>`).
+case "$SLANG_VERSION-$SLANG_ARCH" in
+    2026.9.1-aarch64) EXPECTED_SHA256="42760b3e51c8543cd762b238647b4686fd8bd2b6fa33da42b1037f84ca054881" ;;
+    2026.9.1-x86_64) EXPECTED_SHA256="d45f16f6aa15ed513ebbcdf86e4379eabff054b4b54c9fa98d93b3524203c967" ;;
+    *)
+        echo "No pinned SHA256 for slang $SLANG_VERSION ($SLANG_ARCH); add one to $0." >&2
+        exit 1
+        ;;
+esac
 URL="https://github.com/shader-slang/slang/releases/download/v${SLANG_VERSION}/${ARCHIVE}"
 
 mkdir -p "$TOOLS_DIR"
@@ -36,6 +47,14 @@ trap 'rm -rf "$TMP"' EXIT
 
 echo "Downloading: $URL"
 curl -fsSL "$URL" -o "$TMP/$ARCHIVE"
+
+ACTUAL_SHA256="$(shasum -a 256 "$TMP/$ARCHIVE" | cut -d' ' -f1)"
+if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
+    echo "SHA256 mismatch for $ARCHIVE" >&2
+    echo "  expected: $EXPECTED_SHA256" >&2
+    echo "  actual:   $ACTUAL_SHA256" >&2
+    exit 1
+fi
 
 echo "Extracting to: $SLANG_DIR"
 mkdir -p "$SLANG_DIR"
