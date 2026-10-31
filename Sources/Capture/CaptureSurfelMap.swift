@@ -27,12 +27,18 @@ public struct CaptureSurfelMap: Sendable {
         public let pointCount: Int
         /// Number of distinct keyframes that contributed points to the cell.
         public let viewCount: Int
+        /// Share of the parent cell's refinement this cell's level has reached: refined siblings
+        /// (itself included) / `hideWhenRefinedChildren`, at most 1. Scales the opacity.
+        public var refinedShare: Float = 1
 
         /// In-plane standard deviation (m) of the splat = cell edge ×
         /// `CaptureSurfelMap.splatSigmaPerCell`.
         public var splatSigma: Float { cellMeters * CaptureSurfelMap.splatSigmaPerCell }
-        /// Splat opacity. 0.55 if one keyframe contributed points, 0.95 with 4 or more.
-        public var splatOpacity: Float { 0.55 + 0.4 * min(1, Float(max(0, viewCount - 1)) / 3) }
+        /// Splat opacity. 0.55 if one keyframe contributed points, 0.95 with 4 or more, scaled by
+        /// `refinedShare`.
+        public var splatOpacity: Float {
+            (0.55 + 0.4 * min(1, Float(max(0, viewCount - 1)) / 3)) * refinedShare
+        }
     }
 
     /// Ratio of the splat's in-plane standard deviation to the cell edge. Large enough to overlap
@@ -78,9 +84,11 @@ public struct CaptureSurfelMap: Sendable {
     /// even if cos is below it).
     public let minCosine: Float
     /// If at least this many child cells are refined, the cell is not displayed (left to the finer
-    /// splats). 1: a thin structure seen up close (a bar refines one or two of the 8 children) is
-    /// otherwise covered by the coarse splat that averages it with what lies behind it, and does
-    /// not show however closely it is captured.
+    /// splats). A flat surface crossing a cell covers about 4 of its 8 children, so with 4 the
+    /// coarse splat stays under the fine ones until they cover it. With 1, sparsely refined areas
+    /// (brick, ceilings, the edge of what has been captured) lost the coarse splat while only a
+    /// few fine ones showed, scattering them like leaves; a thin bar refining one or two children
+    /// still shows in front of the coarse splat in the captures checked.
     public let hideWhenRefinedChildren: Int
     /// Cells with fewer points than this are not displayed (isolated points floating off the
     /// surface).
@@ -89,7 +97,7 @@ public struct CaptureSurfelMap: Sendable {
     private var levels: [[Key: Cell]]
 
     public init(finestCellMeters: Float = 0.005, levelCount: Int = 7, cellsPerPixel: Float = 1,
-                minCosine: Float = 0.3, hideWhenRefinedChildren: Int = 1, minPoints: Int = 2) {
+                minCosine: Float = 0.3, hideWhenRefinedChildren: Int = 4, minPoints: Int = 2) {
         precondition(finestCellMeters > 0 && levelCount >= 1 && cellsPerPixel > 0)
         self.finestCellMeters = finestCellMeters
         self.levelCount = levelCount
@@ -192,18 +200,26 @@ public struct CaptureSurfelMap: Sendable {
     }
 
     /// Surfels to display (excluding cells with at least `hideWhenRefinedChildren` refined children
-    /// and cells with fewer than `minPoints` points).
+    /// and cells with fewer than `minPoints` points). A cell whose parent is still shown fades with
+    /// how few of its siblings are refined (`Surfel.refinedShare`): on plain surfaces the points
+    /// gather on the little texture there is (grooves, edges), and their fine splats alone read as
+    /// dark leaves scattered over the coarse splat.
     public func snapshot() -> [Surfel] {
         var out: [Surfel] = []
         for (level, cells) in levels.enumerated() {
             let size = cellMeters(level: level)
-            for cell in cells.values where cell.count >= minPoints
+            for (key, cell) in cells where cell.count >= minPoints
                 && cell.childMask.nonzeroBitCount < hideWhenRefinedChildren {
                 let n = simd_length(cell.normal) > 1e-6 ? simd_normalize(cell.normal) : SIMD3<Float>(0, 0, 1)
                 let inv = 1 / Float(cell.count)
-                out.append(Surfel(
+                var surfel = Surfel(
                     position: cell.position * inv, normal: n, color: cell.color * inv,
-                    cellMeters: size, level: level, pointCount: cell.count, viewCount: cell.frames))
+                    cellMeters: size, level: level, pointCount: cell.count, viewCount: cell.frames)
+                if level + 1 < levelCount,
+                   let parent = levels[level + 1][Key(x: key.x >> 1, y: key.y >> 1, z: key.z >> 1)] {
+                    surfel.refinedShare = min(1, Float(parent.childMask.nonzeroBitCount) / Float(hideWhenRefinedChildren))
+                }
+                out.append(surfel)
             }
         }
         return out
