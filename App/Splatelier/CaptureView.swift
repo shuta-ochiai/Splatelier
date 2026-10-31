@@ -100,9 +100,8 @@ struct CaptureView: View {
             }
         }
         .alert("Unfinished capture found", isPresented: $showResumePrompt) {
-            Button("Open") { resumePendingDataset() }
+            Button("Restart") { resumePendingDataset() }
             Button("Discard", role: .destructive) { discardPendingDataset() }
-            Button("Later", role: .cancel) { }
         } message: {
             Text("The last training run stopped before finishing. The capture data is still here, so you can train it again from the start.")
         }
