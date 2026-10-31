@@ -90,7 +90,7 @@ targets:
         # Also state in project.yml the team baked into the committed .xcodeproj.
         # If left empty, `xcodegen generate` resets the team to "" (the omission trap) and
         # Automatic signing fails. People on a different team replace it with their own ID.
-        DEVELOPMENT_TEAM: Q7V45KS8Z5
+        DEVELOPMENT_TEAM: 434V3FTL9C
         PRODUCT_BUNDLE_IDENTIFIER: io.github.shuta-ochiai.splatelier
         CODE_SIGN_STYLE: Automatic
         SWIFT_STRICT_CONCURRENCY: minimal

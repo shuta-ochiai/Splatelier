@@ -47,7 +47,7 @@ fi
 
 if [ "$TARGET" = guides ] || [ "$TARGET" = all ]; then
     mkdir -p "$APP_DIR/Guides"
-    for scene in slow turn angles pivot loop light subjects; do
+    for scene in slow turn angles pivot loop light subjects cool; do
         mkdir -p "$WORK/$scene"
         "$PYTHON" "$SCRIPT_DIR/render_guides.py" "$WORK/$scene" "$scene"
         encode "$WORK/$scene" 60 16 "$APP_DIR/Guides/guide_$scene.mp4"

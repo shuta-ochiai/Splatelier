@@ -19,9 +19,9 @@ struct GuideSequence {
     /// sets apart (here {slow, light, loop} and {subjects, turn, pivot}), so that no set can follow
     /// another with the same clip.
     static let sets: [[String]] = [
-        ["slow", "turn", "angles", "pivot", "loop", "light", "subjects"],
-        ["light", "subjects", "pivot", "slow", "angles", "loop", "turn"],
-        ["loop", "angles", "subjects", "turn", "light", "slow", "pivot"],
+        ["slow", "turn", "angles", "cool", "pivot", "loop", "light", "subjects"],
+        ["light", "subjects", "pivot", "slow", "angles", "cool", "loop", "turn"],
+        ["loop", "cool", "angles", "subjects", "turn", "light", "slow", "pivot"],
     ]
 
     private static let lastSetKey = "guideLastSet"
@@ -67,7 +67,7 @@ private struct GuideNavigation: Equatable {
 
 /// Square tip animation with rounded corners. Plays only while it is on screen and the app is
 /// active; with Reduce Motion on it stays on its first frame. A tap pauses it (and resumes it); a
-/// double tap on the right half goes to the next clip, on the left half to the previous one.
+/// swipe to the left goes to the next clip, a swipe to the right to the previous one.
 struct GuideClipView: View {
     /// Changes on every appearance, which starts a fresh random set.
     @State private var session = 0
@@ -75,7 +75,6 @@ struct GuideClipView: View {
     /// Paused by a tap.
     @State private var userPaused = false
     @State private var navigation = GuideNavigation()
-    @State private var width: CGFloat = 0
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -99,11 +98,12 @@ struct GuideClipView: View {
         .aspectRatio(1, contentMode: .fit)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .contentShape(Rectangle())
-        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
-        // The double tap is declared first so a single tap waits to see whether a second follows.
-        .gesture(SpatialTapGesture(count: 2).onEnded { tap in
+        // A mostly horizontal drag; a tap (which pauses) is too short to count as one.
+        .gesture(DragGesture(minimumDistance: 30).onEnded { drag in
+            let dx = drag.translation.width
+            guard abs(dx) > abs(drag.translation.height) else { return }
             userPaused = false
-            navigation = GuideNavigation(id: navigation.id + 1, forward: tap.location.x > width / 2)
+            navigation = GuideNavigation(id: navigation.id + 1, forward: dx < 0)
         })
         .onTapGesture {
             withAnimation(.easeInOut(duration: 0.15)) { userPaused.toggle() }
