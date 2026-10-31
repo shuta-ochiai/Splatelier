@@ -49,7 +49,12 @@ public enum CaptureTraining {
     public static func makeViews(
         frames: [CapturedFrame], tileSize: Int = 16, background: MLXArray,
         weightByTimestamp: [TimeInterval: Float]? = nil,
-        lidarSurfaceMask: Bool = false
+        surfaceMask: Bool = false,
+        // Each frame's measured cells (`mvsSurfaceCells` / `sparseSurfaceCells`, combined) by
+        // viewmat (LiDAR alone for the frames without).
+        surfaceCells: [[Float]: [Float]] = [:],
+        // Count the LiDAR samples as measured surface besides MVS.
+        lidarSurface: Bool = true
     ) -> [TrainView] {
         var views: [TrainView] = []
         views.reserveCapacity(frames.count)
@@ -80,7 +85,10 @@ public enum CaptureTraining {
                 name: String(format: "capture_%06d.png", idx),
                 weight: weight
             )
-            if lidarSurfaceMask { view.surfaceMask = surfaceMask(frame) }
+            if surfaceMask, let masks = surfaceMasks(frame, cells: surfaceCells[frame.viewmat], lidar: lidarSurface) {
+                view.surfaceMask = masks.surface
+                view.opaqueMask = masks.opaque
+            }
             views.append(view)
         }
         return views
@@ -90,15 +98,23 @@ public enum CaptureTraining {
     /// 8th of the 256×192 depth pixels), so each sample marks its own cell.
     static let surfaceMaskGrid = (rows: 24, cols: 32)
 
-    /// [rows, cols] grid with 1 in the cells the frame's LiDAR samples project to, nil without
-    /// samples. Samples only exist where the sensor returned a surface within range, so the cells
-    /// left 0 are where the background may show (sky, far walls, windows).
-    static func surfaceMask(_ frame: CapturedFrame) -> MLXArray? {
-        guard !frame.lidarSamples.isEmpty else { return nil }
+    /// [rows, cols] grids of the frame's measured surface: `surface` has 1 in the cells its LiDAR
+    /// samples project to or `cells` marks (MVS / sparse), `opaque` in those of them whose 8
+    /// neighbors are marked too (the image border counts as marked). nil with neither. LiDAR
+    /// samples only exist where the sensor returned a surface within range, MVS depth where views
+    /// agreed on one and sparse points where features were tracked, so the cells left 0 are where
+    /// the background may show (sky, far walls, windows). Leaving out
+    /// the edge cells keeps a silhouette from being pulled over the background beside it, which a
+    /// cell this coarse (1/32 of the width) would partly cover.
+    static func surfaceMasks(
+        _ frame: CapturedFrame, cells: [Float]?, lidar: Bool = true
+    ) -> (surface: MLXArray, opaque: MLXArray)? {
+        let lidarSamples = lidar ? frame.lidarSamples : []
+        guard !lidarSamples.isEmpty || cells != nil else { return nil }
         let (rows, cols) = surfaceMaskGrid
-        var grid = [Float](repeating: 0, count: rows * cols)
+        var grid = cells ?? [Float](repeating: 0, count: rows * cols)
         let k = frame.intrinsics
-        for s in frame.lidarSamples {
+        for s in lidarSamples {
             let p = s.cameraPoint
             guard p.z > 0 else { continue }
             let u = (k.fx * p.x / p.z + k.cx) / Float(frame.width)
@@ -106,22 +122,92 @@ public enum CaptureTraining {
             guard u >= 0, u < 1, v >= 0, v < 1 else { continue }
             grid[Int(v * Float(rows)) * cols + Int(u * Float(cols))] = 1
         }
-        return MLXArray(grid, [rows, cols])
+        var opaque = grid
+        for r in 0..<rows {
+            for c in 0..<cols where grid[r * cols + c] > 0 {
+                for nr in Swift.max(0, r - 1)...Swift.min(rows - 1, r + 1) {
+                    for nc in Swift.max(0, c - 1)...Swift.min(cols - 1, c + 1) where grid[nr * cols + nc] == 0 {
+                        opaque[r * cols + c] = 0
+                    }
+                }
+            }
+        }
+        return (MLXArray(grid, [rows, cols]), MLXArray(opaque, [rows, cols]))
     }
 
-    /// Mean rendered foreground alpha over the pixels where LiDAR measured a surface: a wall
-    /// taken over by the background shows as alpha near 0 there although the image still matches.
+    /// [rows·cols] cells over `frame` (`surfaceMaskGrid`) with 1 where at least `minPoints` of
+    /// `points` (world) land in front of the camera. A point anywhere along a cell's rays means a
+    /// surface at or before it, so occlusion does not matter. The count keeps a stray point in the
+    /// sky from marking its cell.
+    static func sparseSurfaceCells(_ points: [SIMD3<Float>], frame: CapturedFrame, minPoints: Int = 3) -> [Float] {
+        let (rows, cols) = surfaceMaskGrid
+        let k = frame.intrinsics, vm = frame.viewmat
+        let r0 = SIMD4(vm[0], vm[1], vm[2], vm[3])
+        let r1 = SIMD4(vm[4], vm[5], vm[6], vm[7])
+        let r2 = SIMD4(vm[8], vm[9], vm[10], vm[11])
+        // Intrinsics in cells rather than pixels.
+        let sx = Float(cols) / Float(frame.width), sy = Float(rows) / Float(frame.height)
+        let fx = k.fx * sx, cx = k.cx * sx, fy = k.fy * sy, cy = k.cy * sy
+        let colsF = Float(cols), rowsF = Float(rows)
+        var counts = [Int32](repeating: 0, count: rows * cols)
+        counts.withUnsafeMutableBufferPointer { counts in
+            for p in points {
+                let h = SIMD4(p, 1)
+                let z = simd_dot(r2, h)
+                guard z > 0 else { continue }
+                let u = fx * simd_dot(r0, h) / z + cx
+                let v = fy * simd_dot(r1, h) / z + cy
+                guard u >= 0, u < colsF, v >= 0, v < rowsF else { continue }
+                counts[Int(v) * cols + Int(u)] += 1
+            }
+        }
+        return counts.map { $0 >= minPoints ? 1 : 0 }
+    }
+
+    /// [rows·cols] cells over `frame` (`surfaceMaskGrid`) with 1 where at least half of a 4×4
+    /// sampling of its MVS depth map (same pose, own resolution and intrinsics) holds a depth.
+    static func mvsSurfaceCells(_ map: CostVolumeMVS.DepthView, frame: CapturedFrame) -> [Float] {
+        let (rows, cols) = surfaceMaskGrid
+        let k = frame.intrinsics, ti = map.intrinsics
+        let sub = 4
+        var cells = [Float](repeating: 0, count: rows * cols)
+        for r in 0..<rows {
+            for c in 0..<cols {
+                var hits = 0
+                for i in 0..<sub {
+                    let py = (Float(r) + (Float(i) + 0.5) / Float(sub)) / Float(rows) * Float(frame.height)
+                    let v = ((py - k.cy) / k.fy * ti.fy + ti.cy).rounded(.down)
+                    guard v >= 0, v < Float(map.height) else { continue }
+                    for j in 0..<sub {
+                        let px = (Float(c) + (Float(j) + 0.5) / Float(sub)) / Float(cols) * Float(frame.width)
+                        let u = ((px - k.cx) / k.fx * ti.fx + ti.cx).rounded(.down)
+                        guard u >= 0, u < Float(map.width) else { continue }
+                        if map.depth[Int(v) * map.width + Int(u)] > 0 { hits += 1 }
+                    }
+                }
+                if hits * 2 >= sub * sub { cells[r * cols + c] = 1 }
+            }
+        }
+        return cells
+    }
+
+    /// Mean rendered foreground alpha over the pixels of a measured surface (`surfaceMask`), and the
+    /// share of them below 0.5 (holes once the viewer hides the background): a wall taken over by
+    /// the background shows as alpha near 0 there although the image still matches.
     static func logSurfaceAlpha(views: [TrainView], trainer: GaussianTrainer, label: String, log: (String) -> Void) {
-        var sum: Float = 0, count: Float = 0
+        var sum: Float = 0, holes: Float = 0, count: Float = 0
         for v in views {
             guard let mask = v.surfaceMask else { continue }
             let alpha = trainer.renderer.forward(model: trainer.model, camera: v.camera, shDegree: 3).renderAlpha
+                .reshaped([v.camera.height, v.camera.width])
             let m = GaussianTrainer.upsampleNearest(mask, height: v.camera.height, width: v.camera.width)
-            sum += (alpha.reshaped([v.camera.height, v.camera.width]) * m).sum().item(Float.self)
+            sum += (alpha * m).sum().item(Float.self)
+            holes += ((alpha .< Float(0.5)).asType(.float32) * m).sum().item(Float.self)
             count += m.sum().item(Float.self)
         }
         guard count > 0 else { return }
-        log(String(format: "[eval-holdout] %@: mean foreground alpha on LiDAR surface pixels = %.3f", label, sum / count))
+        log(String(format: "[eval-holdout] %@: on measured surface pixels mean foreground alpha = %.3f, alpha < 0.5 = %.1f%%",
+                   label, sum / count, 100 * holes / count))
     }
 
     /// Trains an on-device capture from its geometry (`prepareGeometry`, shared with meshing;
@@ -162,10 +248,25 @@ public enum CaptureTraining {
         // Color the LiDAR seed points from the frame images (mid-grey otherwise). Worth +0.8 to
         // +1.3 dB held-out where LiDAR is a large share of the seed.
         lidarColors: Bool = true,
-        // Keep the pixels where LiDAR measured a surface out of the bg-SH background mask, so a
-        // plain wall the background color can imitate stays foreground (+0.5 dB held-out on a
-        // LiDAR capture; MVS depth for the same purpose gained nothing).
+        // Keep the pixels where LiDAR or MVS measured a surface out of the bg-SH background mask,
+        // so a plain wall the background color can imitate stays foreground (LiDAR: +0.5 dB
+        // held-out on a LiDAR capture; MVS alone for the same purpose gained nothing).
+        surfaceMask: Bool = true,
+        // Count MVS depth as a measured surface besides LiDAR (`surfaceMask`).
+        mvsSurfaceMask: Bool = true,
+        // Count LiDAR samples as a measured surface besides MVS (`surfaceMask`).
         lidarSurfaceMask: Bool = true,
+        // Count the sparse points (BA and ARKit features) as a measured surface besides MVS
+        // (`surfaceMask`): they also land on repeating or plain-ish texture (brick, floor tiles)
+        // where the MVS views do not agree.
+        sparseSurfaceMask: Bool = true,
+        // Seed the BA points where MVS / LiDAR left a gap, so the foreground has Gaussians on the
+        // surfaces the sparse cells mark (`sparseSurfaceMask`) (+0.45 dB held-out on one
+        // MVS-only capture with the surface pull, the same on another).
+        sparseSeed: Bool = true,
+        // Weight of the loss pulling foreground alpha to 1 inside the measured surface (away from
+        // its edges), so hiding the background in the viewer leaves no holes there. 0 disables it.
+        surfaceAlphaWeight: Float = 0.15,
         // The background is always bg-SH: an O(pixels) background that renders the foreground on
         // black and composites `render + (1-alpha)·bg(dir)`. It is baked into far-shell Gaussians
         // at export, which the viewer can hide. Degree 4 (25 bands) absorbs more of the
@@ -228,6 +329,7 @@ public enum CaptureTraining {
                 fusionVoxelSize: fusionVoxelSize,
                 allocation: seedAllocation, maxPoints: maxInitGaussians,
                 lidarColors: lidarColors,
+                sparseGapFill: sparseSeed,
                 log: log
             )
             eval(positions, colors)
@@ -249,24 +351,48 @@ public enum CaptureTraining {
         }
         log(memorySnapshot("post-init"))
         phaseMs("init(OperatorI disc + model)")
-        // Built last so the view copies are not resident alongside the seed build.
-        var views = makeViews(
-            frames: trainingFrames, tileSize: tileSize, background: background,
-            weightByTimestamp: geometry.weightByTimestamp, lidarSurfaceMask: lidarSurfaceMask
-        )
-        phaseMs("makeViews(decode+upload \(trainingFrames.count) frames)")
-        if geometryRegularization != nil {
-            // Each training view's MVS depth map (same frame, so the same pose).
-            do {
-                var byPose: [[Float]: CostVolumeMVS.DepthView] = [:]
-                for map in try geometry.depthViews() { byPose[map.viewmat] = map }
+        // Each frame's MVS depth map (same frame, so the same pose), for the geometric
+        // regularization and the surface masks. The maps are let go before training; the
+        // held-out views keep only their mask cells.
+        var surfaceCells: [[Float]: [Float]] = [:]
+        var views: [TrainView]
+        do {
+            var byPose: [[Float]: CostVolumeMVS.DepthView] = [:]
+            if geometryRegularization != nil || surfaceMask || !heldOutFrames.isEmpty {
+                do {
+                    for map in try geometry.depthViews() { byPose[map.viewmat] = map }
+                } catch {
+                    log("[warn] no MVS depth for the geometric regularization / surface mask: \(error)")
+                }
+            }
+            let sparsePoints = farClipped(workingScene.sparsePoints, frames: workingScene.frames, sceneScale: sceneScale)
+            // The held-out views always get every source, so their surface alpha compares across
+            // settings.
+            let maskFrames = trainingFrames.map { ($0, true) } + heldOutFrames.map { ($0, false) }
+            for (frame, training) in maskFrames {
+                var cells: [Float]?
+                if let map = byPose[frame.viewmat], !training || (surfaceMask && mvsSurfaceMask) {
+                    cells = mvsSurfaceCells(map, frame: frame)
+                }
+                if !sparsePoints.isEmpty, !training || (surfaceMask && sparseSurfaceMask) {
+                    let sparse = sparseSurfaceCells(sparsePoints, frame: frame)
+                    cells = cells.map { zip($0, sparse).map(Swift.max) } ?? sparse
+                }
+                surfaceCells[frame.viewmat] = cells
+            }
+            // Built last so the view copies are not resident alongside the seed build.
+            views = makeViews(
+                frames: trainingFrames, tileSize: tileSize, background: background,
+                weightByTimestamp: geometry.weightByTimestamp, surfaceMask: surfaceMask,
+                surfaceCells: surfaceCells, lidarSurface: lidarSurfaceMask
+            )
+            phaseMs("makeViews(decode+upload \(trainingFrames.count) frames)")
+            if geometryRegularization != nil {
                 for i in views.indices {
                     guard let map = byPose[trainingFrames[i].viewmat] else { continue }
                     views[i].mvsDepth = DepthTarget(
                         width: map.width, height: map.height, depth: map.depth, intrinsics: map.intrinsics)
                 }
-            } catch {
-                log("[warn] geometry regularization without MVS depth: \(error)")
             }
         }
         log(String(format: "[timing] === pre-training total = %.2fs (training starts) ===",
@@ -283,6 +409,7 @@ public enum CaptureTraining {
             enableBackgroundSH: true,
             backgroundSHDegree: backgroundSHDegree,
             alphaLossWeight: alphaLossWeight,
+            surfaceAlphaWeight: surfaceMask ? surfaceAlphaWeight : 0,
             coarseToFineFactor: coarseToFineFactor,
             coarseToFineFraction: coarseToFineFraction,
             fineResample: fineResample,
@@ -296,7 +423,7 @@ public enum CaptureTraining {
         )
         if !heldOutFrames.isEmpty, let trainer = result.session?.trainer {
             let heldOutViews = makeViews(frames: heldOutFrames, tileSize: tileSize, background: background,
-                                         lidarSurfaceMask: true)
+                                         surfaceMask: true, surfaceCells: surfaceCells)
             log("[eval-holdout] held-out views:")
             _ = try TrainingDriver.evaluate(views: heldOutViews, log: log) {
                 trainer.renderForEval(camera: $0.camera)

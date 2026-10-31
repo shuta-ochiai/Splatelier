@@ -25,7 +25,7 @@ private func makeSmokeScene(seed: UInt64 = 0) -> (model: GaussianModel, camera: 
          Float(1), Float(0), Float(0), Float(0)],
         [n, 4]
     )
-    // Keep them wide so the 1/255 alpha cull does not kick in inside the image (sharp ones make FD
+    // Keep them wide so the 4/255 alpha cull does not kick in inside the image (sharp ones make FD
     // pick up discontinuities absent from the analytic gradient).
     let logScales = MLXArray([Float](repeating: log(0.4), count: n * 3), [n, 3])
     let logitOpacities = MLXArray([Float](repeating: logit(0.7), count: n), [n])
@@ -239,7 +239,7 @@ func rendererBackwardLogScalesMatchFD() throws {
     let analytical = f.grads.dLogScales.asArray(Float.self)
     let n = f.model.count
     // means / scale move the on-screen shape, so FD crosses the rasterizer's discrete thresholds
-    // (1/255 cull, sigma sign) and picks up discontinuities (slightly worse with eps2d dilation).
+    // (4/255 cull, sigma sign) and picks up discontinuities (slightly worse with eps2d dilation).
     // Loosen the abs tolerance. The backward itself is verified by the standalone project_to_screen
     // / rasterize FD tests and the overfit test.
     checkFiniteDiff(
