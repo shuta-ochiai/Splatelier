@@ -31,7 +31,7 @@ let package = Package(
         ),
     ],
     dependencies: [
-        .package(url: "https://github.com/ml-explore/mlx-swift", from: "0.25.3"),
+        .package(url: "https://github.com/ml-explore/mlx-swift", from: "0.33.0"),
         // Real-time Gaussian-splat viewer (MIT). Used by the CLI's `view` subcommand,
         // the live-training window and SplatViewerKit, not the training library.
         // Vendored v1.0.1 with a patch that blends in sRGB space on non-sRGB targets
