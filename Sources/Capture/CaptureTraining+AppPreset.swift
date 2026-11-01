@@ -75,8 +75,10 @@ extension CaptureTraining {
             let start = max(100, horizon / 5)
             let stop = max(start + 1, (horizon * 3) / 4)
             // IGS+ LAS is deterministic and edge-guided, so it uses fewer, higher-confidence splits
-            // than MCMC.
-            let targetFireCount = min(16, max(8, horizon / 500 + 6))
+            // than MCMC. The number of splits sets how fine the Gaussians end up: 16 instead of
+            // about 11 makes them 10-16% smaller, where a run twice as long but with 11 splits does
+            // not.
+            let targetFireCount = 16
             return Schedule(
                 refineStartIter: start, refineStopIter: stop,
                 refineEvery: max(25, max(1, stop - start) / targetFireCount))
