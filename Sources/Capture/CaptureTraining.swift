@@ -15,14 +15,15 @@ public enum CaptureTraining {
 
     /// Recommended training iterations proportional to the capture frame count (1 iter = 1 view),
     /// clamped to [minIters, maxIters] and rounded to the stepper granularity of 50. ~8 iter/frame
-    /// in [500, 1350], favoring heat/time. MVS mode uses 4 iter/frame in [500, 2400]: with the
-    /// dense MVS seed, 4×frames is the knee of quality vs energy, and the cap
-    /// lets a 600-frame (about 2-minute) capture keep 4 iter/frame.
+    /// in [500, 1350], favoring heat/time. MVS mode uses 4.8 iter/frame in [500, 2900]: with the
+    /// dense MVS seed and the Hybrid prune keeping the Gaussians few and opaque, a step costs about
+    /// a fifth less than at 4 iter/frame before that prune, so the extra fifth of iterations buys
+    /// held-out SSIM and PSNR within the same training energy; the cap lets a 600-frame (about
+    /// 2-minute) capture keep 4.8 iter/frame.
     public static func recommendedIterations(frameCount: Int, mvs: Bool = false) -> Int {
-        let itersPerFrame = mvs ? 4 : 8
         let minIters = 500
-        let maxIters = mvs ? 2400 : 1350
-        let raw = Swift.max(0, frameCount) * itersPerFrame
+        let maxIters = mvs ? 2900 : 1350
+        let raw = mvs ? Swift.max(0, frameCount) * 24 / 5 : Swift.max(0, frameCount) * 8
         let rounded = ((raw + 25) / 50) * 50
         return Swift.min(maxIters, Swift.max(minIters, rounded))
     }
