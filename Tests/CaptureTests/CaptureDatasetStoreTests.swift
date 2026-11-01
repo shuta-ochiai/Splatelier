@@ -112,6 +112,60 @@ func datasetStoreRoundTripsCameraSettings() throws {
     #expect(CameraSettings.summary(of: [base]) == nil)
 }
 
+/// A yaw of 0.02 rad and a 1 cm step to the right over 1/60 s give the expected velocities in the
+/// camera's axes, and the blur in pixels follows from them.
+@Test
+func cameraMotionFromTwoPoses() throws {
+    let dt = 1.0 / 60
+    let yaw: Float = 0.02
+    // A camera rotated 90° about world z, so world and camera axes differ.
+    let base = simd_float4x4(simd_quatf(angle: .pi / 2, axis: SIMD3(0, 0, 1)))
+    var next = base * simd_float4x4(simd_quatf(angle: yaw, axis: SIMD3(0, 1, 0)))
+    let right = base * SIMD4<Float>(0.01, 0, 0, 0)     // 1 cm along the camera's x, in world
+    next.columns.3 = base.columns.3 + right
+    let m = try #require(CameraMotion(from: base, at: 10, to: next, at: 10 + dt))
+    #expect(abs(m.angularVelocity[1] - yaw / Float(dt)) < 1e-3, "\(m.angularVelocity)")
+    #expect(abs(m.angularVelocity[0]) < 1e-4 && abs(m.angularVelocity[2]) < 1e-4)
+    // The translation is read in the second camera's axes, turned by the yaw.
+    #expect(abs(m.linearVelocity[0] - 0.01 * cos(yaw) / Float(dt)) < 1e-3, "\(m.linearVelocity)")
+    #expect(abs(m.interval - dt) < 1e-9)
+    // 1.2 rad/s for 4 ms at 800 px is 3.84 px; 0.6 m/s at 1 m depth is 1.92 px.
+    #expect(abs(m.rotationalBlurPixels(exposure: 0.004, focal: 800) - 3.84) < 0.01)
+    #expect(abs(m.translationalBlurPixels(exposure: 0.004, focal: 800, depth: 1) - 1.92) < 0.01)
+    #expect(CameraMotion(from: base, at: 10, to: next, at: 10) == nil)
+}
+
+/// The motion round-trips through the dataset and the intake summary reports the blur.
+@Test
+func datasetStoreRoundTripsCameraMotion() throws {
+    let base = datasetFrame(index: 0, width: 4, height: 4)
+    let motion = CameraMotion(angularVelocity: [0, 1.25, 0.5], linearVelocity: [0.25, 0, -0.5],
+                              interval: 1.0 / 60)
+    let settings = CameraSettings(exposureDuration: 0.004, exposureOffset: 0)
+    let frame = CapturedFrame(
+        image: base.image, viewmat: base.viewmat, intrinsics: base.intrinsics,
+        width: base.width, height: base.height, timestamp: base.timestamp,
+        anchorIdentifier: base.anchorIdentifier, cameraSettings: settings, cameraMotion: motion
+    )
+    let scene = CapturedScene(frames: [frame, datasetFrame(index: 1, width: 4, height: 4)], sparsePoints: [])
+    let root = FileManager.default.temporaryDirectory
+        .appendingPathComponent("dataset_motion_\(UUID().uuidString)")
+    let dir = root.appendingPathComponent("capture_test.dataset")
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    try CaptureDatasetStore.save(scene, to: dir)
+    let loaded = try CaptureDatasetStore.load(from: dir)
+    #expect(loaded.frames[0].cameraMotion == motion)
+    #expect(loaded.frames[1].cameraMotion == nil)
+    #expect(loaded.frames[0].withViewmat(base.viewmat).cameraMotion == motion)
+
+    // 1.25 rad/s × 4 ms × fx 123.5 = 0.62 px.
+    let summary = try #require(CameraMotion.summary(of: loaded.frames))
+    #expect(summary.hasPrefix("[motion] 1/2 frames"), "\(summary)")
+    #expect(summary.contains("rotational blur median 0.62"), "\(summary)")
+    #expect(CameraMotion.summary(of: [base]) == nil)
+}
+
 @Test
 func datasetStoreRoundTripsFeatureObservations() throws {
     // ARKit feature point observation IDs (including UInt64 beyond JSON number precision) and

@@ -343,6 +343,14 @@ case "train-capture":
             // UNDISTORT_MIN_TRACK=2 also uses points seen in only 2 views for distortion estimation
             // (default 3; for checking when it is rejected for lack of edge observations).
             lensDistortion: .init(minTrackLength: env["UNDISTORT_MIN_TRACK"].flatMap { Int($0) } ?? 3),
+            // MOTION_BLUR_MAX=<px> overrides the motion blur gate (0 = image-based gates only);
+            // FQ_LOG_ALL=1 lists every dropped frame.
+            frameQualityFilter: {
+                var p = CaptureFrameQualityFilter.Parameters()
+                if let v = env["MOTION_BLUR_MAX"].flatMap({ Float($0) }) { p.maxMotionBlurPixels = v }
+                if env["FQ_LOG_ALL"] == "1" { p.logDropLimit = Int.max }
+                return p
+            }(),
             mvsParameters: {
                 var p = CaptureTraining.MVSMode.mvsParameters
                 // MVS_FVMIN / MVS_M override the number of agreeing views / views in the multi-view

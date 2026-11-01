@@ -40,6 +40,15 @@ public enum CaptureFrameQualityFilter {
         public var lowClipThreshold: Float
         public var highClipThreshold: Float
         public var maxClippedLumaFraction: Float
+        /// Drop a frame whose motion blur (from `CapturedFrame.cameraMotion` and the exposure, in
+        /// pixels of the captured image) exceeds this. Frames that carry the motion are judged by it
+        /// instead of the image-based blur gates, which mistake a plain surface for a blurred one.
+        /// 0 disables it (every frame takes the image-based gates). 3 px of a 1080-wide capture is
+        /// about 2 px at the training resolution; with more than a third of the frames above it, the
+        /// minKeep top-up keeps the least blurred ones.
+        public var maxMotionBlurPixels: Float
+        /// Depth (m) for the translational blur of a frame without ARKit feature points.
+        public var motionBlurFallbackDepth: Float
         public var logDropLimit: Int
 
         public init(
@@ -64,6 +73,8 @@ public enum CaptureFrameQualityFilter {
             lowClipThreshold: Float = 0.01,
             highClipThreshold: Float = 0.99,
             maxClippedLumaFraction: Float = 0.35,
+            maxMotionBlurPixels: Float = 3,
+            motionBlurFallbackDepth: Float = 1,
             logDropLimit: Int = 12
         ) {
             precondition(minFrameCountForFiltering >= 1)
@@ -85,6 +96,8 @@ public enum CaptureFrameQualityFilter {
             precondition(lowClipThreshold >= 0 && lowClipThreshold <= 1)
             precondition(highClipThreshold >= 0 && highClipThreshold <= 1)
             precondition(maxClippedLumaFraction >= 0 && maxClippedLumaFraction <= 1)
+            precondition(maxMotionBlurPixels >= 0)
+            precondition(motionBlurFallbackDepth > 0)
             precondition(logDropLimit >= 0)
             self.enabled = enabled
             self.minFrameCountForFiltering = minFrameCountForFiltering
@@ -107,6 +120,8 @@ public enum CaptureFrameQualityFilter {
             self.lowClipThreshold = lowClipThreshold
             self.highClipThreshold = highClipThreshold
             self.maxClippedLumaFraction = maxClippedLumaFraction
+            self.maxMotionBlurPixels = maxMotionBlurPixels
+            self.motionBlurFallbackDepth = motionBlurFallbackDepth
             self.logDropLimit = logDropLimit
         }
     }
@@ -130,6 +145,20 @@ public enum CaptureFrameQualityFilter {
         let metrics: Metrics
         let reasons: [String]
         let score: Float
+        /// Motion blur in pixels, when the frame carries its motion and exposure.
+        let motionBlur: Float?
+    }
+
+    /// Motion blur of `frame` in pixels of its image: rotation across the image plus translation
+    /// across it at the median depth of its ARKit feature points (`fallbackDepth` without them).
+    /// nil without a recorded motion and exposure.
+    public static func motionBlurPixels(_ frame: CapturedFrame, fallbackDepth: Float = 1) -> Float? {
+        guard let motion = frame.cameraMotion, let settings = frame.cameraSettings else { return nil }
+        let depths = frame.featureObservations.map(\.cameraPoint.z).filter { $0 > 0.05 }.sorted()
+        let depth = depths.isEmpty ? fallbackDepth : depths[depths.count / 2]
+        let t = settings.exposureDuration, f = frame.intrinsics.fx
+        return motion.rotationalBlurPixels(exposure: t, focal: f)
+            + motion.translationalBlurPixels(exposure: t, focal: f, depth: depth)
     }
 
     public static func metrics(
@@ -260,8 +289,25 @@ public enum CaptureFrameQualityFilter {
             return quantile(sorted: window.sorted(), q: 0.5)
         }
 
+        let motionBlurs: [Float?] = parameters.maxMotionBlurPixels > 0
+            ? frames.map { motionBlurPixels($0, fallbackDepth: parameters.motionBlurFallbackDepth) }
+            : Array(repeating: nil, count: n)
+
         let decisions = allMetrics.map { m -> Decision in
             var reasons: [String] = []
+            let exposurePenalty = m.clippedLumaFraction
+                / Swift.max(parameters.maxClippedLumaFraction, 1e-6)
+            let exposureBad = m.lumaMean < parameters.darkMeanThreshold
+                || m.lumaMean > parameters.brightMeanThreshold
+                || m.clippedLumaFraction > parameters.maxClippedLumaFraction
+            // A frame that carries its motion is judged by its motion blur alone.
+            if let blur = motionBlurs[m.index] {
+                if blur > parameters.maxMotionBlurPixels { reasons.append("motionblur") }
+                if exposureBad { reasons.append("exposure") }
+                // Priority for the minKeep top-up: least motion blur, well exposed
+                let score = 3 - Swift.min(blur / parameters.maxMotionBlurPixels, 3) - exposurePenalty
+                return Decision(metrics: m, reasons: reasons, score: score, motionBlur: blur)
+            }
             // Relative gate: ratio to the global median
             if sharpMedian > parameters.minSharpnessAbsolute,
                m.sharpness < sharpThreshold {
@@ -291,18 +337,11 @@ public enum CaptureFrameQualityFilter {
                     reasons.append("blur")
                 }
             }
-            if m.lumaMean < parameters.darkMeanThreshold
-                || m.lumaMean > parameters.brightMeanThreshold
-                || m.clippedLumaFraction > parameters.maxClippedLumaFraction
-            {
-                reasons.append("exposure")
-            }
+            if exposureBad { reasons.append("exposure") }
             // Priority for the minKeep top-up: sharp, structured, well exposed
             let sharpNorm = sharpMedian > 1e-7 ? m.sharpness / sharpMedian : 1
-            let exposurePenalty = m.clippedLumaFraction
-                / Swift.max(parameters.maxClippedLumaFraction, 1e-6)
             let score = Swift.min(sharpNorm, 3) + (1 - m.blurScore) - exposurePenalty
-            return Decision(metrics: m, reasons: reasons, score: score)
+            return Decision(metrics: m, reasons: reasons, score: score, motionBlur: nil)
         }
 
         var keep = Set(decisions.filter { $0.reasons.isEmpty }.map { $0.metrics.index })
@@ -369,14 +408,22 @@ public enum CaptureFrameQualityFilter {
         let blurDrops = finalDropped.filter { $0.reasons.contains("blur") }.count
         let localBlurDrops = finalDropped.filter { $0.reasons.contains("localblur") }.count
         let exposureDrops = finalDropped.filter { $0.reasons.contains("exposure") }.count
+        let motionBlurDrops = finalDropped.filter { $0.reasons.contains("motionblur") }.count
+        let measured = decisions.compactMap(\.motionBlur).sorted()
+        if !measured.isEmpty {
+            log(String(format:
+                "[FrameQuality] motion blur over %d/%d frames: median %.2f p90 %.2f px, max %.2f px",
+                measured.count, n, measured[measured.count / 2],
+                measured[Swift.min(measured.count - 1, measured.count * 9 / 10)], parameters.maxMotionBlurPixels))
+        }
         log(String(format:
             "[FrameQuality] sharp q10/med/q90=%.5f/%.5f/%.5f clipMed=%.3f threshold=%.5f blurMed=%.3f maxBlur=%.2f",
             ev.sharpQ10, ev.sharpMedian, ev.sharpQ90, ev.clipMedian, ev.sharpThreshold,
             ev.blurMedian, parameters.maxBlurScore
         ))
         log(String(format:
-            "[FrameQuality] kept %d/%d frames (dropped=%d blur=%d localblur=%d exposure=%d proposed=%d rescued=%d minKeep=%d)",
-            keep.count, n, finalDropped.count, blurDrops, localBlurDrops, exposureDrops,
+            "[FrameQuality] kept %d/%d frames (dropped=%d blur=%d localblur=%d motionblur=%d exposure=%d proposed=%d rescued=%d minKeep=%d)",
+            keep.count, n, finalDropped.count, blurDrops, localBlurDrops, motionBlurDrops, exposureDrops,
             ev.proposedDropCount, ev.rescuedCount, ev.minKeep
         ))
 
@@ -390,7 +437,7 @@ public enum CaptureFrameQualityFilter {
                     "  [FrameQuality] drop frame[%d] reason=%@ sharp=%.5f blur=%.3f rel=%.2f localRel=%.2f mean=%.3f std=%.3f clip=%.3f",
                     m.index, d.reasons.joined(separator: "+") as NSString,
                     m.sharpness, m.blurScore, rel, localRel, m.lumaMean, m.lumaStd, m.clippedLumaFraction
-                ))
+                ) + (d.motionBlur.map { String(format: " motion=%.2fpx", $0) } ?? ""))
             }
             if finalDropped.count > parameters.logDropLimit {
                 log("  [FrameQuality] ... \(finalDropped.count - parameters.logDropLimit) more dropped frames")

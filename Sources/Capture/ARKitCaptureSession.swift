@@ -454,6 +454,8 @@ private final class IOSImpl: NSObject, ARSessionDelegate {
         let lidarSamples: [LiDARSample]
         // Exposure and white balance when the frame was taken
         let cameraSettings: CameraSettings
+        // Camera motion from the ARKit pose just before this frame
+        let cameraMotion: CameraMotion?
     }
 
     private let configuration: CaptureConfiguration
@@ -517,6 +519,8 @@ private final class IOSImpl: NSObject, ARSessionDelegate {
     private var pending: [PendingFrame] = []
     private var anchorTransforms: [UUID: simd_float4x4] = [:]
     private var lastKeptCameraToWorld: simd_float4x4 = matrix_identity_float4x4
+    // The pose of the previous ARFrame (every frame, not only kept ones), for `CameraMotion`.
+    private var previousFramePose: (cameraToWorld: simd_float4x4, timestamp: TimeInterval)?
     private var hasKeptFirst = false
     private var anchorUpdateCount = 0
     private var relocalizationObserved = false
@@ -750,7 +754,8 @@ private final class IOSImpl: NSObject, ARSessionDelegate {
                 width: p.width, height: p.height, timestamp: p.timestamp,
                 featureObservations: p.featureObservations,
                 lidarSamples: p.lidarSamples,
-                cameraSettings: p.cameraSettings
+                cameraSettings: p.cameraSettings,
+                cameraMotion: p.cameraMotion
             ))
             if let cur = anchorTransforms[p.anchorID], cur == p.seedTransform {
                 unsettled += 1
@@ -825,6 +830,12 @@ private final class IOSImpl: NSObject, ARSessionDelegate {
         stateChange?(.trackingState(stateString))
 
         guard capturing else { return }
+
+        // Motion since the previous ARFrame (about 1/60 s), kept with the frame if it is kept.
+        let motion = previousFramePose.flatMap {
+            CameraMotion(from: $0.cameraToWorld, at: $0.timestamp, to: frame.camera.transform, at: frame.timestamp)
+        }
+        previousFramePose = (frame.camera.transform, frame.timestamp)
 
         // Stillness is judged only on reliable poses; other tracking states have their own HUD.
         let still: Bool
@@ -1010,7 +1021,8 @@ private final class IOSImpl: NSObject, ARSessionDelegate {
             seedTransform: c2w,
             featureObservations: featureObs,
             lidarSamples: lidarSamples,
-            cameraSettings: Self.cameraSettings(of: frame)
+            cameraSettings: Self.cameraSettings(of: frame),
+            cameraMotion: motion
         ))
         lastKeptCameraToWorld = c2w
         hasKeptFirst = true
