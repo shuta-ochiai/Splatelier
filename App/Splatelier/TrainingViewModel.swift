@@ -255,8 +255,8 @@ final class TrainingViewModel: ObservableObject {
         self.resumeDatasetURL = resumeDatasetURL
         self.preserveDataset = preserveDataset
         self.captureName = initialName
-        // The initial value is the MVS-mode recommendation tied to the frame count (4 iter/frame
-        // clamped to [500, 2400]).
+        // The initial value is the MVS-mode recommendation tied to the frame count (4.8 iter/frame
+        // clamped to [500, 2900]).
         self.iterations = CaptureTraining.recommendedIterations(
             frameCount: scene.frames.count, mvs: true)
     }
