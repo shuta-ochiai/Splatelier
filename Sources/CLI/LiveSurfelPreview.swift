@@ -38,6 +38,11 @@
 //                        to the training renderer's overlay
 //   SURFEL_CARVE=1       remove coarse splats floating in front of surfaces captured up close (0
 //                        keeps them)
+//   SURFEL_MINCOS=0.3    lower bound on the cosine between surface and view ray in the footprint
+//   SURFEL_METRIC=<n>    every n keyframes, render the surfels from that keyframe's camera and
+//                        print the averages at the end: share of pixels covered (alpha ≥ 0.5),
+//                        share half covered (0.1 ≤ alpha < 0.9, ragged edges and gaps) and PSNR
+//                        against the camera image over the covered pixels (blur lowers it)
 //   SURFEL_MAXLEVEL=<L>  (for investigation) don't draw surfels coarser than this level
 //   SURFEL_LOG=1         (for investigation) print per-keyframe point count, pixel footprint and
 //                        level used
@@ -73,7 +78,7 @@ func runSurfelPreviewReplay(
     let app = CaptureSurfelMap()
     var map = CaptureSurfelMap(
         finestCellMeters: f("SURFEL_MIN", app.finestCellMeters), levelCount: i("SURFEL_LEVELS", app.levelCount),
-        cellsPerPixel: f("SURFEL_CPP", app.cellsPerPixel),
+        cellsPerPixel: f("SURFEL_CPP", app.cellsPerPixel), minCosine: f("SURFEL_MINCOS", app.minCosine),
         hideWhenRefinedChildren: i("SURFEL_HIDE", app.hideWhenRefinedChildren),
         minPoints: i("SURFEL_MINPTS", app.minPoints))
     let sigma = f("SURFEL_SIGMA", CaptureSurfelMap.splatSigmaPerCell), flat = f("SURFEL_FLAT", 0.2), wash = f("SURFEL_WASH", 0.6)
@@ -83,6 +88,8 @@ func runSurfelPreviewReplay(
     let perFrameLog = env["SURFEL_LOG"] != nil
     let carve = env["SURFEL_CARVE"] != "0"
     let videoEvery = i("SURFEL_VIDEO", 0)
+    let metricEvery = i("SURFEL_METRIC", 0)
+    var metricCovered = 0.0, metricPartial = 0.0, metricSquaredError = 0.0, metricPixels = 0.0, metricShots = 0
     let framesDir = outDir.appendingPathComponent("frames")
     if videoEvery > 0 { try FileManager.default.createDirectory(at: framesDir, withIntermediateDirectories: true) }
 
@@ -191,7 +198,8 @@ func runSurfelPreviewReplay(
 
         let isShot = shotFrames.contains(k)
         let isVideo = videoEvery > 0 && (k % videoEvery == 0 || k == frames.count - 1)
-        guard isShot || isVideo else { continue }
+        let isMetric = metricEvery > 0 && k % metricEvery == metricEvery - 1
+        guard isShot || isVideo || isMetric else { continue }
         let t2 = Date()
         let surfels = map.snapshot().filter { $0.level <= maxLevel }
         snapshotSeconds += Date().timeIntervalSince(t2)
@@ -199,9 +207,22 @@ func runSurfelPreviewReplay(
         let model = surfelModel(surfels, sigma: sigma, flat: flat)
         let cam = StreamingMVS.boxDownscale(frames[k].image, factor: r)
         let (now, nowAlpha) = render(model, k)
-        let (fixed, _) = render(model, fixedView)
         let h = now.shape[0], w = now.shape[1]
         let camCrop = cam[0..<h, 0..<w]
+        if isMetric {
+            // The color where the splats cover the pixel, unblended from the black background.
+            let a = nowAlpha[0..<h, 0..<w]
+            let covered = (a .>= Float(0.9)).asType(.float32)
+            let color = now[0..<h, 0..<w] / MLX.maximum(a, MLXArray(Float(1e-3))).expandedDimensions(axis: 2)
+            let err = (color - camCrop) * (color - camCrop) * covered.expandedDimensions(axis: 2)
+            metricCovered += Double((a .>= Float(0.5)).asType(.float32).mean().item(Float.self))
+            metricPartial += Double(((a .>= Float(0.1)) .&& (a .< Float(0.9))).asType(.float32).mean().item(Float.self))
+            metricSquaredError += Double(err.sum().item(Float.self))
+            metricPixels += Double(covered.sum().item(Float.self)) * 3
+            metricShots += 1
+        }
+        guard isShot || isVideo else { continue }
+        let (fixed, _) = render(model, fixedView)
         let washed = (1 - nowAlpha.expandedDimensions(axis: 2)) * ((1 - wash) * camCrop + wash)
         let overlay = now + washed
         var row = MLX.concatenated(
@@ -262,6 +283,12 @@ func runSurfelPreviewReplay(
     if !sceneKitRows.isEmpty {
         try ImagePNG.write(MLX.concatenated(sceneKitRows, axis: 0),
                            to: outDir.appendingPathComponent("scenekit_sheet.png"))
+    }
+    if metricShots > 0 {
+        let n = Double(metricShots)
+        print(String(format: "[surfel metric] %d keyframes: covered %.1f%%, half covered %.1f%%, PSNR over covered %.2f dB",
+                     metricShots, 100 * metricCovered / n, 100 * metricPartial / n,
+                     -10 * log10(metricSquaredError / max(1, metricPixels))))
     }
     let kf = Double(frames.count)
     print(String(format: "[surfel] %d points, normal fallback %.1f%%, carved %d cells; per keyframe: MVS %.1f ms, "

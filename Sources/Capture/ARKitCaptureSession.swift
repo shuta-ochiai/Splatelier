@@ -193,6 +193,9 @@ public struct CaptureDiagnostics: Sendable {
     /// Processing stats of the `.mvs` live point cloud (frames processed, time per frame, frames
     /// skipped while busy). nil for other modes.
     public var liveMVSSummary: String?
+    /// The camera has barely moved for a while during capture (`CaptureStillnessDetector`).
+    /// Only set while tracking is `.normal`.
+    public var cameraStill: Bool
 
     public init(
         keptFrameCount: Int = 0,
@@ -209,7 +212,8 @@ public struct CaptureDiagnostics: Sendable {
         qualityRejectedExposureCount: Int = 0,
         exposureLocked: Bool = false,
         pixelBufferColorTags: String? = nil,
-        liveMVSSummary: String? = nil
+        liveMVSSummary: String? = nil,
+        cameraStill: Bool = false
     ) {
         self.keptFrameCount = keptFrameCount
         self.trackingStateDescription = trackingStateDescription
@@ -226,6 +230,7 @@ public struct CaptureDiagnostics: Sendable {
         self.exposureLocked = exposureLocked
         self.pixelBufferColorTags = pixelBufferColorTags
         self.liveMVSSummary = liveMVSSummary
+        self.cameraStill = cameraStill
     }
 }
 
@@ -394,6 +399,7 @@ public final class ARKitCaptureSession {
         case .lidarFrame(let n): _diagnostics.lidarFrameCount = n
         case .lidarPoints(let n): _diagnostics.lidarPointCount = n
         case .exposureLocked(let b): _diagnostics.exposureLocked = b
+        case .cameraStill(let b): _diagnostics.cameraStill = b
         case .qualityCandidate: _diagnostics.qualityCandidateFrameCount += 1
         case .qualityRejected(let reasons):
             _diagnostics.qualityRejectedFrameCount += 1
@@ -422,6 +428,7 @@ fileprivate enum DiagnosticsUpdate {
     case qualityCandidate
     case qualityRejected([CaptureRealtimeFrameSelector.RejectReason])
     case exposureLocked(Bool)
+    case cameraStill(Bool)
 }
 
 // MARK: - iOS implementation
@@ -445,6 +452,10 @@ private final class IOSImpl: NSObject, ARSessionDelegate {
         let featureObservations: [ARKitFeatureObservation]
         // LiDAR samples of this frame
         let lidarSamples: [LiDARSample]
+        // Exposure and white balance when the frame was taken
+        let cameraSettings: CameraSettings
+        // Camera motion from the ARKit pose just before this frame
+        let cameraMotion: CameraMotion?
     }
 
     private let configuration: CaptureConfiguration
@@ -508,9 +519,13 @@ private final class IOSImpl: NSObject, ARSessionDelegate {
     private var pending: [PendingFrame] = []
     private var anchorTransforms: [UUID: simd_float4x4] = [:]
     private var lastKeptCameraToWorld: simd_float4x4 = matrix_identity_float4x4
+    // The pose of the previous ARFrame (every frame, not only kept ones), for `CameraMotion`.
+    private var previousFramePose: (cameraToWorld: simd_float4x4, timestamp: TimeInterval)?
     private var hasKeptFirst = false
     private var anchorUpdateCount = 0
     private var relocalizationObserved = false
+    private var stillnessDetector = CaptureStillnessDetector()
+    private var cameraStill = false
     private var stateChange: ((DiagnosticsUpdate) -> Void)?
     // AE/AWB lock: arm the timer once on the first .normal frame and lock once when it fires
     private var exposureLockScheduled = false
@@ -559,6 +574,8 @@ private final class IOSImpl: NSObject, ARSessionDelegate {
             self.hasKeptFirst = false
             self.anchorUpdateCount = 0
             self.relocalizationObserved = false
+            self.stillnessDetector.reset()
+            self.cameraStill = false
             self.exposureLockScheduled = false
             self.exposureLockDone = false
             self.stateChange = onStateChange
@@ -618,6 +635,10 @@ private final class IOSImpl: NSObject, ARSessionDelegate {
             delegateQueue.async {
                 self.capturing = false
                 self.stopContinuation = cont
+                if self.cameraStill {
+                    self.cameraStill = false
+                    self.stateChange?(.cameraStill(false))
+                }
             }
             let deadline: DispatchTime = .now() + configuration.settleSeconds
             delegateQueue.asyncAfter(deadline: deadline) { [weak self] in
@@ -637,6 +658,22 @@ private final class IOSImpl: NSObject, ARSessionDelegate {
             self.stopContinuation?.resume(throwing: CaptureError.notRunning)
             self.stopContinuation = nil
         }
+    }
+
+    /// The exposure ARKit reports for `frame`, with the capture device's ISO, white balance gains
+    /// and lock state (iOS 16+), read as the frame is kept.
+    private static func cameraSettings(of frame: ARFrame) -> CameraSettings {
+        var s = CameraSettings(exposureDuration: frame.camera.exposureDuration,
+                               exposureOffset: frame.camera.exposureOffset)
+        if #available(iOS 16.0, *),
+           let device = ARWorldTrackingConfiguration.configurableCaptureDeviceForPrimaryCamera {
+            let g = device.deviceWhiteBalanceGains
+            s.iso = device.iso
+            s.whiteBalanceGains = [g.redGain, g.greenGain, g.blueGain]
+            s.exposureLocked = device.exposureMode == .locked || device.exposureMode == .custom
+            s.whiteBalanceLocked = device.whiteBalanceMode == .locked
+        }
+        return s
     }
 
     /// Lock AE/AWB at their current values (called once from the warm-up timer). No-op if
@@ -716,7 +753,9 @@ private final class IOSImpl: NSObject, ARSessionDelegate {
                 intrinsics: p.intrinsics,
                 width: p.width, height: p.height, timestamp: p.timestamp,
                 featureObservations: p.featureObservations,
-                lidarSamples: p.lidarSamples
+                lidarSamples: p.lidarSamples,
+                cameraSettings: p.cameraSettings,
+                cameraMotion: p.cameraMotion
             ))
             if let cur = anchorTransforms[p.anchorID], cur == p.seedTransform {
                 unsettled += 1
@@ -791,6 +830,26 @@ private final class IOSImpl: NSObject, ARSessionDelegate {
         stateChange?(.trackingState(stateString))
 
         guard capturing else { return }
+
+        // Motion since the previous ARFrame (about 1/60 s), kept with the frame if it is kept.
+        let motion = previousFramePose.flatMap {
+            CameraMotion(from: $0.cameraToWorld, at: $0.timestamp, to: frame.camera.transform, at: frame.timestamp)
+        }
+        previousFramePose = (frame.camera.transform, frame.timestamp)
+
+        // Stillness is judged only on reliable poses; other tracking states have their own HUD.
+        let still: Bool
+        if case .normal = frame.camera.trackingState {
+            still = stillnessDetector.update(cameraToWorld: frame.camera.transform,
+                                             timestamp: frame.timestamp)
+        } else {
+            stillnessDetector.reset()
+            still = false
+        }
+        if still != cameraStill {
+            cameraStill = still
+            stateChange?(.cameraStill(still))
+        }
 
         if configuration.lockExposureAndWhiteBalance,
            !exposureLockScheduled,
@@ -961,7 +1020,9 @@ private final class IOSImpl: NSObject, ARSessionDelegate {
             intrinsics: scaled, timestamp: frame.timestamp,
             seedTransform: c2w,
             featureObservations: featureObs,
-            lidarSamples: lidarSamples
+            lidarSamples: lidarSamples,
+            cameraSettings: Self.cameraSettings(of: frame),
+            cameraMotion: motion
         ))
         lastKeptCameraToWorld = c2w
         hasKeptFirst = true

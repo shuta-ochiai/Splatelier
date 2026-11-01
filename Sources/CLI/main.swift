@@ -262,7 +262,7 @@ case "train-capture":
     // (CaptureTraining.AppPreset, train's defaults). The env variables are knobs for A/B.
     guard args.count >= 4 else {
         print("usage: splatelier train-capture <dataset.valset> <output.ply> "
-              + "[iterations=app recommendation] [densification=hybrid] [lambdaSSIM=0.2]")
+              + "[iterations=app recommendation] [densification=hybrid] [lambdaSSIM=0.5]")
         exit(1)
     }
     let valsetURL = URL(fileURLWithPath: args[2])
@@ -275,7 +275,8 @@ case "train-capture":
               let start = lr.first else { return nil }
         return (start, lr.count > 1 ? lr[1] : start)
     }
-    let lambdaSSIM: Float = args.count > 6 ? (Float(args[6]) ?? 0.2) : 0.2
+    let lambdaSSIM: Float = args.count > 6
+        ? (Float(args[6]) ?? CaptureTraining.AppPreset.lambdaSSIM) : CaptureTraining.AppPreset.lambdaSSIM
     MLX.Memory.peakMemory = 0
     #if os(macOS)
     // GPU energy is system-wide. If other processes are using the GPU the A/B gets mixed, so check
@@ -342,6 +343,14 @@ case "train-capture":
             // UNDISTORT_MIN_TRACK=2 also uses points seen in only 2 views for distortion estimation
             // (default 3; for checking when it is rejected for lack of edge observations).
             lensDistortion: .init(minTrackLength: env["UNDISTORT_MIN_TRACK"].flatMap { Int($0) } ?? 3),
+            // MOTION_BLUR_MAX=<px> overrides the motion blur gate (0 = image-based gates only);
+            // FQ_LOG_ALL=1 lists every dropped frame.
+            frameQualityFilter: {
+                var p = CaptureFrameQualityFilter.Parameters()
+                if let v = env["MOTION_BLUR_MAX"].flatMap({ Float($0) }) { p.maxMotionBlurPixels = v }
+                if env["FQ_LOG_ALL"] == "1" { p.logDropLimit = Int.max }
+                return p
+            }(),
             mvsParameters: {
                 var p = CaptureTraining.MVSMode.mvsParameters
                 // MVS_FVMIN / MVS_M override the number of agreeing views / views in the multi-view
@@ -378,6 +387,8 @@ case "train-capture":
             opacityReg: env["REG"].flatMap { Float($0) } ?? CaptureTraining.AppPreset.regularization,
             scaleReg: env["REG"].flatMap { Float($0) } ?? CaptureTraining.AppPreset.regularization,
             lambdaSSIM: lambdaSSIM,
+            // SH_LR=<lr>: overrides the view-dependent SH learning rate.
+            shNLR: env["SH_LR"].flatMap { Float($0) } ?? CaptureTraining.AppPreset.shNLearningRate,
             // EVAL_HOLDOUT=N: holds out 1 in N images from training and logs held-out PSNR.
             evalHoldoutEvery: env["EVAL_HOLDOUT"].flatMap { Int($0) } ?? 0,
             // EVAL_HOLDOUT_ALL=1: take the held-out views from all frames before thinning to
@@ -403,9 +414,18 @@ case "train-capture":
             // LIDAR_COLOR=0: leave the LiDAR seed points mid-grey (colored from the images as in the
             // app).
             lidarColors: env["LIDAR_COLOR"] != "0",
-            // LIDAR_SURFACE=0: pixels where LiDAR measured a surface may be background again (they
-            // are kept out of the background mask as in the app).
+            // SURFACE_MASK=0: pixels where LiDAR or MVS measured a surface may be background again
+            // (as in the app they are kept out of the background mask and their alpha is pulled to
+            // 1). MVS_SURFACE=0 / LIDAR_SURFACE=0: LiDAR / MVS alone marks them. SURFACE_ALPHA=<w>:
+            // weight of the pull to 1 (0 disables it).
+            surfaceMask: env["SURFACE_MASK"] != "0",
+            mvsSurfaceMask: env["MVS_SURFACE"] != "0",
             lidarSurfaceMask: env["LIDAR_SURFACE"] != "0",
+            // SPARSE_SURFACE=0: the sparse points do not mark measured surface.
+            sparseSurfaceMask: env["SPARSE_SURFACE"] != "0",
+            // SPARSE_SEED=0: no BA points fill the seed's MVS / LiDAR gaps.
+            sparseSeed: env["SPARSE_SEED"] != "0",
+            surfaceAlphaWeight: env["SURFACE_ALPHA"].flatMap { Float($0) } ?? 0.15,
             // C2F=<fraction>: share of iterations at 1/C2F_FACTOR of the captured resolution.
             // FINE_RES=<num>/<den> | full: resolution of the rest. The defaults are the app's (0.5,
             // 1/3 and 2/3: the coarse phase is half the fine resolution); with FINE_RES the coarse
@@ -439,6 +459,17 @@ case "train-capture":
                 if let v = env["GEO_DEPTH_ITERS"].flatMap({ Int($0) }) { g.depth.bisectionIterations = v }
                 if let v = env["GEO_SAMPLE_WIDTH"].flatMap({ Int($0) }) { g.sampleWidth = v }
                 GeometryRegularization.profileStages = env["GEO_PROFILE_STAGES"] == "1"
+                return g
+            }(),
+            // Per-frame exposure / white balance gains (on as in the app; PHOTO_GAIN=0 turns them off).
+            // PHOTO_GAIN_START fraction of iterations before they are fitted, PHOTO_GAIN_RATE, and
+            // PHOTO_GAIN_MAX (stops) the bound.
+            photometricGains: {
+                if ["0", "off", "no", "false"].contains(env["PHOTO_GAIN"]?.lowercased() ?? "") { return nil }
+                var g = CaptureTraining.AppPreset.photometricGains ?? PhotometricGainConfig()
+                if let v = env["PHOTO_GAIN_START"].flatMap({ Float($0) }) { g.startFraction = v }
+                if let v = env["PHOTO_GAIN_RATE"].flatMap({ Float($0) }) { g.rate = v }
+                if let v = env["PHOTO_GAIN_MAX"].flatMap({ Float($0) }) { g.maxLogGain = v * Float(log(2.0)) }
                 return g
             }(),
             log: logErr

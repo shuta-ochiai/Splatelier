@@ -31,15 +31,18 @@ func recommendedIterationsIsMultipleOf50() {
     }
 }
 
-/// MVS mode: 4 iter/frame, [500, 2400] clamp.
+/// MVS mode: 4.8 iter/frame, [500, 2900] clamp, rounded to 50.
 @Test
 func recommendedIterationsForMVSMode() {
-    #expect(CaptureTraining.recommendedIterations(frameCount: 300, mvs: true) == 1200)
+    #expect(CaptureTraining.recommendedIterations(frameCount: 300, mvs: true) == 1450)
     #expect(CaptureTraining.recommendedIterations(frameCount: 100, mvs: true) == 500)
-    #expect(CaptureTraining.recommendedIterations(frameCount: 200, mvs: true) == 800)
-    #expect(CaptureTraining.recommendedIterations(frameCount: 500, mvs: true) == 2000)
-    #expect(CaptureTraining.recommendedIterations(frameCount: 600, mvs: true) == 2400)
-    #expect(CaptureTraining.recommendedIterations(frameCount: 800, mvs: true) == 2400)
+    #expect(CaptureTraining.recommendedIterations(frameCount: 200, mvs: true) == 950)
+    #expect(CaptureTraining.recommendedIterations(frameCount: 500, mvs: true) == 2400)
+    #expect(CaptureTraining.recommendedIterations(frameCount: 600, mvs: true) == 2900)
+    #expect(CaptureTraining.recommendedIterations(frameCount: 800, mvs: true) == 2900)
+    for n in stride(from: 0, through: 1000, by: 7) {
+        #expect(CaptureTraining.recommendedIterations(frameCount: n, mvs: true) % 50 == 0)
+    }
 }
 
 /// Training view cap: 0.4 view/frame, at least 120.

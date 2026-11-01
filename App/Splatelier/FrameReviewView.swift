@@ -151,6 +151,7 @@ private func blurReasonLabels(_ reasons: [String]) -> String {
         switch $0 {
         case "blur": return "Blur"
         case "localblur": return "Local blur"
+        case "motionblur": return "Motion blur"
         case "exposure": return "Exposure"
         default: return $0
         }
@@ -223,7 +224,7 @@ private struct EnlargedFramePage: View {
 }
 
 /// Thumbnail of one frame. Dropped frames are dimmed + red border + reason badge.
-private struct FrameThumbnail: View {
+struct FrameThumbnail: View {
     let frame: CapturedFrame
     let index: Int
     let dropped: Bool

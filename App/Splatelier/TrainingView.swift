@@ -10,6 +10,57 @@ import Trainer
 import Capture
 import SplatViewerKit
 
+/// The captured frames, one after another with a cross-fade.
+private struct FrameSlideshow: View {
+    let images: [UIImage]
+    @State private var index = 0
+
+    var body: some View {
+        ZStack {
+            Image(uiImage: images[index % images.count])
+                .resizable()
+                .scaledToFit()
+                .clipShape(RoundedRectangle(cornerRadius: DesignSystem.cardRadius, style: .continuous))
+                .id(index)
+                .transition(.opacity)
+        }
+        // Says what the pictures are: they are not the model yet.
+        .overlay(alignment: .top) {
+            Label("Your captured frames", systemImage: "photo.on.rectangle")
+                .font(.caption.weight(.semibold))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(.ultraThinMaterial, in: Capsule())
+                .padding(.top, 10)
+        }
+        // On the ZStack, not the image: the image is rebuilt on every change (its id), which would
+        // restart the loop.
+        .task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(2.6))
+                withAnimation(.easeInOut(duration: 1.0)) { index += 1 }
+            }
+        }
+    }
+}
+
+/// A soft band of light sweeping over the picture from left to right, again and again.
+private struct MeshShimmer: View {
+    var body: some View {
+        TimelineView(.animation) { context in
+            GeometryReader { geo in
+                let t = context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.8) / 1.8
+                LinearGradient(colors: [.clear, .white.opacity(0.3), .clear],
+                               startPoint: .leading, endPoint: .trailing)
+                    .frame(width: geo.size.width * 0.5)
+                    .offset(x: geo.size.width * (-0.5 + 1.5 * t))
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: DesignSystem.cardRadius, style: .continuous))
+        .allowsHitTesting(false)
+    }
+}
+
 private struct TrainingHelp: Identifiable {
     let id: String
     let title: String
@@ -33,6 +84,7 @@ struct TrainingView: View {
     /// stored dataset stays where it is, so closing is harmless.
     let closeDiscards: Bool
     @State private var activeHelp: TrainingHelp?
+    @State private var showDiscardConfirm = false
 
     /// Thermal banner. critical (thermalPaused) means paused, serious (thermalThrottled) means
     /// slowed down. critical takes display priority; the banner disappears once the device cools
@@ -51,6 +103,21 @@ struct TrainingView: View {
                 tint: .yellow
             )
         }
+    }
+
+    /// Whether Low Power Mode is on; it follows the setting if it is switched meanwhile.
+    @State private var lowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled
+
+    /// Low Power Mode slows the CPU and GPU down, and training with them. Shown before it starts and
+    /// while it runs.
+    private var lowPowerNotice: some View {
+        Label("Low Power Mode is on, which slows training down. Turn it off in Settings > Battery.",
+              systemImage: "battery.25percent")
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(.yellow)
+            .padding()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .cardBackground()
     }
 
     private func thermalBanner(icon: String, text: String, tint: Color) -> some View {
@@ -81,6 +148,7 @@ struct TrainingView: View {
                     VStack(spacing: 16) {
                         header
                         AnyView(trainingSettingsCard)
+                        if lowPowerMode { AnyView(lowPowerNotice) }
                         AnyView(startButton)
                     }
                     .padding(.horizontal)
@@ -93,6 +161,7 @@ struct TrainingView: View {
                 // the measurements.
                 VStack(spacing: 16) {
                     AnyView(previewCard).frame(maxHeight: .infinity)
+                    if lowPowerMode && vm.isBusy { AnyView(lowPowerNotice) }
                     AnyView(phaseCard)
                     AnyView(metricsCard)
                 }
@@ -102,6 +171,9 @@ struct TrainingView: View {
             }
         }
         .overlay(alignment: .top) { thermalPausedBanner }
+        .onReceive(NotificationCenter.default.publisher(for: .NSProcessInfoPowerStateDidChange)) { _ in
+            lowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled
+        }
         .animation(.easeInOut(duration: 0.25), value: vm.thermalPaused)
         .animation(.easeInOut(duration: 0.25), value: vm.thermalThrottled)
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -184,14 +256,33 @@ struct TrainingView: View {
                     .resizable()
                     .scaledToFit()
                     .clipShape(RoundedRectangle(cornerRadius: DesignSystem.cardRadius, style: .continuous))
+                    // While the mesh is made the picture stops changing; a light sweeps over it.
+                    .overlay { if vm.isGeneratingMesh { MeshShimmer() } }
                     .id(vm.previewCount)
                     .transition(.opacity)
+            } else if !vm.frameSlides.isEmpty {
+                // The frames are being prepared: show them, so the card is not empty.
+                FrameSlideshow(images: vm.frameSlides)
             } else {
                 VStack(spacing: 10) {
                     Image(systemName: "sparkles").font(.title2)
                     Text("The picture appears when training starts").font(.footnote)
                 }
                 .foregroundStyle(.secondary)
+            }
+        }
+        // Training runs on the GPU, which iOS does not give to an app that is not on screen, so
+        // leaving the app stops it. A chip on the picture, in the same shape as the one at the
+        // top of the frames.
+        .overlay(alignment: .bottom) {
+            if vm.isBusy {
+                Label("Keep the app open", systemImage: "iphone")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.orange)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .padding(.bottom, 10)
             }
         }
         .animation(.easeInOut(duration: 0.5), value: vm.previewCount)
@@ -427,13 +518,25 @@ struct TrainingView: View {
         return Group {
             if destructive {
                 // Plain red text, set apart from Start training so the two are not mixed up.
-                Button(role: .destructive, action: onClose) {
+                Button(role: .destructive) { showDiscardConfirm = true } label: {
                     Label(title, systemImage: symbol)
                         .font(.subheadline)
                         .padding(.horizontal, 12).padding(.vertical, 8)
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.red)
+                // The capture is not saved until it is trained, so confirm before discarding it.
+                // On the button, so the dialog appears next to it at the bottom.
+                .confirmationDialog(
+                    "Discard this capture?",
+                    isPresented: $showDiscardConfirm,
+                    titleVisibility: .visible
+                ) {
+                    Button("Discard and go back", role: .destructive, action: onClose)
+                    Button("Cancel", role: .cancel) { }
+                } message: {
+                    Text("If you haven't trained it or used \"Save for validation\", the capture data will be lost. This can't be undone.")
+                }
             } else {
                 Button(action: onClose) {
                     Label(title, systemImage: symbol)

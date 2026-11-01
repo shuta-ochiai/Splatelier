@@ -167,8 +167,9 @@ func referenceProjectToScreen(
 
     let depths = means3dCam[.ellipsis, 2]
 
-    // Per-axis radius (gsplat ProjectionEWA3DGSFused.cu:186-206).
-    let ALPHA_THRESHOLD: Float = 1.0 / 255.0
+    // Per-axis radius (gsplat ProjectionEWA3DGSFused.cu:186-206, with project_to_screen.slang's
+    // 4/255 cutoff in place of gsplat's 1/255).
+    let ALPHA_THRESHOLD: Float = 4.0 / 255.0
     let GAUSSIAN_EXTEND: Float = 3.33
     let aPos = MLX.maximum(a, MLXArray(0.0 as Float))
     let cPos = MLX.maximum(c, MLXArray(0.0 as Float))

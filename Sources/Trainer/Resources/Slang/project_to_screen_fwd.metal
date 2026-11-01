@@ -276,14 +276,14 @@ struct KernelContext_0
     *((&kernelContext_0)->conics_0+_S10) = out_2.conic_c_0;
     *((&kernelContext_0)->depths_0+i_0) = out_2.depth_0;
     float opac_0 = (&kernelContext_0)->opacities_0[i_0];
-    if(opac_0 < 0.00392156885936856)
+    if(opac_0 < 0.01568627543747425)
     {
         *((&kernelContext_0)->radii_0+mBase_0) = int(0);
         *((&kernelContext_0)->radii_0+_S11) = int(0);
     }
     else
     {
-        float _S12 = min(3.32999992370605469, sqrt(2.0 * log(opac_0 / 0.00392156885936856)));
+        float _S12 = min(3.32999992370605469, sqrt(2.0 * log(opac_0 / 0.01568627543747425)));
         int rx_0 = int(ceil(_S12 * sqrt(max(0.0, out_2.cov2d_a_0))));
         int ry_0 = int(ceil(_S12 * sqrt(max(0.0, out_2.cov2d_c_0))));
         float maxR_0 = 4.0 * max((&kernelContext_0)->image_dims_0[int(0)], (&kernelContext_0)->image_dims_0[int(1)]);

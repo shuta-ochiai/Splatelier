@@ -111,3 +111,21 @@ func surfelRendererOrdersBackToFront() {
     let order = CaptureSurfelRenderer.backToFrontOrder(surfels, eye: .zero)
     #expect(order == [4, 1, 3, 0, 2, 5])
 }
+
+/// A fine cell under a coarse cell that is still shown fades with how few of its siblings are
+/// refined: one refined child of three needed shows at a third of its opacity.
+@Test
+func surfelMapFadesSparselyRefinedCells() {
+    var map = makeMap()
+    insertGrid(&map, xMax: 0.08, pixelSize: 0.035, frame: 0)
+    for _ in 0..<2 {
+        map.insert(position: SIMD3(0.005, 0.005, 0.001), normal: SIMD3(0, 0, 1), color: SIMD3(0, 1, 0),
+                   pixelSize: 0.0045, cameraCenter: SIMD3(0.005, 0.005, 1), frame: 1)
+    }
+    let s = map.snapshot()
+    let fine = try! #require(s.first { $0.level == 0 })
+    let coarse = try! #require(s.first { $0.level == 3 })
+    #expect(abs(fine.refinedShare - 1.0 / 3) < 1e-6)
+    #expect(abs(fine.splatOpacity - 0.55 / 3) < 1e-6)   // one keyframe: 0.55 before fading
+    #expect(coarse.refinedShare == 1)
+}

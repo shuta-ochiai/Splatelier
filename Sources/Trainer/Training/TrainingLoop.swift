@@ -25,6 +25,7 @@ extension TrainingDriver {
         enableBackgroundSH: Bool = false,
         backgroundSHDegree: Int = 3,
         alphaLossWeight: Float = 0.15,
+        surfaceAlphaWeight: Float = 0,
         // Maximum foreground SH degree (lower means less sh_eval bandwidth and heat). Capped by
         // `GaussianModel.maxShDegree`.
         maxShDegree maxShDegreeParam: Int = GaussianModel.maxShDegree,
@@ -38,9 +39,16 @@ extension TrainingDriver {
         // Bring the SH degree warm-up forward (half the interval), so even short runs learn
         // view-dependent color.
         useEarlySH: Bool = false,
+        // Learning rate of the view-dependent SH coefficients (degree ≥ 1). gsplat's is the DC
+        // rate / 20.
+        shNLR: Float = 2.5e-3 / 20,
         // Geometric regularization (surface depth + normal consistency + MVS depth) from
         // `startFraction` of the iterations on. nil disables it.
         geometryRegularization: GeometryRegularization? = nil,
+        // A gain per view that the render is multiplied by before the loss, so frames shot at a
+        // different exposure or white balance do not pull the scene's colours (training only).
+        // nil disables it.
+        photometricGains: PhotometricGainConfig? = nil,
         onThermalThrottle: ((ThermalThrottleState) -> Void)? = nil,
         // A small picture of the model every few seconds (for the App's training screen).
         onPreview: ((TrainingPreviewFrame) -> Void)? = nil,
@@ -62,15 +70,23 @@ extension TrainingDriver {
         }
         let trainer = try GaussianTrainer(
             model: model, renderer: renderer, meansLR: meansLR,
+            shNLR: shNLR,
             lambdaSSIM: lambdaSSIM,
             opacityReg: opacityReg, scaleReg: scaleReg,
             maxScale: maxScale,
             enableBackgroundSH: enableBackgroundSH,
             backgroundSHDegree: backgroundSHDegree,
-            alphaLossWeight: alphaLossWeight
+            alphaLossWeight: alphaLossWeight,
+            surfaceAlphaWeight: surfaceAlphaWeight
         )
+        let gainStart = photometricGains.map { Int(Float(iterations) * Swift.min(1, Swift.max(0, $0.startFraction))) } ?? 0
+        if let config = photometricGains {
+            trainer.photometricGains = PhotometricGains(viewCount: views.count, config: config)
+            log(String(format: "photometric gains: per-view exposure and colour from iter %d (rate %.2f, ±%.2f stops max)",
+                       gainStart, config.rate, config.maxLogGain / Float(Foundation.log(2.0))))
+        }
         if enableBackgroundSH {
-            log("rasterizer: background SH env-map enabled (degree=\(backgroundSHDegree), alphaLoss=\(alphaLossWeight))")
+            log("rasterizer: background SH env-map enabled (degree=\(backgroundSHDegree), alphaLoss=\(alphaLossWeight), surfaceAlpha=\(surfaceAlphaWeight))")
         }
         // gsplat's means lr: exponential decay from scene-scale times to 1/100. MCMC's Langevin
         // noise (lr·noiseLR) also follows this decay, so it does not disturb and diverge an already
@@ -194,7 +210,9 @@ extension TrainingDriver {
             }
             let lr = trainer.optMeans.lr
             let shDegree = Swift.min(it / shDegreeInterval, maxShDegree)
-            let v = views[viewSampler.sample(using: &rng)]
+            let viewIndex = viewSampler.sample(using: &rng)
+            let v = views[viewIndex]
+            let fitGain = photometricGains != nil && it >= gainStart
             let cf = it < coarseUntil ? coarseToFineFactor : 1
             // The coarse phase box-averages the uint8 v.image directly (no full-res float32); the
             // fine phase uses fineResample.
@@ -232,14 +250,16 @@ extension TrainingDriver {
                 if needsCache {
                     let output = trainer.stepWithCache(
                         camera: stepCamera, targetImage: stepTarget, shDegree: shDegree,
-                        geometry: geometry, mvsDepth: v.mvsDepth, surfaceMask: v.surfaceMask
+                        geometry: geometry, mvsDepth: v.mvsDepth, surfaceMask: v.surfaceMask,
+                        opaqueMask: v.opaqueMask, viewIndex: viewIndex, fitGain: fitGain
                     )
                     return (output.loss, output.cache)
                 } else {
                     return (
                         trainer.step(
                             camera: stepCamera, targetImage: stepTarget, shDegree: shDegree,
-                            geometry: geometry, mvsDepth: v.mvsDepth, surfaceMask: v.surfaceMask
+                            geometry: geometry, mvsDepth: v.mvsDepth, surfaceMask: v.surfaceMask,
+                            opaqueMask: v.opaqueMask, viewIndex: viewIndex, fitGain: fitGain
                         ),
                         nil
                     )
@@ -331,6 +351,11 @@ extension TrainingDriver {
             }
         }
         GaussianRenderer.diagnosticEnabled = false
+        if let gains = trainer.photometricGains {
+            let e = gains.exposureSummary()
+            log(String(format: "photometric gains: exposure %+.2f … %+.2f stops over %d views (std %.2f)",
+                       e.minStops, e.maxStops, views.count, e.stdStops))
+        }
         if let energy = profiler.energySummary() {
             log(energy)
         }
@@ -436,22 +461,27 @@ extension TrainingDriver {
         }
 
         if let thumbnailPNG, !views.isEmpty {
-            // Render up to 8 views and use the one with the largest mean alpha (how much of the
-            // frame the subject fills) as the thumbnail.
-            let step = Swift.max(1, views.count / 8)
+            // Render every view and use the one the render matches best (highest PSNR against its
+            // photo) as the thumbnail and the viewer's initial pose.
             var bestColor: MLXArray?
             var bestView: TrainView?
-            var bestCoverage: Float = -1
-            for idx in Swift.stride(from: 0, to: views.count, by: step) {
-                let out = renderer.forward(model: exportModel, camera: views[idx].camera, shDegree: 3)
+            var bestPSNR = -Float.infinity
+            var bestCoverage: Float = 0
+            for view in views {
+                let out = renderer.forward(model: exportModel, camera: view.camera, shDegree: 3)
+                let diff = out.renderColor - view.imageFloat
+                let mse = (diff * diff).mean()
                 let cov = out.renderAlpha.mean()
-                eval(cov)
-                let covVal = cov.item(Float.self)
-                if covVal > bestCoverage {
+                eval(mse, cov)
+                let mseHost = mse.item(Float.self)
+                guard mseHost.isFinite else { continue }
+                let psnr: Float = mseHost > 1e-12 ? -10 * Foundation.log10(mseHost) : 200
+                if psnr > bestPSNR {
                     eval(out.renderColor)
-                    bestCoverage = covVal
+                    bestPSNR = psnr
+                    bestCoverage = cov.item(Float.self)
                     bestColor = out.renderColor
-                    bestView = views[idx]
+                    bestView = view
                 }
             }
             if let bestColor {
@@ -460,13 +490,14 @@ extension TrainingDriver {
                     if let bestView {
                         try writePreviewCameraMetadata(
                             view: bestView,
+                            psnr: bestPSNR,
                             coverage: bestCoverage,
                             to: thumbnailPNG.deletingPathExtension()
                                 .appendingPathExtension("preview.json")
                         )
                     }
-                    log(String(format: "wrote thumbnail (coverage %.3f) to %@",
-                               bestCoverage, thumbnailPNG.path))
+                    log(String(format: "wrote thumbnail (%@, PSNR %.2f dB) to %@",
+                               bestView?.name ?? "-", bestPSNR, thumbnailPNG.path))
                 } catch {
                     log("thumbnail render failed: \(error)")
                 }
@@ -519,10 +550,13 @@ extension TrainingDriver {
             // surfaces it flattened.
             let geometry = session.geometryRegularization.flatMap { i % $0.every == 0 ? $0 : nil }
             let loss: Float = autoreleasepool {
-                let v = views[session.viewSampler.sample(using: &rng)]
-                // The scale cap is applied inside trainer.step.
+                let viewIndex = session.viewSampler.sample(using: &rng)
+                let v = views[viewIndex]
+                // The scale cap is applied inside trainer.step. The gains go on being fitted.
                 return trainer.step(camera: v.camera, targetImage: v.imageFloat, shDegree: shDegree,
-                                    geometry: geometry, mvsDepth: v.mvsDepth, surfaceMask: v.surfaceMask)
+                                    geometry: geometry, mvsDepth: v.mvsDepth, surfaceMask: v.surfaceMask,
+                                    opaqueMask: v.opaqueMask, viewIndex: viewIndex,
+                                    fitGain: trainer.photometricGains != nil)
             }
             lastStepSeconds = Date().timeIntervalSince(t0)
             history.append(loss)
@@ -567,6 +601,7 @@ extension TrainingDriver {
     private struct PreviewCameraMetadata: Codable {
         let version: Int
         let sourceViewName: String
+        let psnr: Float
         let coverage: Float
         let width: Int
         let height: Int
@@ -576,6 +611,7 @@ extension TrainingDriver {
 
     private static func writePreviewCameraMetadata(
         view: TrainView,
+        psnr: Float,
         coverage: Float,
         to url: URL
     ) throws {
@@ -583,6 +619,7 @@ extension TrainingDriver {
         let metadata = PreviewCameraMetadata(
             version: 1,
             sourceViewName: view.name,
+            psnr: psnr,
             coverage: coverage,
             width: view.camera.width,
             height: view.camera.height,

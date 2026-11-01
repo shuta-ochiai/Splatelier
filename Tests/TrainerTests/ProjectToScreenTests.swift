@@ -80,7 +80,7 @@ private func sampleProjectScene(seed: UInt64, n: Int) -> ProjectScene {
     let imageWidth: Float = 512
     let imageHeight: Float = 512
     let imageDims = MLXArray([imageWidth, imageHeight], [2])
-    // All above 1/255 so no opacity cull happens.
+    // All above the 4/255 cutoff so no opacity cull happens.
     let opacities = MLXArray([Float](repeating: 0.5, count: n), [n])
     eval(means3dWorld, quats, scales, view.mlx, intrinsics, imageDims, opacities)
     return ProjectScene(

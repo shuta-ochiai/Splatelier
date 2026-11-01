@@ -242,6 +242,9 @@ public struct IGSPlusStrategy: DensificationStrategy {
     public var maxPruneFraction: Float
     /// pruneDead bloat test (maxScale > multiple × median counts as dead). 0 disables.
     public var bloatScaleMultiple: Float
+    /// pruneDead faint test: above `Densification.deadOpacity`, a Gaussian at or below minOpacity
+    /// is dead only when its maxScale exceeds multiple × median. 0 prunes faint ones of any size.
+    public var faintPruneScaleMultiple: Float
     /// Minimum number of Gaussians pruneDead keeps.
     public var minRemainingGaussians: Int
     /// Diagnostic string from the most recent postStep.
@@ -272,6 +275,7 @@ public struct IGSPlusStrategy: DensificationStrategy {
         pruneDeadGaussians: Bool = false,
         maxPruneFraction: Float = 0.25,
         bloatScaleMultiple: Float = 0,
+        faintPruneScaleMultiple: Float = 0,
         minRemainingGaussians: Int = 1
     ) {
         self.capMax = capMax
@@ -293,6 +297,7 @@ public struct IGSPlusStrategy: DensificationStrategy {
         self.pruneDeadGaussians = pruneDeadGaussians
         self.maxPruneFraction = maxPruneFraction
         self.bloatScaleMultiple = bloatScaleMultiple
+        self.faintPruneScaleMultiple = faintPruneScaleMultiple
         self.minRemainingGaussians = minRemainingGaussians
     }
 
@@ -357,6 +362,7 @@ public struct IGSPlusStrategy: DensificationStrategy {
                 store: store, snapshot: Densification.snapshotHost(store: store),
                 minOpacity: minOpacity,
                 bloatScaleMultiple: bloatScaleMultiple,
+                faintScaleMultiple: faintPruneScaleMultiple,
                 maxPruneFraction: maxPruneFraction,
                 minRemaining: minRemainingGaussians)
             {

@@ -93,7 +93,7 @@ void rasterize_bwd_coop(uint3 tid : SV_DispatchThreadID)
                 vis = exp(-sigma);
                 raw_alpha = opac * vis;
                 alpha = min(0.99, raw_alpha);
-                if (alpha < 0.00392157) { valid = false; }
+                if (alpha < 0.01568627) { valid = false; }  // 4/255
             }
         }
 

@@ -12,13 +12,14 @@
 // order only when z > 0 (sign bit = 0).
 
 // ---- Scanline (ellipse × band) ------------------------------------------------
-// rasterize discards opac·exp(-Q/2) < 1/255 for Q = a dx² + 2b dx dy + c dy² (conic), so
-// contributing pixels lie inside the ellipse Q <= rr = 2·log(255·opac). Capped at 3.33² like radii.
+// rasterize discards opac·exp(-Q/2) < 4/255 for Q = a dx² + 2b dx dy + c dy² (conic), so
+// contributing pixels lie inside the ellipse Q <= rr = 2·log(255/4·opac). Capped at 3.33² like
+// radii.
 // Pixel centers are 0.5 px inside tile boundaries, so a range error under 0.5 px never drops a
 // contributing tile.
 float ellipse_rr(float opac)
 {
-    float extend = min(3.33, sqrt(2.0 * log(opac * 255.0)));
+    float extend = min(3.33, sqrt(2.0 * log(opac * 63.75)));
     return extend * extend;
 }
 

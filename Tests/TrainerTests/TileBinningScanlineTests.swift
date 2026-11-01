@@ -47,8 +47,8 @@ private struct ScreenSplats {
             let det = a * c - b * b
             guard det > 0 else { continue }
             let invDet = 1 / det
-            let opac = rng.uniform(0.004, 0.99)
-            let extend = min(Float(3.33), (2 * log(opac / (1.0 / 255.0))).squareRoot())
+            let opac = rng.uniform(0.016, 0.99)
+            let extend = min(Float(3.33), (2 * log(opac / (4.0 / 255.0))).squareRoot())
             means2d += [rng.uniform(-30, Float(width) + 30), rng.uniform(-30, Float(height) + 30)]
             conics += [c * invDet, -b * invDet, a * invDet]
             opacities.append(opac)
@@ -85,7 +85,7 @@ private func pairCounts(_ r: TileBinningResult) -> [Int64: Int] {
 
 @Test
 func scanlineBinningCoversEveryContributingPixel() {
-    // Every tile containing a pixel with alpha >= 1/255 (same formula as rasterize) must be in the
+    // Every tile containing a pixel with alpha >= 4/255 (same formula as rasterize) must be in the
     // scanline result. The scanline result is a subset of the AABB, with no duplicates.
     let (w, h, tile) = (200, 152, 16)
     let splats = ScreenSplats(count: 600, width: w, height: h, maxSigma: 60,
@@ -118,7 +118,7 @@ func scanlineBinningCoversEveryContributingPixel() {
                 let sigma = 0.5 * (ca * dx * dx + cc * dy * dy) + cb * dx * dy
                 if sigma < 0 { continue }
                 let alpha = min(0.99, opac * exp(-sigma))
-                if alpha < 0.00392157 { continue }
+                if alpha < 0.01568627 { continue }
                 let key = Int64((py / tile) * numTilesX + px / tile) << 32 | Int64(g)
                 // Pixels the AABB also misses (outside radii) are existing behavior, so out of
                 // scope.

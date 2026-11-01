@@ -63,7 +63,7 @@ func referenceRasterize(
 
                 let opac = opacities[gi]
                 let alpha = min(Float(0.99), opac * Foundation.exp(-sigma))
-                if alpha < Float(1.0 / 255.0) { continue }
+                if alpha < Float(4.0 / 255.0) { continue }
 
                 let nextT = T * (1 - alpha)
                 if nextT < Float(1e-4) {

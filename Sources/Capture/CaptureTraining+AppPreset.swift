@@ -15,8 +15,20 @@ extension CaptureTraining {
         /// it to the cap during the run. This matches a full-cap start in PSNR at slightly lower GPU
         /// energy; starting at 2/3 does not grow to the cap and loses PSNR.
         public static func initialGaussianCap(cap: Int) -> Int { cap * 5 / 6 }
-        /// Opacity and scale regularization weight (gsplat MCMC's values).
-        public static let regularization: Float = 0.01
+        /// Opacity and scale regularization weight, a tenth of gsplat MCMC's 0.01: at 0.01 it held
+        /// most Gaussians near transparent through a short run, so the scene was drawn by many faint
+        /// layers and looked hazy.
+        public static let regularization: Float = 0.001
+        /// Opacity of the seed Gaussians. Starting opaque (rather than 3DGS's 0.1) lets a short run
+        /// settle on opaque surfaces instead of stacks of faint discs.
+        public static let seedOpacity: Float = 0.5
+        /// Learning rate of the view-dependent (degree-1) SH coefficients: the DC colour's, not
+        /// gsplat's DC / 20. A view is drawn about ten times a run, and at a twentieth of the rate
+        /// degree 1 hardly moved, so glossy surfaces such as stainless steel came out flat and dull.
+        public static let shNLearningRate: Float = 2.5e-3
+        /// Weight λ of the D-SSIM term. Above 3DGS's 0.2 it keeps more of the local contrast and
+        /// edges, at about 0.1 dB of held-out PSNR.
+        public static let lambdaSSIM: Float = 0.5
         /// Fragment slots per pixel of the replay cache (a margin covering the overlap at the center
         /// pixel). The replay cache itself is always on as a thermal measure: its backward is
         /// slower than coop backward but memory-bandwidth bound and low power.
@@ -32,6 +44,10 @@ extension CaptureTraining {
         /// every 8 iterations from 30% of training), so the Gaussians' surface depth gives a flat
         /// TSDF mesh (generated after training in the app), at a small cost in GPU energy and held-out PSNR.
         public static let geometryRegularization: GeometryRegularization? = GeometryRegularization()
+        /// A gain per frame on the render (exposure and white balance), fitted from 30% of training
+        /// on. Frames shot before the exposure lock, or under a changing light, then do not pull
+        /// the scene's colours; with a locked exposure the gains stay near 1.
+        public static let photometricGains: PhotometricGainConfig? = PhotometricGainConfig()
         /// The app's mesh after training: 5mm voxels, at most 12 million allocated (≈ 145MB, to fit device memory;
         /// beyond that the voxel size is widened automatically).
         public static let meshParameters = CaptureMeshing.Parameters(
@@ -62,7 +78,10 @@ extension CaptureTraining {
         }
 
         /// Hybrid: IGS+ LAS growth + MCMC dead prune. The budget freed by pruning goes to edges, and
-        /// bloatScaleMultiple also cleans up bloated blobs. With the SH background, the coarse phase
+        /// bloatScaleMultiple also cleans up bloated blobs. The prune takes the faint (opacity ≤ 0.15)
+        /// Gaussians larger than the median, which veil the scene, and keeps the faint small ones
+        /// that draw fine detail such as text; minOpacity also keeps faint Gaussians from being
+        /// split and floors the split halves' opacity. With the SH background, the coarse phase
         /// at half the fine resolution and 4 iter/frame, it beats MCMC + environment sphere in PSNR
         /// at lower energy.
         public static func strategy(iterations: Int, cap: Int) -> IGSPlusStrategy {
@@ -72,9 +91,10 @@ extension CaptureTraining {
                 refineStartIter: s.refineStartIter,
                 refineStopIter: s.refineStopIter,
                 refineEvery: s.refineEvery,
-                minOpacity: 0.005,
+                minOpacity: 0.15,
                 pruneDeadGaussians: true,
-                bloatScaleMultiple: 100)
+                bloatScaleMultiple: 100,
+                faintPruneScaleMultiple: 1)
         }
     }
 }

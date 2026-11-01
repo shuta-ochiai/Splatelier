@@ -124,7 +124,7 @@ struct KernelContext_0
         float vis_0 = exp(- sigma_0);
         float raw_alpha_0 = opac_0 * vis_0;
         float _S15 = min(0.99000000953674316, raw_alpha_0);
-        if(_S15 < 0.00392156979069114)
+        if(_S15 < 0.0156862698495388)
         {
             k_0 = k_0 - int(1);
             continue;

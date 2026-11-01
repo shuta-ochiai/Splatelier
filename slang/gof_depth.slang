@@ -108,7 +108,8 @@ StructuredBuffer<float> v_depth;         // dL/d(depth), same layout
 RWStructuredBuffer<float> v_frames;      // [N, 12] dL/d(M rows, o_g)
 RWStructuredBuffer<float> v_frame_opacities; // [N] dL/d(opacity)
 
-static const float kMinAlpha = 0.00392157;  // 1/255, as the rasterizer
+// gsplat's 1/255. The rasterizer cuts at 4/255 since; this depth pass was not re-tuned with it.
+static const float kMinAlpha = 0.00392157;
 static const float kMaxAlpha = 0.99;
 static const int kSplit = 8;                // search segments per pass (kSplit - 1 interior points)
 static const int kMaxPoints = kSplit + 1;   // the first pass also measures its interval's ends

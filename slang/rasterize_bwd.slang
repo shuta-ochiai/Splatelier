@@ -86,7 +86,7 @@ void rasterize_bwd(uint3 tid : SV_DispatchThreadID)
         float vis = exp(-sigma);
         float raw_alpha = opac * vis;
         float alpha = min(0.99, raw_alpha);
-        if (alpha < 0.00392157) { continue; }
+        if (alpha < 0.01568627) { continue; }  // 4/255
 
         float ra = 1.0 / max(1e-6, 1.0 - alpha);
         T *= ra;                                  // T just before this Gaussian

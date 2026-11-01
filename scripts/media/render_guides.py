@@ -5,8 +5,9 @@
   slow   : move slowly  (fast pass = sparse, blurred captures / slow = dense)
   turn   : avoid sudden turns (jerk = tracking lost / smooth orbit = locked)
   angles : capture from many heights (low -> mid -> high orbit)
+  cool   : keep the phone cool for training (close other apps / unplug / take the case off)
 
-usage: python3 render_guides.py OUT_DIR {slow,turn,angles,pivot,loop,light,subjects} [--only N]
+usage: python3 render_guides.py OUT_DIR {slow,turn,angles,pivot,loop,light,subjects,cool} [--only N]
 """
 import argparse, math, os, random
 import numpy as np
@@ -690,7 +691,88 @@ def _paste_fade(im, a):
     oi = Image.fromarray(o, "RGBA"); im.paste(oi, OBJ_SMALL_AT, oi)
 
 
-SCENES = {"slow": scene_slow, "turn": scene_turn, "angles": scene_angles,
+def scene_cool(t, sc):
+    """Three tips for training without the phone throttling: each one is a hot phone (red meter,
+    heat waves) that turns cool (lavender meter) once the cause is taken away."""
+    D = 7.9
+    sc.obj = lambda im: None; sc.no_ground = True
+    PX, PY, PW, PH = 500, 520, 168, 312      # the phone
+    MX = 900                                 # the heat meter
+    T0, PANEL = 0.2, 2.5
+    CHANGE = (1.25, 1.75)                    # when the cause goes away, within a panel
+
+    def rrect(d, x, y, w, h, r, **kw):
+        d.rounded_rectangle([S((x - w / 2, y - h / 2)), S((x + w / 2, y + h / 2))], radius=int(r * SS), **kw)
+
+    def phone_body(d, a, x=PX, y=PY):
+        rrect(d, x, y, PW, PH, 28, fill=col(IVORY, a), outline=col(DARK, a), width=3 * SS)
+        rrect(d, x, y, PW - 24, PH - 28, 18, fill=col(DARK, a))
+        # training progress on the screen
+        rrect(d, x, y + 70, 100, 10, 5, fill=col(LAV, 0.25 * a))
+        rrect(d, x - 20, y + 70, 60, 10, 5, fill=col(LAV, 0.9 * a))
+        d.ellipse([S((x - 14, y - 26)), S((x + 14, y + 2))], fill=col(LAV, 0.85 * a))
+
+    def meter(d, a, cool):
+        x, y0, y1, w = MX, 400, 680, 34
+        c = tuple(int(lerp(CORAL[i], LAV[i], cool)) for i in range(3))
+        rrect(d, x, (y0 + y1) / 2, w, y1 - y0, w / 2, outline=col(IVORY, 0.55 * a), width=3 * SS)
+        top = y1 - (y1 - y0 - 24) * lerp(0.92, 0.28, cool)
+        rrect(d, x, (top + y1) / 2, w - 12, y1 - top, (w - 12) / 2, fill=col(c, 0.95 * a))
+        d.ellipse([S((x - 26, y1 - 12)), S((x + 26, y1 + 40))], fill=col(c, a))
+
+    def waves(d, a, cool):
+        a *= 1 - cool
+        if a <= 0: return
+        for k in (-1, 0, 1):
+            pts = [(PX + k * 46 + 9 * math.sin(i / 5.0 + t * 7 + k), PY - PH / 2 - 24 - i * 2.2) for i in range(34)]
+            d.line([S(p) for p in pts], fill=col(ORANGE, 0.8 * a), width=5 * SS, joint="curve")
+
+    def panel(i, behind, front):
+        t0 = T0 + i * PANEL
+        a = fade(t, t0, t0 + 0.25, t0 + PANEL - 0.25, t0 + PANEL)
+        cool = smooth(seg(t, t0 + CHANGE[0], t0 + CHANGE[1]))
+        out = cool                                  # the cause leaves as the phone cools
+        if a <= 0: return
+        sc.add(True, lambda d: behind(d, a, out))
+        sc.add(True, lambda d: phone_body(d, a))
+        sc.add(True, lambda d: front(d, a, out))
+        sc.add(True, lambda d: waves(d, a, cool))
+        sc.add(True, lambda d: meter(d, a, cool))
+        sc.badge += [("ng", t0 + 0.3, t0 + CHANGE[0] - 0.05), ("ok", t0 + CHANGE[1] + 0.05, t0 + PANEL - 0.1)]
+
+    sc.badge = []
+    nothing = lambda d, a, out: None
+
+    def cards(d, a, out):                           # other apps, swiped away
+        for cx in (PX - 215, PX + 215):
+            y = PY - out * 300
+            rrect(d, cx, y, 120, 220, 18, fill=col(IVORY, 0.42 * a * (1 - out)), outline=col(LAV, 0.5 * a * (1 - out)), width=2 * SS)
+            rrect(d, cx, y - 82, 70, 12, 6, fill=col(PURPLE, 0.8 * a * (1 - out)))
+    def cable(d, a, out):                           # the charger, pulled out
+        dy = out * 130; ca = a * (1 - out)
+        if ca <= 0: return
+        yb = PY + PH / 2
+        d.line([S((PX, yb + 38 + dy)), S((PX, yb + 130 + dy)), S((PX + 190, yb + 130 + dy))],
+               fill=col(IVORY, 0.9 * ca), width=9 * SS, joint="curve")
+        rrect(d, PX, yb + 20 + dy, 34, 44, 8, fill=col(IVORY, ca), outline=col(DARK, ca), width=3 * SS)
+        bolt = [(10, -60), (-26, 8), (-2, 8), (-10, 60), (26, -12), (2, -12)]
+        d.polygon([S((PX + 0.55 * x, PY - 95 + 0.55 * y)) for x, y in bolt], fill=col(GOLD, ca))
+    def case(d, a, out):                            # the case, slid off
+        ca = a * (1 - out)
+        if ca <= 0: return
+        rrect(d, PX - out * 360, PY + out * 30, PW + 40, PH + 40, 40, fill=col(PURPLE, 0.95 * ca), outline=col(LAV, 0.8 * ca), width=3 * SS)
+
+    panel(0, cards, nothing)
+    panel(1, nothing, cable)
+    panel(2, case, nothing)
+    sc.title = "Keep it cool"
+    sc.caps = [("Close other apps before training", T0 + 0.1, T0 + PANEL - 0.05),
+               ("Unplug the charger while it trains", T0 + PANEL + 0.1, T0 + 2 * PANEL - 0.05),
+               ("Take the case off to shed heat", T0 + 2 * PANEL + 0.1, T0 + 3 * PANEL - 0.05)]
+    return D
+
+
+SCENES = {"cool": scene_cool, "slow": scene_slow, "turn": scene_turn, "angles": scene_angles,
           "pivot": scene_pivot, "loop": scene_loop, "light": scene_light, "subjects": scene_subjects}
 
 

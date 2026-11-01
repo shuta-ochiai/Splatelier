@@ -32,7 +32,8 @@ func appPresetStrategyIsHybrid() {
     #expect(strategy.refineStartIter == 240)
     #expect(strategy.refineStopIter == 900)
     #expect(strategy.refineEvery == 82)
-    #expect(strategy.minOpacity == 0.005)
+    #expect(strategy.minOpacity == 0.15)
     #expect(strategy.pruneDeadGaussians)
     #expect(strategy.bloatScaleMultiple == 100)
+    #expect(strategy.faintPruneScaleMultiple == 1)
 }

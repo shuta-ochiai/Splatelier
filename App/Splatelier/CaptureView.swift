@@ -12,7 +12,6 @@ import Capture
 
 struct CaptureView: View {
     @StateObject private var vm = CaptureViewModel()
-    @State private var showDiscardConfirm = false
     @State private var showFrameReview = false
     /// LiDAR depth during capture (LiDAR devices only). Still experimental, so off by default.
     @AppStorage("capture.useLiDAR") private var useLiDAR = false
@@ -30,7 +29,6 @@ struct CaptureView: View {
     // MARK: crash recovery
     /// Preserved dataset (*.dataset) left over from a previous crash. Detected at launch.
     @State private var pendingDatasetURL: URL?
-    @State private var showResumePrompt = false
     @State private var showAbout = false
     @State private var didCheckRecovery = false
     @State private var recoveryError: String?
@@ -100,13 +98,6 @@ struct CaptureView: View {
                 trainerIsFreshCapture = true
             }
         }
-        .alert("Unfinished capture found", isPresented: $showResumePrompt) {
-            Button("Open") { resumePendingDataset() }
-            Button("Discard", role: .destructive) { discardPendingDataset() }
-            Button("Later", role: .cancel) { }
-        } message: {
-            Text("The last training run stopped before finishing. The capture data is still here, so you can train it again from the start.")
-        }
         .alert(
             "Couldn't resume",
             isPresented: Binding(get: { recoveryError != nil },
@@ -117,17 +108,6 @@ struct CaptureView: View {
             Text(recoveryError ?? "")
         }
         .onDisappear { vm.cancel() }
-        // A captured scene is not saved until it is trained, so confirm before discarding it.
-        .confirmationDialog(
-            "Discard this capture?",
-            isPresented: $showDiscardConfirm,
-            titleVisibility: .visible
-        ) {
-            Button("Discard and go back", role: .destructive) { endTraining() }
-            Button("Cancel", role: .cancel) { }
-        } message: {
-            Text("If you haven't trained it or used \"Save for validation\", the capture data will be lost. This can't be undone.")
-        }
     }
 
     private var isLive: Bool {
@@ -141,7 +121,7 @@ struct CaptureView: View {
     private var setupView: some View {
         if let trainer {
             TrainingView(
-                vm: trainer, header: trainingHeader, onClose: closeTraining,
+                vm: trainer, header: trainingHeader, onClose: endTraining,
                 closeDiscards: trainerIsFreshCapture)
         } else if vm.capturedScene != nil {
             // The capture just finished; the training panel appears on the next update.
@@ -193,23 +173,9 @@ struct CaptureView: View {
         )
     }
 
-    /// The button at the bottom of the training panel. A fresh capture that was not trained yet
-    /// asks first; everything else just goes back to the start screen.
-    private func closeTraining() {
-        if trainerIsFreshCapture, let trainer, !isTrained(trainer) {
-            showDiscardConfirm = true
-        } else {
-            endTraining()
-        }
-    }
-
-    private func isTrained(_ trainer: TrainingViewModel) -> Bool {
-        if case .completed = trainer.phase { return true }
-        return false
-    }
-
-    /// Back to the start screen. A fresh capture is released here (it is saved by training, or
-    /// the user chose to discard it).
+    /// Back to the start screen (the button at the bottom of the training panel; TrainingView
+    /// confirms first when that discards a capture that was not trained yet). A fresh capture is
+    /// released here (it is saved by training, or the user chose to discard it).
     private func endTraining() {
         if trainerIsFreshCapture { vm.discardCapturedScene() }
         trainer = nil
@@ -237,6 +203,10 @@ struct CaptureView: View {
             #endif
             VStack {
                 liveHUD
+                if showKeepMovingWarning {
+                    keepMovingWarning
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
                 Spacer()
                 controlRow
                     .padding()
@@ -244,7 +214,25 @@ struct CaptureView: View {
                     .padding(.horizontal)
                     .padding(.bottom)
             }
+            .animation(.easeInOut(duration: 0.25), value: showKeepMovingWarning)
         }
+        .sensoryFeedback(.warning, trigger: showKeepMovingWarning) { _, shown in shown }
+    }
+
+    /// The capturer stood still while frames can still be added. Once the frame cap is reached,
+    /// moving no longer adds anything, so the warning stays off.
+    private var showKeepMovingWarning: Bool {
+        vm.state == .running && vm.diagnostics.cameraStill
+            && vm.diagnostics.keptFrameCount < vm.maxFrames
+    }
+
+    private var keepMovingWarning: some View {
+        Label("Keep moving around the subject", systemImage: "figure.walk.motion")
+            .font(.subheadline.bold())
+            .foregroundStyle(.orange)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(.ultraThinMaterial, in: Capsule())
     }
 
     private var liveHUD: some View {
@@ -439,23 +427,6 @@ struct CaptureView: View {
         } message: { entry in
             Text(entry.displayDate)
         }
-        .confirmationDialog(
-            "Delete this validation dataset?",
-            isPresented: Binding(
-                get: { deletingValset != nil },
-                set: { if !$0 { deletingValset = nil } }
-            ),
-            titleVisibility: .visible,
-            presenting: deletingValset
-        ) { entry in
-            Button("Delete", role: .destructive) {
-                deleteValidationDataset(entry.url)
-                deletingValset = nil
-            }
-            Button("Cancel", role: .cancel) { deletingValset = nil }
-        } message: { entry in
-            Text("\(entry.displayTitle) will be permanently deleted. This can't be undone.")
-        }
         .sheet(item: $valsetShareItem) { item in
             ShareSheet(items: [item.url])
         }
@@ -518,6 +489,24 @@ struct CaptureView: View {
                     }
                     if entry.id != validationSets.last?.id { Divider() }
                 }
+                // On the row, not the list: the dialog appears next to the view it is attached
+                // to, so it shows beside the "…" that was tapped.
+                .confirmationDialog(
+                    "Delete this validation dataset?",
+                    isPresented: Binding(
+                        get: { deletingValset?.id == entry.id },
+                        set: { if !$0 { deletingValset = nil } }
+                    ),
+                    titleVisibility: .visible
+                ) {
+                    Button("Delete", role: .destructive) {
+                        deleteValidationDataset(entry.url)
+                        deletingValset = nil
+                    }
+                    Button("Cancel", role: .cancel) { deletingValset = nil }
+                } message: {
+                    Text("\(entry.displayTitle) will be permanently deleted. This can't be undone.")
+                }
             }
         }
     }
@@ -577,7 +566,22 @@ struct CaptureView: View {
         guard !isLive, vm.capturedScene == nil, trainer == nil,
               let url = Self.mostRecentPendingDataset() else { return }
         pendingDatasetURL = url
-        showResumePrompt = true
+        presentResumePrompt()
+    }
+
+    /// A UIKit alert rather than SwiftUI's `.alert`: with a destructive button and no cancel
+    /// button, SwiftUI adds a system Cancel button, and the prompt must be answered either way.
+    private func presentResumePrompt() {
+        let alert = UIAlertController(
+            title: "Unfinished capture found",
+            message: "The last training run stopped before finishing. The capture data is still here, so you can train it again from the start.",
+            preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "Restart", style: .default) { _ in resumePendingDataset() })
+        alert.addAction(UIAlertAction(title: "Discard", style: .destructive) { _ in discardPendingDataset() })
+        let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
+        var top = scene?.windows.first(where: \.isKeyWindow)?.rootViewController
+        while let presented = top?.presentedViewController { top = presented }
+        top?.present(alert, animated: true)
     }
 
     /// Decode the preserved dataset in the background and open the training panel for it.
