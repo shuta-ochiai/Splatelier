@@ -307,7 +307,7 @@ final class TrainingViewModel: ObservableObject {
                 frameCount: scene.frames.count,
                 iterations: effectiveIterations,
                 gaussianCap: cap,
-                lambdaSSIM: 0.2,
+                lambdaSSIM: CaptureTraining.AppPreset.lambdaSSIM,
                 strategy: "Hybrid",
                 background: "SH background",
                 // Hybrid uses no MCMC densification; the MCMC fields keep the record format.
@@ -952,8 +952,8 @@ final class TrainingViewModel: ObservableObject {
 
     private nonisolated static func trainingPerformanceSettingsLine(initCap: Int) -> String {
         String(format:
-            "[settings] training perf: initCap=%d frameQuality=on opticalFlow=on lambdaSSIM=0.20 replayCache=on K=%d",
-            initCap, CaptureTraining.AppPreset.replayKMax
+            "[settings] training perf: initCap=%d frameQuality=on opticalFlow=on lambdaSSIM=%.2f replayCache=on K=%d",
+            initCap, CaptureTraining.AppPreset.lambdaSSIM, CaptureTraining.AppPreset.replayKMax
         )
     }
 }

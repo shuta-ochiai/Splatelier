@@ -225,7 +225,7 @@ public enum CaptureTraining {
         strategy: (any DensificationStrategy)? = nil,
         opacityReg: Float = AppPreset.regularization,
         scaleReg: Float = AppPreset.regularization,
-        lambdaSSIM: Float = 0.2,
+        lambdaSSIM: Float = AppPreset.lambdaSSIM,
         // If >0, hold out every Nth training view and log PSNR/SSIM after training. BA / seed use
         // all frames.
         evalHoldoutEvery: Int = 0,

@@ -262,7 +262,7 @@ case "train-capture":
     // (CaptureTraining.AppPreset, train's defaults). The env variables are knobs for A/B.
     guard args.count >= 4 else {
         print("usage: splatelier train-capture <dataset.valset> <output.ply> "
-              + "[iterations=app recommendation] [densification=hybrid] [lambdaSSIM=0.2]")
+              + "[iterations=app recommendation] [densification=hybrid] [lambdaSSIM=0.5]")
         exit(1)
     }
     let valsetURL = URL(fileURLWithPath: args[2])
@@ -275,7 +275,8 @@ case "train-capture":
               let start = lr.first else { return nil }
         return (start, lr.count > 1 ? lr[1] : start)
     }
-    let lambdaSSIM: Float = args.count > 6 ? (Float(args[6]) ?? 0.2) : 0.2
+    let lambdaSSIM: Float = args.count > 6
+        ? (Float(args[6]) ?? CaptureTraining.AppPreset.lambdaSSIM) : CaptureTraining.AppPreset.lambdaSSIM
     MLX.Memory.peakMemory = 0
     #if os(macOS)
     // GPU energy is system-wide. If other processes are using the GPU the A/B gets mixed, so check
