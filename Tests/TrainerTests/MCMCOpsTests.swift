@@ -120,6 +120,34 @@ func pruneDeadRemovesLowOpacityRowsAndKeepsTrainable() throws {
     #expect(trainer.gaussianCount == 5)
 }
 
+/// With faintScaleMultiple, a faint Gaussian goes only when it is larger than the median; one at or
+/// below `deadOpacity` goes whatever its size.
+@Test
+func pruneDeadFaintScaleMultipleKeepsSmallFaintRows() throws {
+    let renderer = try GaussianRenderer()
+    // Rows: opaque small ×3, faint small ×2, faint large ×2, dead small ×1.
+    let opacities: [Float] = [0.8, 0.8, 0.8, 0.1, 0.1, 0.1, 0.1, 0.001]
+    let scales: [Float] = [0.01, 0.01, 0.01, 0.01, 0.01, 0.2, 0.2, 0.01]
+    let n = opacities.count
+    let model = GaussianModel(
+        means: MLXArray((0..<n).flatMap { [Float($0) * 0.1 - 0.4, 0, 4.0] }, [n, 3]),
+        quats: MLXArray((0..<n).flatMap { _ -> [Float] in [1, 0, 0, 0] }, [n, 4]),
+        logScales: MLXArray(scales.flatMap { [log($0), log($0), log($0)] }, [n, 3]),
+        logitOpacities: MLXArray(opacities.map { logit($0) }, [n]),
+        sh0: MLXArray.zeros([n, 3]),
+        shN: MLXArray.zeros([n, GaussianModel.shRestBands, 3])
+    )
+    let trainer = try GaussianTrainer(model: model, renderer: renderer)
+
+    let pruned = Densification.pruneDead(
+        store: trainer, minOpacity: 0.15, faintScaleMultiple: 1, maxPruneFraction: 1)
+    #expect(pruned == 3, "the two faint large rows and the dead row go, got \(pruned)")
+    let keptOpacity = model.opacities().asArray(Float.self)
+    let keptScale = model.scales().asArray(Float.self)
+    #expect(keptOpacity.filter { $0 < 0.15 }.count == 2, "both faint small rows stay")
+    #expect(keptScale.allSatisfy { $0 < 0.1 }, "no large row stays")
+}
+
 @Test
 func sampleAddGrowsCountAndKeepsTrainable() throws {
     let renderer = try GaussianRenderer()

@@ -35,9 +35,15 @@ extension Densification {
         )
     }
 
+    /// Opacity at or below which a Gaussian is dead whatever its size (gsplat's prune threshold).
+    public static let deadOpacity: Float = 0.005
+
     /// Removes dead Gaussians and compacts all parameters and Adam moments with the same keep index
     /// (unlike relocate, the total shrinks). dead = opacity ≤ minOpacity, non-finite / non-positive
     /// scale or opacity, and (if bloatScaleMultiple > 0) maxScale > median × multiple.
+    /// With `faintScaleMultiple` > 0, a Gaussian whose opacity is above `deadOpacity` but at most
+    /// minOpacity is dead only when its maxScale exceeds median × multiple: the faint large ones
+    /// that veil the scene go, the faint small ones that draw fine detail such as text stay.
     /// `maxPruneFraction` caps deletions per fire to avoid collapsing coverage; at least
     /// `minRemaining` are kept.
     @discardableResult
@@ -45,6 +51,7 @@ extension Densification {
         store: GaussianParamStore,
         minOpacity: Float,
         bloatScaleMultiple: Float = 0,
+        faintScaleMultiple: Float = 0,
         maxPruneFraction: Float = 0.25,
         minRemaining: Int = 1
     ) -> Int {
@@ -53,6 +60,7 @@ extension Densification {
             store: store, snapshot: snapshot,
             minOpacity: minOpacity,
             bloatScaleMultiple: bloatScaleMultiple,
+            faintScaleMultiple: faintScaleMultiple,
             maxPruneFraction: maxPruneFraction,
             minRemaining: minRemaining
         )
@@ -64,13 +72,14 @@ extension Densification {
         snapshot: HostSnapshot,
         minOpacity: Float,
         bloatScaleMultiple: Float = 0,
+        faintScaleMultiple: Float = 0,
         maxPruneFraction: Float = 0.25,
         minRemaining: Int = 1
     ) -> Int {
         let keep = pruneDeadKeepingIndices(
             store: store, snapshot: snapshot, minOpacity: minOpacity,
-            bloatScaleMultiple: bloatScaleMultiple, maxPruneFraction: maxPruneFraction,
-            minRemaining: minRemaining)
+            bloatScaleMultiple: bloatScaleMultiple, faintScaleMultiple: faintScaleMultiple,
+            maxPruneFraction: maxPruneFraction, minRemaining: minRemaining)
         return keep.map { snapshot.n - $0.count } ?? 0
     }
 
@@ -82,6 +91,7 @@ extension Densification {
         snapshot: HostSnapshot,
         minOpacity: Float,
         bloatScaleMultiple: Float = 0,
+        faintScaleMultiple: Float = 0,
         maxPruneFraction: Float = 0.25,
         minRemaining: Int = 1
     ) -> [Int32]? {
@@ -101,21 +111,14 @@ extension Densification {
             scaleMax[i] = Swift.max(sx, Swift.max(sy, sz))
         }
 
-        let bloatThreshold: Float
-        if bloatScaleMultiple > 0 {
-            let finitePositiveScales = scaleMax.filter { $0.isFinite && $0 > 0 }
-            if finitePositiveScales.isEmpty {
-                bloatThreshold = .infinity
-            } else {
-                let sortedScales = finitePositiveScales.sorted()
-                let median = sortedScales[sortedScales.count / 2]
-                bloatThreshold = median.isFinite && median > 0
-                    ? bloatScaleMultiple * median
-                    : .infinity
-            }
-        } else {
-            bloatThreshold = .infinity
+        var medianScale: Float = .infinity
+        if bloatScaleMultiple > 0 || faintScaleMultiple > 0 {
+            let sortedScales = scaleMax.filter { $0.isFinite && $0 > 0 }.sorted()
+            if !sortedScales.isEmpty { medianScale = sortedScales[sortedScales.count / 2] }
         }
+        let bloatThreshold = bloatScaleMultiple > 0 ? bloatScaleMultiple * medianScale : .infinity
+        // Without a median (no finite scale) every faint Gaussian stays, as no size can be judged.
+        let faintScaleThreshold = faintScaleMultiple > 0 ? faintScaleMultiple * medianScale : 0
 
         struct Candidate {
             let index: Int
@@ -130,6 +133,7 @@ extension Densification {
             let scale = scaleMax[i]
             let invalid = !opa.isFinite || !scale.isFinite || scale <= 0
             let deadByOpacity = opa.isFinite && opa <= minOpacity
+                && (opa <= deadOpacity || scale > faintScaleThreshold)
             let deadByBloat = scale.isFinite && scale > bloatThreshold
             guard invalid || deadByOpacity || deadByBloat else { continue }
 

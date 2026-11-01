@@ -132,8 +132,9 @@ extension CaptureTraining {
         return result
     }
 
-    /// PocketGS Operator I disc-like init (K_n=16, K_s=3, r_normal=0.3, opacity 0.1). The MVS seed
-    /// is dense, so there is no eq. 6 scale limit (initScale 1.0, scaleCap unlimited).
+    /// PocketGS Operator I disc-like init (K_n=16, K_s=3, r_normal=0.3), with opacity
+    /// `AppPreset.seedOpacity` instead of the paper's 0.1. The MVS seed is dense, so there is no
+    /// eq. 6 scale limit (initScale 1.0, scaleCap unlimited).
     static func initialModel(
         positions: MLXArray, colors: MLXArray, maxInitGaussians: Int?, log: (String) -> Void
     ) -> GaussianModel {
@@ -145,7 +146,7 @@ extension CaptureTraining {
         let model = GaussianModel.fromPointCloudDisc(
             positions: positions, colors: colors,
             kN: 16, kS: 3, rNormal: 0.3,
-            initOpacity: 0.1,
+            initOpacity: AppPreset.seedOpacity,
             initScale: initScale, scaleCap: scaleCap,
             maxPoints: maxInitGaussians
         )
