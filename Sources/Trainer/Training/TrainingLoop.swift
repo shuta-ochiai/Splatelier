@@ -39,6 +39,9 @@ extension TrainingDriver {
         // Bring the SH degree warm-up forward (half the interval), so even short runs learn
         // view-dependent color.
         useEarlySH: Bool = false,
+        // Learning rate of the view-dependent SH coefficients (degree ≥ 1). gsplat's is the DC
+        // rate / 20.
+        shNLR: Float = 2.5e-3 / 20,
         // Geometric regularization (surface depth + normal consistency + MVS depth) from
         // `startFraction` of the iterations on. nil disables it.
         geometryRegularization: GeometryRegularization? = nil,
@@ -67,6 +70,7 @@ extension TrainingDriver {
         }
         let trainer = try GaussianTrainer(
             model: model, renderer: renderer, meansLR: meansLR,
+            shNLR: shNLR,
             lambdaSSIM: lambdaSSIM,
             opacityReg: opacityReg, scaleReg: scaleReg,
             maxScale: maxScale,

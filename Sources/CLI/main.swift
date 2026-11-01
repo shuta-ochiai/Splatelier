@@ -379,6 +379,8 @@ case "train-capture":
             opacityReg: env["REG"].flatMap { Float($0) } ?? CaptureTraining.AppPreset.regularization,
             scaleReg: env["REG"].flatMap { Float($0) } ?? CaptureTraining.AppPreset.regularization,
             lambdaSSIM: lambdaSSIM,
+            // SH_LR=<lr>: overrides the view-dependent SH learning rate.
+            shNLR: env["SH_LR"].flatMap { Float($0) } ?? CaptureTraining.AppPreset.shNLearningRate,
             // EVAL_HOLDOUT=N: holds out 1 in N images from training and logs held-out PSNR.
             evalHoldoutEvery: env["EVAL_HOLDOUT"].flatMap { Int($0) } ?? 0,
             // EVAL_HOLDOUT_ALL=1: take the held-out views from all frames before thinning to
