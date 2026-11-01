@@ -24,29 +24,19 @@ and compiled to Metal.
 
 ## Features
 
-- **Guided capture**: ARKit images and poses with exposure and white balance locked, a live splat
-  preview that shows which parts of the scene are covered, a nudge to keep moving when you stand
-  still, and short animated tips on the start screen. Each frame records the camera's exposure and
-  motion, and frames that would come out motion-blurred are left out of training.
+- **Guided capture**: ARKit images and poses, a live splat preview that shows which parts of the
+  scene are covered, and frames that would come out motion-blurred left out of training.
 - **On-device training**: bundle adjustment refines the ARKit poses, multi-view stereo provides dense
-  seed points, and the Gaussians are trained on the iPhone's GPU. Training keeps the Gaussians
-  opaque rather than hazy, and fits each frame's exposure and white balance so that their
-  differences do not pull the colours. It slows down when the device gets hot, pauses when iOS
-  reports a critical thermal state, and warns when Low Power Mode is on. A finished model can be
-  trained further. Capture, the training settings and the training are one screen, with one
-  progress bar and a picture of the model that sharpens as it trains.
-- **Built-in viewer**: orbit the result, choose the layers to show (splats, background, mesh, seed
-  points), measure distances between two points, and edit the splats: a colour grade (tint,
-  temperature, saturation, brightness, levels, opacity) and a box or sphere crop. The Library lists
-  your captures and opens `.ply`, `.splat` and `.spz` files you import.
-- **Export**: share the splats, as trained or as edited, as a standard 3DGS PLY (common splat
-  viewers open it), compressed PLY, SPZ, `.splat`, glTF (GLB), SOG or OpenUSD (`.usda`), and the
-  mesh (OBJ) generated from the trained scene, from the viewer or the Library. Files are also
-  available in the Files app. The app's version and the open source licenses are in the About
-  sheet.
+  seed points, and the Gaussians are trained on the iPhone's GPU, with each frame's exposure and
+  white balance compensated. Training adapts to the device's temperature, and a finished model can
+  be trained further.
+- **Built-in viewer**: orbit the result, choose the layers to show, measure distances, and grade the
+  colours or crop the splats. The Library lists your captures and opens `.ply`, `.splat` and `.spz`
+  files you import.
+- **Export**: share the splats as a standard 3DGS PLY, compressed PLY, SPZ, `.splat`, glTF (GLB), SOG
+  or OpenUSD (`.usda`), and the mesh (OBJ) generated from the trained scene.
 - **Mac tools**: retrain a capture from the app on a Mac, train and evaluate on COLMAP scenes, and
-  inspect PLY files from the command line. `splatelier convert` turns a PLY into compressed PLY, SPZ,
-  .splat, glTF (GLB), SOG or OpenUSD (.usda, ParticleField3DGaussianSplat from OpenUSD v26.03).
+  convert PLY files from the command line.
 
 ## Requirements
 
