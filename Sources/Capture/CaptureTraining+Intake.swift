@@ -13,6 +13,7 @@ extension CaptureTraining {
     static func logIntake(scene: CapturedScene, log: (String) -> Void) {
         let frameRes = scene.frames.first.map { "\($0.width)x\($0.height)" } ?? "?"
         log("CapturedScene: \(scene.frames.count) frames @ \(frameRes), \(scene.sparsePoints.count) sparse points")
+        if let camera = CameraSettings.summary(of: scene.frames) { log(camera) }
 
         // Capture diagnostics log. nil for scenes not from capture (ColmapScene / CLI replay).
         guard let d = scene.diagnostics else { return }

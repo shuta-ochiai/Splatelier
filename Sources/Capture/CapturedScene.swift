@@ -114,6 +114,57 @@ public struct LiDARSample: Sendable, Equatable {
 
 /// Capture result for one frame. `intrinsics` are in pixels at the image resolution. Not Sendable
 /// because MLXArray is not thread-safe. Synchronize on the constructing side when crossing threads.
+/// The camera's exposure and white balance when a frame was taken, to check that they stayed locked
+/// through a capture (the app locks them after a short warm-up). The exposure comes from ARKit;
+/// the rest from the capture device, nil where it was not available.
+public struct CameraSettings: Codable, Sendable, Equatable {
+    /// Exposure time, seconds.
+    public var exposureDuration: Double
+    /// Exposure offset (EV) ARKit applied.
+    public var exposureOffset: Float
+    public var iso: Float?
+    /// Device white balance gains, R G B.
+    public var whiteBalanceGains: [Float]?
+    public var exposureLocked: Bool?
+    public var whiteBalanceLocked: Bool?
+
+    public init(exposureDuration: Double, exposureOffset: Float, iso: Float? = nil,
+                whiteBalanceGains: [Float]? = nil, exposureLocked: Bool? = nil,
+                whiteBalanceLocked: Bool? = nil) {
+        self.exposureDuration = exposureDuration
+        self.exposureOffset = exposureOffset
+        self.iso = iso
+        self.whiteBalanceGains = whiteBalanceGains
+        self.exposureLocked = exposureLocked
+        self.whiteBalanceLocked = whiteBalanceLocked
+    }
+
+    /// One log line with the range of each setting over `frames` and how many were locked; nil
+    /// when no frame has them.
+    public static func summary(of frames: [CapturedFrame]) -> String? {
+        let s = frames.compactMap(\.cameraSettings)
+        guard !s.isEmpty else { return nil }
+        func range(_ v: [Float], _ f: String) -> String {
+            guard let lo = v.min(), let hi = v.max() else { return "-" }
+            return String(format: "\(f)–\(f)", lo, hi)
+        }
+        let ms = s.map { Float($0.exposureDuration * 1000) }
+        var line = "[camera] \(s.count)/\(frames.count) frames: exposure " + range(ms, "%.2f") + " ms"
+            + ", offset " + range(s.map(\.exposureOffset), "%+.2f") + " EV"
+        let iso = s.compactMap(\.iso)
+        if !iso.isEmpty { line += ", ISO " + range(iso, "%.0f") }
+        let wb = s.compactMap(\.whiteBalanceGains).filter { $0.count == 3 }
+        if !wb.isEmpty {
+            line += ", WB gains R " + range(wb.map { $0[0] }, "%.3f") + " G " + range(wb.map { $0[1] }, "%.3f")
+                + " B " + range(wb.map { $0[2] }, "%.3f")
+        }
+        let ae = s.compactMap(\.exposureLocked), awb = s.compactMap(\.whiteBalanceLocked)
+        if !ae.isEmpty { line += ", exposure locked \(ae.filter { $0 }.count)/\(ae.count)" }
+        if !awb.isEmpty { line += ", WB locked \(awb.filter { $0 }.count)/\(awb.count)" }
+        return line
+    }
+}
+
 public struct CapturedFrame {
     /// [H, W, 3] uint8 RGB as captured. Kept resident at 1/4 the memory of float32 until released
     /// to its saved copy.
@@ -152,6 +203,9 @@ public struct CapturedFrame {
     /// LiDAR depth samples of this frame (empty without LiDAR). Moved to world with the frame's
     /// final pose, so they follow BA and loop closure.
     public let lidarSamples: [LiDARSample]
+    /// The camera's exposure and white balance when the frame was taken (nil for frames not from
+    /// an ARKit capture, and in datasets saved before it was recorded).
+    public let cameraSettings: CameraSettings?
 
     public init(
         image: MLXArray, viewmat: [Float],
@@ -159,7 +213,8 @@ public struct CapturedFrame {
         width: Int, height: Int,
         timestamp: TimeInterval, anchorIdentifier: UUID? = nil,
         featureObservations: [ARKitFeatureObservation] = [],
-        lidarSamples: [LiDARSample] = []
+        lidarSamples: [LiDARSample] = [],
+        cameraSettings: CameraSettings? = nil
     ) {
         precondition(viewmat.count == 16, "viewmat must be a row-major 4×4")
         precondition(image.shape.count == 3 && image.shape[2] == 3,
@@ -174,6 +229,7 @@ public struct CapturedFrame {
         self.anchorIdentifier = anchorIdentifier
         self.featureObservations = featureObservations
         self.lidarSamples = lidarSamples
+        self.cameraSettings = cameraSettings
     }
 
     private init(copying f: CapturedFrame, viewmat: [Float], intrinsics: Intrinsics,
@@ -188,6 +244,7 @@ public struct CapturedFrame {
         self.anchorIdentifier = f.anchorIdentifier
         self.featureObservations = f.featureObservations
         self.lidarSamples = f.lidarSamples
+        self.cameraSettings = f.cameraSettings
     }
 
     /// Frame with only the pose replaced (image and undistortion spec unchanged).

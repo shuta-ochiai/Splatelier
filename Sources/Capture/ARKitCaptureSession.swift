@@ -452,6 +452,8 @@ private final class IOSImpl: NSObject, ARSessionDelegate {
         let featureObservations: [ARKitFeatureObservation]
         // LiDAR samples of this frame
         let lidarSamples: [LiDARSample]
+        // Exposure and white balance when the frame was taken
+        let cameraSettings: CameraSettings
     }
 
     private let configuration: CaptureConfiguration
@@ -654,6 +656,22 @@ private final class IOSImpl: NSObject, ARSessionDelegate {
         }
     }
 
+    /// The exposure ARKit reports for `frame`, with the capture device's ISO, white balance gains
+    /// and lock state (iOS 16+), read as the frame is kept.
+    private static func cameraSettings(of frame: ARFrame) -> CameraSettings {
+        var s = CameraSettings(exposureDuration: frame.camera.exposureDuration,
+                               exposureOffset: frame.camera.exposureOffset)
+        if #available(iOS 16.0, *),
+           let device = ARWorldTrackingConfiguration.configurableCaptureDeviceForPrimaryCamera {
+            let g = device.deviceWhiteBalanceGains
+            s.iso = device.iso
+            s.whiteBalanceGains = [g.redGain, g.greenGain, g.blueGain]
+            s.exposureLocked = device.exposureMode == .locked || device.exposureMode == .custom
+            s.whiteBalanceLocked = device.whiteBalanceMode == .locked
+        }
+        return s
+    }
+
     /// Lock AE/AWB at their current values (called once from the warm-up timer). No-op if
     /// unsupported.
     private func lockCameraExposureAndWhiteBalance() {
@@ -731,7 +749,8 @@ private final class IOSImpl: NSObject, ARSessionDelegate {
                 intrinsics: p.intrinsics,
                 width: p.width, height: p.height, timestamp: p.timestamp,
                 featureObservations: p.featureObservations,
-                lidarSamples: p.lidarSamples
+                lidarSamples: p.lidarSamples,
+                cameraSettings: p.cameraSettings
             ))
             if let cur = anchorTransforms[p.anchorID], cur == p.seedTransform {
                 unsettled += 1
@@ -990,7 +1009,8 @@ private final class IOSImpl: NSObject, ARSessionDelegate {
             intrinsics: scaled, timestamp: frame.timestamp,
             seedTransform: c2w,
             featureObservations: featureObs,
-            lidarSamples: lidarSamples
+            lidarSamples: lidarSamples,
+            cameraSettings: Self.cameraSettings(of: frame)
         ))
         lastKeptCameraToWorld = c2w
         hasKeptFirst = true
