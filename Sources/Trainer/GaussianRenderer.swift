@@ -64,6 +64,10 @@ public final class GaussianRenderer {
     /// equivalent T-reconstruction kernel). Backward picks its path from the cache's `replayKMax`,
     /// so it follows the setting at forward time.
     public var useReplayCache: Bool = false
+    /// Wait for the GPU at the end of each forward / backward stage, so the profiler can time the
+    /// stages. Off by default: each wait leaves the GPU idle while the next stage is encoded, about
+    /// a tenth of a step in all.
+    nonisolated(unsafe) public static var stageTiming = false
 
     /// In tile binning, drop tiles inside the AABB that the ellipse does not cover (TileBinning's
     /// scanline culling). Reduces intersections (sort / rasterize work) without changing the
@@ -157,7 +161,7 @@ public final class GaussianRenderer {
         let tParam = Date()
         let scales = model.scales()
         let opacities = model.opacities()
-        eval(scales, opacities)
+        if Self.stageTiming { eval(scales, opacities) }
         mark("param_activations", since: tParam)
 
         let imageDims = MLXArray([Float(camera.width), Float(camera.height)], [2])
@@ -175,7 +179,7 @@ public final class GaussianRenderer {
         let conics  = projOut[1].reshaped([n, 3])
         let depths  = projOut[2]
         let radii   = projOut[3].reshaped([n, 2])
-        eval(means2d, conics, depths, radii)
+        if Self.stageTiming { eval(means2d, conics, depths, radii) }
         mark("project_fwd", since: tProj)
 
         let tBin = Date()
@@ -220,7 +224,7 @@ public final class GaussianRenderer {
             outputDTypes: [.float16]
         )
         let rgb = shOut[0].reshaped([n, 3])   // fp16
-        eval(rgb)
+        if Self.stageTiming { eval(rgb) }
         mark("sh_eval_fwd", since: tSH)
 
         let tRaster = Date()
@@ -296,7 +300,7 @@ public final class GaussianRenderer {
             cacheId = rasterOut[2]
             let cacheCountRaw = rasterOut[3]
             cacheCount = cacheCountRaw
-            eval(renderColor, renderAlpha)
+            if Self.stageTiming { eval(renderColor, renderAlpha) }
             // The overflow count is computed only on diag iters (avoids a GPU→CPU readback
             // normally). Summing overflowBit (2^30) as int32 overflows at 2+ pixels, so convert to
             // 0/1 before counting.
@@ -333,7 +337,7 @@ public final class GaussianRenderer {
             renderColor = rasterOut[0].reshaped([camera.height, camera.width, 3])
             renderAlpha = rasterOut[1].reshaped([camera.height, camera.width])
             lastIds = rasterOut[2]
-            eval(renderColor, renderAlpha, lastIds)
+            if Self.stageTiming { eval(renderColor, renderAlpha, lastIds) }
         }
         mark("rasterize_fwd", since: tRaster)
 
@@ -446,14 +450,14 @@ public final class GaussianRenderer {
             vColors    = rasterBwd[2].reshaped([n, 3])
             vOpacities = rasterBwd[3]
         }
-        eval(vMeans2d, vConics, vColors, vOpacities)
+        if Self.stageTiming { eval(vMeans2d, vConics, vColors, vOpacities) }
         mark("rasterize_bwd", since: tRasterBwd)
 
         let tProjBwd = Date()
         let (dMeans, dQuats, dLogScales, dLogitOpacities) = projectionBackward(
             model: model, camera: camera, cache: cache,
             vMeans2d: vMeans2d, vConics: vConics, vOpacities: vOpacities)
-        eval(dMeans, dQuats, dLogScales, dLogitOpacities)
+        if Self.stageTiming { eval(dMeans, dQuats, dLogScales, dLogitOpacities) }
         mark("project_bwd", since: tProjBwd)
 
         // SH bwd (as in gsplat) returns gradDirs, the gradient w.r.t. the unit dir. For means,

@@ -320,7 +320,7 @@ final class TrainingViewModel: ObservableObject {
                 includeSparse: false,
                 frameQualityFilter: true,
                 useReplayCache: nil,
-                replayCacheMode: ReplayCacheMode.on.rawValue,
+                replayCacheMode: CaptureTraining.AppPreset.replayCache.rawValue,
                 replayKMax: CaptureTraining.AppPreset.replayKMax,
                 useMCMCReg: true,
                 useEarlySH: true,
@@ -961,8 +961,9 @@ final class TrainingViewModel: ObservableObject {
 
     private nonisolated static func trainingPerformanceSettingsLine(initCap: Int) -> String {
         String(format:
-            "[settings] training perf: initCap=%d frameQuality=on opticalFlow=on lambdaSSIM=%.2f replayCache=on K=%d",
-            initCap, CaptureTraining.AppPreset.lambdaSSIM, CaptureTraining.AppPreset.replayKMax
+            "[settings] training perf: initCap=%d frameQuality=on opticalFlow=on lambdaSSIM=%.2f replayCache=%@ K=%d",
+            initCap, CaptureTraining.AppPreset.lambdaSSIM,
+            CaptureTraining.AppPreset.replayCache.rawValue as NSString, CaptureTraining.AppPreset.replayKMax
         )
     }
 }

@@ -150,7 +150,7 @@ sources. It does not run the tests, because most of them need a Metal GPU: run `
   eliminated by per-point QR and the reduced system is solved with Accelerate), and dense seed
   points from multi-view stereo (plane sweep + SGM). With the experimental LiDAR switch, LiDAR depth,
   reprojected with the refined poses, joins the seed points.
-- **Training**: PocketGS disc-like initialization and replay cache; a hybrid of MCMC and ImprovedGS+
+- **Training**: PocketGS disc-like initialization; a hybrid of MCMC and ImprovedGS+
   long-axis split for densification, whose prune takes faint Gaussians larger than the median; a
   directional spherical-harmonics background; per-frame exposure and white balance gains; fused
   SSIM; coarse-to-fine; thermal throttling; continued training with the Adam state kept.

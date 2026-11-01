@@ -99,9 +99,12 @@ final class TrainingProfiler {
             return "\(name)=\(String(format: "%.1f", b.mean))"
         }
         let stageSum = Self.stageOrder.reduce(0.0) { $0 + (stages[$1]?.mean ?? 0) }
-        lines.append(String(format:
-            "       stages: %@ (sum=%.1f)",
-            stageParts.joined(separator: " ") as NSString, stageSum))
+        // Without the per-stage waits the stage times only measure encoding, so they are left out.
+        if GaussianRenderer.stageTiming {
+            lines.append(String(format:
+                "       stages: %@ (sum=%.1f)",
+                stageParts.joined(separator: " ") as NSString, stageSum))
+        }
         if densifyFire.count > 0 {
             lines.append(String(format:
                 "       densify-fires n=%d avg=%.1fms | last %@",
