@@ -77,6 +77,41 @@ func datasetStoreRoundTrips() throws {
     #expect(orig == back, "uint8 image round-trip must be exact")
 }
 
+/// The camera's exposure and white balance round-trip, a frame without them stays nil, and the
+/// intake summary covers only the frames that have them.
+@Test
+func datasetStoreRoundTripsCameraSettings() throws {
+    let base = datasetFrame(index: 0, width: 4, height: 4)
+    let settings = CameraSettings(exposureDuration: 1.0 / 120, exposureOffset: -0.25, iso: 320,
+                                  whiteBalanceGains: [1.95, 1, 2.125], exposureLocked: true,
+                                  whiteBalanceLocked: false)
+    let withSettings = CapturedFrame(
+        image: base.image, viewmat: base.viewmat, intrinsics: base.intrinsics,
+        width: base.width, height: base.height, timestamp: base.timestamp,
+        anchorIdentifier: base.anchorIdentifier, cameraSettings: settings
+    )
+    let scene = CapturedScene(
+        frames: [withSettings, datasetFrame(index: 1, width: 4, height: 4)], sparsePoints: []
+    )
+    let root = FileManager.default.temporaryDirectory
+        .appendingPathComponent("dataset_camera_\(UUID().uuidString)")
+    let dir = root.appendingPathComponent("capture_test.dataset")
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    try CaptureDatasetStore.save(scene, to: dir)
+    let loaded = try CaptureDatasetStore.load(from: dir)
+    #expect(loaded.frames[0].cameraSettings == settings)
+    #expect(loaded.frames[1].cameraSettings == nil)
+    // A pose update keeps them.
+    #expect(loaded.frames[0].withViewmat(base.viewmat).cameraSettings == settings)
+
+    let summary = try #require(CameraSettings.summary(of: loaded.frames))
+    #expect(summary.hasPrefix("[camera] 1/2 frames"), "\(summary)")
+    #expect(summary.contains("ISO 320–320") && summary.contains("exposure locked 1/1")
+            && summary.contains("WB locked 0/1"), "\(summary)")
+    #expect(CameraSettings.summary(of: [base]) == nil)
+}
+
 @Test
 func datasetStoreRoundTripsFeatureObservations() throws {
     // ARKit feature point observation IDs (including UInt64 beyond JSON number precision) and

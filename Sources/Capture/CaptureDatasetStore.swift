@@ -90,6 +90,8 @@ public enum CaptureDatasetStore {
         var lidarFile: String?
         // LiDAR sample positions only, from datasets saved before `lidarFile` (read only).
         var lidarCameraPoints: [Float]?     // flattened xyz
+        // Exposure and white balance at capture (nil in old datasets).
+        var camera: CameraSettings?
     }
 
     /// Floats per sample in a `.lidar` file: camera x, y, z, depth spread, confidence level.
@@ -125,7 +127,8 @@ public enum CaptureDatasetStore {
                 featureCameraPoints: f.featureObservations.isEmpty
                     ? nil : packPoints(f.featureObservations.map(\.cameraPoint)),
                 lidarFile: f.lidarSamples.isEmpty
-                    ? nil : try writeLiDARSamples(f.lidarSamples, to: tmp, index: i)
+                    ? nil : try writeLiDARSamples(f.lidarSamples, to: tmp, index: i),
+                camera: f.cameraSettings
             ))
         }
 
@@ -207,7 +210,8 @@ public enum CaptureDatasetStore {
                 timestamp: r.timestamp,
                 anchorIdentifier: r.anchorIdentifier.flatMap(UUID.init(uuidString:)),
                 featureObservations: featureObs,
-                lidarSamples: try readLiDARSamples(r, from: directory)
+                lidarSamples: try readLiDARSamples(r, from: directory),
+                cameraSettings: r.camera
             )
             frame.imageStorage.attach(files, path: r.imageFile)
             frames.append(frame)
