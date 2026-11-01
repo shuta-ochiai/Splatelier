@@ -24,6 +24,7 @@ public enum LoopClosureResolver {
         public let featureObservations: [ARKitFeatureObservation]
         public let lidarSamples: [LiDARSample]
         public let cameraSettings: CameraSettings?
+        public let cameraMotion: CameraMotion?
 
         public init(
             anchorID: UUID, image: MLXArray,
@@ -31,7 +32,8 @@ public enum LoopClosureResolver {
             width: Int, height: Int, timestamp: TimeInterval,
             featureObservations: [ARKitFeatureObservation] = [],
             lidarSamples: [LiDARSample] = [],
-            cameraSettings: CameraSettings? = nil
+            cameraSettings: CameraSettings? = nil,
+            cameraMotion: CameraMotion? = nil
         ) {
             self.anchorID = anchorID
             self.image = image
@@ -42,6 +44,7 @@ public enum LoopClosureResolver {
             self.featureObservations = featureObservations
             self.lidarSamples = lidarSamples
             self.cameraSettings = cameraSettings
+            self.cameraMotion = cameraMotion
         }
     }
 
@@ -91,7 +94,8 @@ public enum LoopClosureResolver {
                 anchorIdentifier: r.anchorID,
                 featureObservations: r.featureObservations,
                 lidarSamples: r.lidarSamples,
-                cameraSettings: r.cameraSettings
+                cameraSettings: r.cameraSettings,
+                cameraMotion: r.cameraMotion
             ))
         }
         return out

@@ -165,6 +165,87 @@ public struct CameraSettings: Codable, Sendable, Equatable {
     }
 }
 
+/// How fast the camera moved when a frame was taken, from the ARKit pose just before it (about
+/// 1/60 s earlier). With the exposure duration this gives the motion blur in pixels whatever the
+/// frame shows, which an image measure of sharpness cannot (a plain surface looks soft to it).
+/// Velocities are in the ARKit camera's axes: x right, y up, z towards the viewer.
+public struct CameraMotion: Codable, Sendable, Equatable {
+    /// Angular velocity, rad/s.
+    public var angularVelocity: [Float]
+    /// Linear velocity, m/s.
+    public var linearVelocity: [Float]
+    /// Time between the two poses, seconds.
+    public var interval: Double
+
+    public init(angularVelocity: [Float], linearVelocity: [Float], interval: Double) {
+        self.angularVelocity = angularVelocity
+        self.linearVelocity = linearVelocity
+        self.interval = interval
+    }
+
+    /// The motion from the camera-to-world pose `from` at `t0` to `to` at `t1`; nil when the
+    /// interval is not positive.
+    public init?(from: simd_float4x4, at t0: TimeInterval, to: simd_float4x4, at t1: TimeInterval) {
+        let dt = t1 - t0
+        guard dt > 0 else { return nil }
+        func rotation(_ m: simd_float4x4) -> simd_float3x3 {
+            simd_float3x3(SIMD3(m.columns.0.x, m.columns.0.y, m.columns.0.z),
+                          SIMD3(m.columns.1.x, m.columns.1.y, m.columns.1.z),
+                          SIMD3(m.columns.2.x, m.columns.2.y, m.columns.2.z))
+        }
+        let r0 = rotation(from), r1 = rotation(to)
+        // The rotation from the first camera to the second, in the first camera's axes.
+        let q = simd_quatf(r0.transpose * r1)
+        let angle = q.angle
+        let axis = angle > 1e-7 ? q.axis : SIMD3<Float>(0, 0, 0)
+        let omega = axis * (angle > Float.pi ? angle - 2 * Float.pi : angle) / Float(dt)
+        let world = SIMD3(to.columns.3.x - from.columns.3.x, to.columns.3.y - from.columns.3.y,
+                          to.columns.3.z - from.columns.3.z) / Float(dt)
+        let v = r1.transpose * world
+        self.init(angularVelocity: [omega.x, omega.y, omega.z], linearVelocity: [v.x, v.y, v.z],
+                  interval: dt)
+    }
+
+    /// Blur in pixels from turning the camera across the image (pitch and yaw) during `exposure`
+    /// seconds, at focal length `focal` px. Roll is left out (it smears only towards the edges).
+    public func rotationalBlurPixels(exposure: Double, focal: Float) -> Float {
+        guard angularVelocity.count == 3 else { return 0 }
+        return focal * Float(exposure) * (angularVelocity[0] * angularVelocity[0]
+                                          + angularVelocity[1] * angularVelocity[1]).squareRoot()
+    }
+
+    /// Blur in pixels from moving across the image during `exposure` seconds, for a surface `depth`
+    /// metres away.
+    public func translationalBlurPixels(exposure: Double, focal: Float, depth: Float) -> Float {
+        guard linearVelocity.count == 3, depth > 0 else { return 0 }
+        return focal * Float(exposure) * (linearVelocity[0] * linearVelocity[0]
+                                          + linearVelocity[1] * linearVelocity[1]).squareRoot() / depth
+    }
+
+    /// One log line with the angular speed and, where the exposure was recorded, the rotational
+    /// blur over `frames`; nil when no frame has a motion.
+    public static func summary(of frames: [CapturedFrame]) -> String? {
+        let withMotion = frames.filter { $0.cameraMotion != nil }
+        guard !withMotion.isEmpty else { return nil }
+        func median(_ v: [Float]) -> Float { v.sorted()[v.count / 2] }
+        func p90(_ v: [Float]) -> Float { v.sorted()[Swift.min(v.count - 1, v.count * 9 / 10)] }
+        let speeds = withMotion.compactMap { $0.cameraMotion }.map { m -> Float in
+            m.angularVelocity.count == 3 ? (m.angularVelocity.map { $0 * $0 }.reduce(0, +)).squareRoot() : 0
+        }
+        var line = String(format: "[motion] %d/%d frames: angular speed median %.2f p90 %.2f rad/s",
+                          withMotion.count, frames.count, median(speeds), p90(speeds))
+        let blur = withMotion.compactMap { f -> Float? in
+            guard let m = f.cameraMotion, let s = f.cameraSettings else { return nil }
+            return m.rotationalBlurPixels(exposure: s.exposureDuration, focal: f.intrinsics.fx)
+        }
+        if !blur.isEmpty {
+            line += String(format: ", rotational blur median %.2f p90 %.2f px, over 2 px %d",
+                           median(blur), p90(blur), blur.filter { $0 > 2 }.count)
+        }
+        return line
+    }
+}
+
 public struct CapturedFrame {
     /// [H, W, 3] uint8 RGB as captured. Kept resident at 1/4 the memory of float32 until released
     /// to its saved copy.
@@ -206,6 +287,9 @@ public struct CapturedFrame {
     /// The camera's exposure and white balance when the frame was taken (nil for frames not from
     /// an ARKit capture, and in datasets saved before it was recorded).
     public let cameraSettings: CameraSettings?
+    /// How fast the camera moved when the frame was taken (nil for frames not from an ARKit
+    /// capture, and in datasets saved before it was recorded).
+    public let cameraMotion: CameraMotion?
 
     public init(
         image: MLXArray, viewmat: [Float],
@@ -214,7 +298,8 @@ public struct CapturedFrame {
         timestamp: TimeInterval, anchorIdentifier: UUID? = nil,
         featureObservations: [ARKitFeatureObservation] = [],
         lidarSamples: [LiDARSample] = [],
-        cameraSettings: CameraSettings? = nil
+        cameraSettings: CameraSettings? = nil,
+        cameraMotion: CameraMotion? = nil
     ) {
         precondition(viewmat.count == 16, "viewmat must be a row-major 4×4")
         precondition(image.shape.count == 3 && image.shape[2] == 3,
@@ -230,6 +315,7 @@ public struct CapturedFrame {
         self.featureObservations = featureObservations
         self.lidarSamples = lidarSamples
         self.cameraSettings = cameraSettings
+        self.cameraMotion = cameraMotion
     }
 
     private init(copying f: CapturedFrame, viewmat: [Float], intrinsics: Intrinsics,
@@ -245,6 +331,7 @@ public struct CapturedFrame {
         self.featureObservations = f.featureObservations
         self.lidarSamples = f.lidarSamples
         self.cameraSettings = f.cameraSettings
+        self.cameraMotion = f.cameraMotion
     }
 
     /// Frame with only the pose replaced (image and undistortion spec unchanged).

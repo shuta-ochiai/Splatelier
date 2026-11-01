@@ -84,6 +84,41 @@ func frameQualityFilterDropsSharpnessOutlier() {
     #expect(logs.contains { $0.contains("drop frame[5]") })
 }
 
+/// Frames that carry their motion are judged by the motion blur, not the image: a plain frame shot
+/// while still stays (the image gates would drop it), a sharp-looking frame shot while turning
+/// fast goes.
+@Test
+func frameQualityMotionBlurGateJudgesByMotion() {
+    let w = 16, h = 16
+    var frames: [CapturedFrame] = []
+    for i in 0..<12 {
+        let pixels = i == 3 ? flatPixels(width: w, height: h, value: 0.5) : checkerPixels(width: w, height: h)
+        // 0.5 rad/s gives 0.2 px at 4 ms and fx 100; 10 rad/s gives 4 px.
+        let yaw: Float = i == 7 ? 10 : 0.5
+        frames.append(CapturedFrame(
+            image: MLXArray(pixels, [h, w, 3]), viewmat: qualityViewmatAt(Float(i) * 0.05),
+            intrinsics: (fx: 100, fy: 100, cx: Float(w) / 2, cy: Float(h) / 2),
+            width: w, height: h, timestamp: TimeInterval(i),
+            cameraSettings: CameraSettings(exposureDuration: 0.004, exposureOffset: 0),
+            cameraMotion: CameraMotion(angularVelocity: [0, yaw, 0], linearVelocity: [0, 0, 0],
+                                       interval: 1.0 / 60)
+        ))
+    }
+    let scene = CapturedScene(frames: frames, sparsePoints: [])
+    let params = CaptureFrameQualityFilter.Parameters(
+        minFrameCountForFiltering: 4, minKeptFrames: 4, minKeepFraction: 0.5,
+        sharpnessStride: 1, exposureSampleStride: 1, maxMotionBlurPixels: 3)
+    var logs: [String] = []
+    let filtered = CaptureFrameQualityFilter.filter(scene: scene, parameters: params) { logs.append($0) }
+    #expect(filtered.frames.count == 11)
+    #expect(logs.contains { $0.contains("drop frame[7] reason=motionblur") && $0.contains("motion=4.00px") },
+            "\(logs)")
+    #expect(!logs.contains { $0.contains("drop frame[3]") }, "\(logs)")
+    let review = CaptureFrameQualityFilter.review(scene: scene, parameters: params)
+    #expect(review.filter { !$0.kept }.map(\.index) == [7])
+    #expect(review[7].reasons == ["motionblur"])
+}
+
 /// `review()` returns the same keep set as `filter()` (the images shown in the UI match those used
 /// for training) and a per-frame drop reason.
 @Test

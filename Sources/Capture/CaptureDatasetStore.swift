@@ -92,6 +92,8 @@ public enum CaptureDatasetStore {
         var lidarCameraPoints: [Float]?     // flattened xyz
         // Exposure and white balance at capture (nil in old datasets).
         var camera: CameraSettings?
+        // Camera motion when the frame was taken (nil in old datasets).
+        var motion: CameraMotion?
     }
 
     /// Floats per sample in a `.lidar` file: camera x, y, z, depth spread, confidence level.
@@ -128,7 +130,8 @@ public enum CaptureDatasetStore {
                     ? nil : packPoints(f.featureObservations.map(\.cameraPoint)),
                 lidarFile: f.lidarSamples.isEmpty
                     ? nil : try writeLiDARSamples(f.lidarSamples, to: tmp, index: i),
-                camera: f.cameraSettings
+                camera: f.cameraSettings,
+                motion: f.cameraMotion
             ))
         }
 
@@ -211,7 +214,8 @@ public enum CaptureDatasetStore {
                 anchorIdentifier: r.anchorIdentifier.flatMap(UUID.init(uuidString:)),
                 featureObservations: featureObs,
                 lidarSamples: try readLiDARSamples(r, from: directory),
-                cameraSettings: r.camera
+                cameraSettings: r.camera,
+                cameraMotion: r.motion
             )
             frame.imageStorage.attach(files, path: r.imageFile)
             frames.append(frame)
