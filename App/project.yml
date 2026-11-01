@@ -48,7 +48,7 @@ targets:
         CFBundleDisplayName: Splatelier
         # The release version, kept equal to the git tag and to Splatelier.version
         # (Sources/Trainer/Splatelier.swift). CFBundleVersion is the build number.
-        CFBundleShortVersionString: "0.1.0"
+        CFBundleShortVersionString: "0.2.0"
         CFBundleVersion: "1"
         # Input is RGB + coarse pose from ARKit. CameraUsageDescription is the text shown in the OS dialog
         # when the ARSession starts. Unified as "Splatelier" to match the display name.
