@@ -288,6 +288,9 @@ public enum CaptureTraining {
         // Geometric regularization (surface depth + normal consistency + MVS depth from the
         // geometry's depth maps). nil disables it.
         geometryRegularization: GeometryRegularization? = AppPreset.geometryRegularization,
+        // A gain per frame on the render, for the exposure and white balance changes between frames
+        // (training only). nil disables it.
+        photometricGains: PhotometricGainConfig? = AppPreset.photometricGains,
         onThermalThrottle: ((ThermalThrottleState) -> Void)? = nil,
         onPreview: ((TrainingPreviewFrame) -> Void)? = nil,
         onSnapshot: ((GaussianModel, Int) -> Void)? = nil,
@@ -417,6 +420,7 @@ public enum CaptureTraining {
             // training.
             useEarlySH: true,
             geometryRegularization: geometryRegularization,
+            photometricGains: photometricGains,
             onThermalThrottle: onThermalThrottle,
             onPreview: onPreview,
             onSnapshot: onSnapshot, log: log

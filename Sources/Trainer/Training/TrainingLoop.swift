@@ -42,6 +42,10 @@ extension TrainingDriver {
         // Geometric regularization (surface depth + normal consistency + MVS depth) from
         // `startFraction` of the iterations on. nil disables it.
         geometryRegularization: GeometryRegularization? = nil,
+        // A gain per view that the render is multiplied by before the loss, so frames shot at a
+        // different exposure or white balance do not pull the scene's colours (training only).
+        // nil disables it.
+        photometricGains: PhotometricGainConfig? = nil,
         onThermalThrottle: ((ThermalThrottleState) -> Void)? = nil,
         // A small picture of the model every few seconds (for the App's training screen).
         onPreview: ((TrainingPreviewFrame) -> Void)? = nil,
@@ -71,6 +75,12 @@ extension TrainingDriver {
             alphaLossWeight: alphaLossWeight,
             surfaceAlphaWeight: surfaceAlphaWeight
         )
+        let gainStart = photometricGains.map { Int(Float(iterations) * Swift.min(1, Swift.max(0, $0.startFraction))) } ?? 0
+        if let config = photometricGains {
+            trainer.photometricGains = PhotometricGains(viewCount: views.count, config: config)
+            log(String(format: "photometric gains: per-view exposure and colour from iter %d (rate %.2f, ±%.2f stops max)",
+                       gainStart, config.rate, config.maxLogGain / Float(Foundation.log(2.0))))
+        }
         if enableBackgroundSH {
             log("rasterizer: background SH env-map enabled (degree=\(backgroundSHDegree), alphaLoss=\(alphaLossWeight), surfaceAlpha=\(surfaceAlphaWeight))")
         }
@@ -196,7 +206,9 @@ extension TrainingDriver {
             }
             let lr = trainer.optMeans.lr
             let shDegree = Swift.min(it / shDegreeInterval, maxShDegree)
-            let v = views[viewSampler.sample(using: &rng)]
+            let viewIndex = viewSampler.sample(using: &rng)
+            let v = views[viewIndex]
+            let fitGain = photometricGains != nil && it >= gainStart
             let cf = it < coarseUntil ? coarseToFineFactor : 1
             // The coarse phase box-averages the uint8 v.image directly (no full-res float32); the
             // fine phase uses fineResample.
@@ -235,7 +247,7 @@ extension TrainingDriver {
                     let output = trainer.stepWithCache(
                         camera: stepCamera, targetImage: stepTarget, shDegree: shDegree,
                         geometry: geometry, mvsDepth: v.mvsDepth, surfaceMask: v.surfaceMask,
-                        opaqueMask: v.opaqueMask
+                        opaqueMask: v.opaqueMask, viewIndex: viewIndex, fitGain: fitGain
                     )
                     return (output.loss, output.cache)
                 } else {
@@ -243,7 +255,7 @@ extension TrainingDriver {
                         trainer.step(
                             camera: stepCamera, targetImage: stepTarget, shDegree: shDegree,
                             geometry: geometry, mvsDepth: v.mvsDepth, surfaceMask: v.surfaceMask,
-                            opaqueMask: v.opaqueMask
+                            opaqueMask: v.opaqueMask, viewIndex: viewIndex, fitGain: fitGain
                         ),
                         nil
                     )
@@ -335,6 +347,11 @@ extension TrainingDriver {
             }
         }
         GaussianRenderer.diagnosticEnabled = false
+        if let gains = trainer.photometricGains {
+            let e = gains.exposureSummary()
+            log(String(format: "photometric gains: exposure %+.2f … %+.2f stops over %d views (std %.2f)",
+                       e.minStops, e.maxStops, views.count, e.stdStops))
+        }
         if let energy = profiler.energySummary() {
             log(energy)
         }
@@ -529,11 +546,13 @@ extension TrainingDriver {
             // surfaces it flattened.
             let geometry = session.geometryRegularization.flatMap { i % $0.every == 0 ? $0 : nil }
             let loss: Float = autoreleasepool {
-                let v = views[session.viewSampler.sample(using: &rng)]
-                // The scale cap is applied inside trainer.step.
+                let viewIndex = session.viewSampler.sample(using: &rng)
+                let v = views[viewIndex]
+                // The scale cap is applied inside trainer.step. The gains go on being fitted.
                 return trainer.step(camera: v.camera, targetImage: v.imageFloat, shDegree: shDegree,
                                     geometry: geometry, mvsDepth: v.mvsDepth, surfaceMask: v.surfaceMask,
-                                    opaqueMask: v.opaqueMask)
+                                    opaqueMask: v.opaqueMask, viewIndex: viewIndex,
+                                    fitGain: trainer.photometricGains != nil)
             }
             lastStepSeconds = Date().timeIntervalSince(t0)
             history.append(loss)

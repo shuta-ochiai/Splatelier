@@ -451,6 +451,17 @@ case "train-capture":
                 GeometryRegularization.profileStages = env["GEO_PROFILE_STAGES"] == "1"
                 return g
             }(),
+            // Per-frame exposure / white balance gains (on as in the app; PHOTO_GAIN=0 turns them off).
+            // PHOTO_GAIN_START fraction of iterations before they are fitted, PHOTO_GAIN_RATE, and
+            // PHOTO_GAIN_MAX (stops) the bound.
+            photometricGains: {
+                if ["0", "off", "no", "false"].contains(env["PHOTO_GAIN"]?.lowercased() ?? "") { return nil }
+                var g = CaptureTraining.AppPreset.photometricGains ?? PhotometricGainConfig()
+                if let v = env["PHOTO_GAIN_START"].flatMap({ Float($0) }) { g.startFraction = v }
+                if let v = env["PHOTO_GAIN_RATE"].flatMap({ Float($0) }) { g.rate = v }
+                if let v = env["PHOTO_GAIN_MAX"].flatMap({ Float($0) }) { g.maxLogGain = v * Float(log(2.0)) }
+                return g
+            }(),
             log: logErr
         )
         // With EVAL_HOLDOUT the meshes leave out the MVS depth of the held-out views too, so
