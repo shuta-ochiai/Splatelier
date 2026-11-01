@@ -29,7 +29,6 @@ struct CaptureView: View {
     // MARK: crash recovery
     /// Preserved dataset (*.dataset) left over from a previous crash. Detected at launch.
     @State private var pendingDatasetURL: URL?
-    @State private var showResumePrompt = false
     @State private var showAbout = false
     @State private var didCheckRecovery = false
     @State private var recoveryError: String?
@@ -98,12 +97,6 @@ struct CaptureView: View {
                 trainer = TrainingViewModel(scene: scene)
                 trainerIsFreshCapture = true
             }
-        }
-        .alert("Unfinished capture found", isPresented: $showResumePrompt) {
-            Button("Restart") { resumePendingDataset() }
-            Button("Discard", role: .destructive) { discardPendingDataset() }
-        } message: {
-            Text("The last training run stopped before finishing. The capture data is still here, so you can train it again from the start.")
         }
         .alert(
             "Couldn't resume",
@@ -573,7 +566,22 @@ struct CaptureView: View {
         guard !isLive, vm.capturedScene == nil, trainer == nil,
               let url = Self.mostRecentPendingDataset() else { return }
         pendingDatasetURL = url
-        showResumePrompt = true
+        presentResumePrompt()
+    }
+
+    /// A UIKit alert rather than SwiftUI's `.alert`: with a destructive button and no cancel
+    /// button, SwiftUI adds a system Cancel button, and the prompt must be answered either way.
+    private func presentResumePrompt() {
+        let alert = UIAlertController(
+            title: "Unfinished capture found",
+            message: "The last training run stopped before finishing. The capture data is still here, so you can train it again from the start.",
+            preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "Restart", style: .default) { _ in resumePendingDataset() })
+        alert.addAction(UIAlertAction(title: "Discard", style: .destructive) { _ in discardPendingDataset() })
+        let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
+        var top = scene?.windows.first(where: \.isKeyWindow)?.rootViewController
+        while let presented = top?.presentedViewController { top = presented }
+        top?.present(alert, animated: true)
     }
 
     /// Decode the preserved dataset in the background and open the training panel for it.
