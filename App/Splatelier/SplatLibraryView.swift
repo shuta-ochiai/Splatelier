@@ -28,6 +28,10 @@ struct SplatLibraryView: View {
         var displayName: String { name ?? mainURL.deletingPathExtension().lastPathComponent }
     }
 
+    private final class RowFrames {
+        var frames: [String: CGRect] = [:]
+    }
+
     private struct SettingsSheetData: Identifiable {
         let id: String          // capture base
         let title: String
@@ -42,6 +46,10 @@ struct SplatLibraryView: View {
     @State private var confirmingBatchDelete = false
     /// The capture a single Delete (swipe or menu) asks about.
     @State private var deletingItem: CaptureItem?
+    /// Where each row is on screen (not observed: it changes on every scroll frame), and the frame
+    /// of the row Delete was tapped on, which the dialog points at.
+    @State private var rowFrames = RowFrames()
+    @State private var deleteAnchorFrame: CGRect = .zero
     @State private var renamingItem: CaptureItem?
     @State private var renameText = ""
     @State private var settingsSheet: SettingsSheetData?
@@ -60,31 +68,29 @@ struct SplatLibraryView: View {
                 List {
                     ForEach(items) { item in
                         rowContainer(item)
-                            // On the row, not the list: the dialog appears next to the view it
-                            // is attached to, so on the list it showed at the top of the screen.
-                            .confirmationDialog(
-                                "Delete this capture?",
-                                isPresented: Binding(
-                                    get: { deletingItem?.id == item.id },
-                                    set: { if !$0 { deletingItem = nil } }
-                                ),
-                                titleVisibility: .visible
-                            ) {
-                                Button("Delete", role: .destructive) {
-                                    delete(item)
-                                    deletingItem = nil
-                                }
-                                Button("Cancel", role: .cancel) { deletingItem = nil }
-                            } message: {
-                                Text("\(item.displayName) and all its files (PLY, mesh, logs, etc.) will be deleted. This can't be undone.")
+                            .onGeometryChange(for: CGRect.self) {
+                                $0.frame(in: .global)
+                            } action: {
+                                rowFrames.frames[item.id] = $0
                             }
                             // The rows would draw a black group box behind each card; let the
                             // indigo show through and space the cards instead of ruling them off.
                             .listRowBackground(Color.clear)
                             .listRowSeparator(.hidden)
                             .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                            // Not `.onDelete`, and no `.destructive` role: both make the row play
+                            // its removal animation, which scrolls a list that is at its end up by
+                            // a card, and the dialog then pointed at the card above. The row stays
+                            // because the dialog decides.
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                Button {
+                                    askDelete(item)
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                                .tint(.red)
+                            }
                     }
-                    .onDelete(perform: deleteAt)
                 }
                 .listStyle(.plain)
             }
@@ -93,6 +99,7 @@ struct SplatLibraryView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { toolbarContent }
         .safeAreaInset(edge: .bottom) { selectionBar }
+        .overlay { deleteDialogAnchor }
         .onAppear(perform: reload)
         .refreshable { reload() }
         .sheet(item: $shareRequest) { request in
@@ -255,7 +262,7 @@ struct SplatLibraryView: View {
             }
         }
         Button(role: .destructive) {
-            deletingItem = item
+            askDelete(item)
         } label: {
             Label("Delete", systemImage: "trash")
         }
@@ -334,6 +341,52 @@ struct SplatLibraryView: View {
                         .foregroundStyle(.secondary)
                 }
         }
+    }
+
+    // MARK: - Delete confirmation
+
+    private func askDelete(_ item: CaptureItem) {
+        deleteAnchorFrame = rowFrames.frames[item.id] ?? .zero
+        // Present after the anchor has moved to this card, so the dialog does not open on the
+        // previous one.
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(100))
+            deletingItem = item
+        }
+    }
+
+    /// Holds the single-delete dialog, placed over the card Delete was tapped on so the dialog
+    /// points at it. It cannot sit on the row: the swipe resets the row, which closed the dialog at
+    /// once. This view is outside the list, so it survives.
+    private var deleteDialogAnchor: some View {
+        GeometryReader { proxy in
+            let origin = proxy.frame(in: .global).origin
+            // The dialog goes on this view, before `.position`: position wraps it in a full-screen
+            // view, and the dialog would then point at the top of the screen. The source is a
+            // strip across the card's middle: with the whole card the arrow sat on the card's edge
+            // and the dialog covered the card before, and with a single point it faced sideways.
+            Color.clear
+                .frame(width: deleteAnchorFrame.width, height: 40)
+                .confirmationDialog(
+                    "Delete this capture?",
+                    isPresented: Binding(
+                        get: { deletingItem != nil },
+                        set: { if !$0 { deletingItem = nil } }
+                    ),
+                    titleVisibility: .visible,
+                    presenting: deletingItem
+                ) { item in
+                    Button("Delete", role: .destructive) {
+                        delete(item)
+                        deletingItem = nil
+                    }
+                    Button("Cancel", role: .cancel) { deletingItem = nil }
+                } message: { item in
+                    Text("\(item.displayName) and all its files (PLY, mesh, logs, etc.) will be deleted. This can't be undone.")
+                }
+                .position(x: deleteAnchorFrame.midX - origin.x, y: deleteAnchorFrame.midY - origin.y)
+        }
+        .allowsHitTesting(false)
     }
 
     // MARK: - Selection bar
@@ -526,12 +579,6 @@ struct SplatLibraryView: View {
         } catch {
             errorMessage = error.localizedDescription
         }
-    }
-
-    /// Swipe to delete: asks first (a swipe deletes one row at a time).
-    private func deleteAt(_ offsets: IndexSet) {
-        guard let index = offsets.first else { return }
-        deletingItem = items[index]
     }
 
     private func delete(_ item: CaptureItem) {
