@@ -227,6 +227,8 @@ public enum CaptureTraining {
         opacityReg: Float = AppPreset.regularization,
         scaleReg: Float = AppPreset.regularization,
         lambdaSSIM: Float = AppPreset.lambdaSSIM,
+        // Learning rate of the view-dependent SH coefficients (`AppPreset.shNLearningRate`).
+        shNLR: Float = AppPreset.shNLearningRate,
         // If >0, hold out every Nth training view and log PSNR/SSIM after training. BA / seed use
         // all frames.
         evalHoldoutEvery: Int = 0,
@@ -417,6 +419,7 @@ public enum CaptureTraining {
             // Bring the SH degree warm-up forward so degree 1 takes effect from about 25% of
             // training.
             useEarlySH: true,
+            shNLR: shNLR,
             geometryRegularization: geometryRegularization,
             onThermalThrottle: onThermalThrottle,
             onPreview: onPreview,
