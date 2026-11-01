@@ -239,7 +239,7 @@ public enum CaptureTraining {
         // Also evaluate held-out views against the images as captured (not resampled by
         // undistortion). For comparing with/without undistortion.
         evalAgainstCapturedImages: Bool = false,
-        // Fragment slots per pixel of the replay cache (always on, see `AppPreset.replayKMax`).
+        // Fragment slots per pixel of the replay cache, when `AppPreset.replayCache` is on.
         replayKMax: Int = AppPreset.replayKMax,
         syntheticSparseCount: Int = 5_000,
         // Cap on training views. Beyond it, thin with viewpoint-coverage priority (FPS) (seed uses
@@ -410,7 +410,7 @@ public enum CaptureTraining {
             iterations: iterations, meansLR: meansLR, logEvery: logEvery,
             seed: seed, strategy: strategy,
             opacityReg: opacityReg, scaleReg: scaleReg, lambdaSSIM: lambdaSSIM,
-            replayCache: .on, replayKMax: replayKMax,
+            replayCache: AppPreset.replayCache, replayKMax: replayKMax,
             outputPLY: outputPLY, thumbnailPNG: thumbnailPNG,
             enableBackgroundSH: true,
             backgroundSHDegree: backgroundSHDegree,

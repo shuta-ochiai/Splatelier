@@ -29,9 +29,14 @@ extension CaptureTraining {
         /// Weight λ of the D-SSIM term. Above 3DGS's 0.2 it keeps more of the local contrast and
         /// edges, at about 0.1 dB of held-out PSNR.
         public static let lambdaSSIM: Float = 0.5
-        /// Fragment slots per pixel of the replay cache (a margin covering the overlap at the center
-        /// pixel). The replay cache itself is always on as a thermal measure: its backward is
-        /// slower than coop backward but memory-bandwidth bound and low power.
+        /// Backward rasterizer. Off: the coop backward, which sums each SIMD group's gradients
+        /// before its atomic adds. The replay cache's backward adds per pixel, and those atomics
+        /// made it the larger part of a step: coop takes a step from 18.6 to 12.0 ms and from 142
+        /// to 105 mJ of GPU energy on a Mac, and a run from 110 to 67 s on an iPhone 16 Pro, with
+        /// the same gradients.
+        public static let replayCache: ReplayCacheMode = .off
+        /// Fragment slots per pixel of the replay cache, when it is on (a margin covering the
+        /// overlap at the center pixel).
         public static let replayKMax = 96
         /// Fraction of iterations in the coarse phase.
         public static let coarseToFineFraction: Float = 0.5
