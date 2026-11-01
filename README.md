@@ -24,23 +24,19 @@ and compiled to Metal.
 
 ## Features
 
-- **Guided capture**: ARKit images and poses, blur and exposure filtering while you capture, a live
-  splat preview that shows which parts of the scene are covered, and short animated tips on the
-  start screen.
+- **Guided capture**: ARKit images and poses, a live splat preview that shows which parts of the
+  scene are covered, and frames that would come out motion-blurred left out of training.
 - **On-device training**: bundle adjustment refines the ARKit poses, multi-view stereo provides dense
-  seed points, and the Gaussians are trained on the iPhone's GPU. Training slows down when the device
-  gets hot and pauses when iOS reports a critical thermal state. A finished model can be trained
-  further. Capture, the training settings and the training are one screen, with one progress bar
-  and a picture of the model that sharpens as it trains.
-- **Built-in viewer**: orbit the result, choose the layers to show (splats, background, mesh, seed
-  points), and measure distances between two points. The Library lists your captures and opens
-  `.ply`, `.splat` and `.spz` files you import.
-- **Export**: share the splats as a standard 3DGS PLY (common splat viewers open it), compressed
-  PLY, SPZ, `.splat`, glTF (GLB) or SOG, and the mesh (OBJ) generated from the trained scene, from
-  the viewer or the Library. Files are also available in the Files app.
+  seed points, and the Gaussians are trained on the iPhone's GPU, with each frame's exposure and
+  white balance compensated. Training adapts to the device's temperature, and a finished model can
+  be trained further.
+- **Built-in viewer**: orbit the result, choose the layers to show, measure distances, and grade the
+  colours or crop the splats. The Library lists your captures and opens `.ply`, `.splat` and `.spz`
+  files you import.
+- **Export**: share the splats as a standard 3DGS PLY, compressed PLY, SPZ, `.splat`, glTF (GLB), SOG
+  or OpenUSD (`.usda`), and the mesh (OBJ) generated from the trained scene.
 - **Mac tools**: retrain a capture from the app on a Mac, train and evaluate on COLMAP scenes, and
-  inspect PLY files from the command line. `splatelier convert` turns a PLY into compressed PLY, SPZ,
-  .splat, glTF (GLB), SOG or OpenUSD (.usda, ParticleField3DGaussianSplat from OpenUSD v26.03).
+  convert PLY files from the command line.
 
 ## Requirements
 
@@ -100,7 +96,7 @@ train-capture <dataset.valset> <output.ply> [iterations]  retrain an app capture
                                                           settings (MESH_OBJ=<path> also writes a mesh)
 view | capture | stats | cull                             viewer and PLY tools
 convert <in.ply> <out.ext> [shDegree]                     convert a PLY to compressed PLY, SPZ, .splat,
-                                                          GLB or SOG
+                                                          GLB, SOG or OpenUSD (.usda)
 ```
 
 - A capture can be saved from the app as a `.valset` dataset and shared to the Mac.
@@ -147,13 +143,17 @@ sources. It does not run the tests, because most of them need a Metal GPU: run `
 
 ### How it works
 
+- **Frame selection**: frames whose recorded camera motion would blur them by more than 3 px over the
+  exposure are left out (for datasets without the motion, an image-based blur test); badly exposed
+  frames are left out too.
 - **Poses and seed points**: bundle adjustment over ORB and ARKit feature tracks (the points are
   eliminated by per-point QR and the reduced system is solved with Accelerate), and dense seed
   points from multi-view stereo (plane sweep + SGM). With the experimental LiDAR switch, LiDAR depth,
   reprojected with the refined poses, joins the seed points.
 - **Training**: PocketGS disc-like initialization and replay cache; a hybrid of MCMC and ImprovedGS+
-  long-axis split for densification; a directional spherical-harmonics background; fused SSIM;
-  coarse-to-fine; thermal throttling; continued training with the Adam state kept.
+  long-axis split for densification, whose prune takes faint Gaussians larger than the median; a
+  directional spherical-harmonics background; per-frame exposure and white balance gains; fused
+  SSIM; coarse-to-fine; thermal throttling; continued training with the Adam state kept.
 - **Output**: a standard 3DGS PLY (SH degree 1, written in the degree-3 layout so common viewers read
   it) with the background baked into a far shell of Gaussians, and a TSDF mesh that is generated
   automatically after training.

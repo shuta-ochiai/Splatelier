@@ -657,6 +657,10 @@ final class TrainingViewModel: ObservableObject {
         refreshProgress()
         UIApplication.shared.isIdleTimerDisabled = true
         let startTime = Date()
+        // The training's timer stopped when it finished; keep Elapsed (a total, continuing from the
+        // training) and the GPU memory moving through the mesh as well.
+        let elapsedBase = elapsedSec
+        startMetricsTimer(since: startTime, base: elapsedBase)
         let (dir, timestamp) = ensureCaptureFolder(date: startTime)
         // Library treats any .ply other than "_seed" as the main one, so put the mesh in a .obj
         // (separate base).
@@ -724,6 +728,11 @@ final class TrainingViewModel: ObservableObject {
                 if case .running = self.phase {} else {
                     UIApplication.shared.isIdleTimerDisabled = false
                 }
+                self.stopMetricsTimer()
+                let snap = MLX.Memory.snapshot()
+                self.peakMemoryBytes = snap.peakMemory
+                self.activeMemoryBytes = snap.activeMemory
+                self.elapsedSec = elapsedBase + Date().timeIntervalSince(startTime)
                 self.meshPhase = outcome
                 self.endProgress(finished: true)
                 // Training is only done once its mesh is: ask for a name (first run only), then open
