@@ -213,6 +213,8 @@ Main papers:
 - [3D Gaussian Splatting as Markov Chain Monte Carlo](https://arxiv.org/abs/2404.09591): densification
 - [ImprovedGS+](https://arxiv.org/abs/2603.08661): long-axis split
 - [Splatfacto-W](https://arxiv.org/abs/2407.12306): directional SH background
+- [PPISP: Physically-Plausible Compensation and Control of Photometric Variations in Radiance Field Reconstruction](https://arxiv.org/abs/2601.18336)
+  ([code](https://github.com/nv-tlabs/ppisp), Apache-2.0): per-frame exposure and white balance gain
 - [Semi-Global Matching](https://doi.org/10.1109/TPAMI.2007.1166) and Mobile3DRecon (ISMAR 2020):
   multi-view stereo
 - [Bundle Adjustment — A Modern Synthesis](https://doi.org/10.1007/3-540-44480-7_21)
@@ -230,6 +232,7 @@ Main papers:
 | ImprovedGS+ | arXiv 2603.08661 |
 | Mobile3DRecon | Yang et al. 2020, ISMAR |
 | Splatfacto-W | Xu et al. 2024 |
+| PPISP (exposure and colour part) | arXiv 2601.18336 |
 | Space-sweep multi-view matching | Collins 1996 |
 | Semi-Global Matching | Hirschmüller 2005, 2008 |
 | Census transform | Zabih & Woodfill 1994; Fife & Archibald 2013 |

@@ -40,6 +40,10 @@ extension CaptureTraining {
         /// every 8 iterations from 30% of training), so the Gaussians' surface depth gives a flat
         /// TSDF mesh (generated after training in the app), at a small cost in GPU energy and held-out PSNR.
         public static let geometryRegularization: GeometryRegularization? = GeometryRegularization()
+        /// A gain per frame on the render (exposure and white balance), fitted from 30% of training
+        /// on. Frames shot before the exposure lock, or under a changing light, then do not pull
+        /// the scene's colours; with a locked exposure the gains stay near 1.
+        public static let photometricGains: PhotometricGainConfig? = PhotometricGainConfig()
         /// The app's mesh after training: 5mm voxels, at most 12 million allocated (≈ 145MB, to fit device memory;
         /// beyond that the voxel size is widened automatically).
         public static let meshParameters = CaptureMeshing.Parameters(
