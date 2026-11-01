@@ -179,6 +179,10 @@ if let meter = gpuEnergyMeter {
 }
 #endif
 
+// STAGE_TIMING=1: wait for the GPU after each render stage so the profile reports per-stage times
+// (adds idle time between stages).
+GaussianRenderer.stageTiming = ProcessInfo.processInfo.environment["STAGE_TIMING"] == "1"
+
 // THERMAL_SIM=nominal|fair|serious: pins the thermalState seen by the thermal guard and reproduces
 // on the Mac iOS's slowdown at serious (sleep between steps).
 if let token = ProcessInfo.processInfo.environment["THERMAL_SIM"]?.lowercased() {
