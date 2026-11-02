@@ -16,6 +16,10 @@ struct SplatViewerPreviewCamera {
     let elevation: Float
     let distance: Float
     let fovyRadians: Float
+    /// Orbit pivot on the source view's optical axis, `distance` ahead of its eye, so the orbit
+    /// camera starts exactly at the training camera's position rather than on a line through the
+    /// scene center.
+    let center: SIMD3<Float>
 
     private struct Metadata: Decodable {
         let version: Int
@@ -57,7 +61,8 @@ struct SplatViewerPreviewCamera {
             azimuth: angles.azimuth,
             elevation: angles.elevation,
             distance: distance,
-            fovyRadians: fovy
+            fovyRadians: fovy,
+            center: eye + forward * distance
         )
     }
 
@@ -296,13 +301,13 @@ final class SplatViewerModel: ObservableObject {
 
     /// Records the auto-framing computed from the loaded splats.
     func frame(center: SIMD3<Float>, distance: Float, previewCamera: SplatViewerPreviewCamera?) {
-        self.framedCenter = center
         self.previewCamera = previewCamera
+        self.framedCenter = previewCamera?.center ?? center
         if let previewCamera {
             self.azimuth = previewCamera.azimuth
             self.elevation = previewCamera.elevation
             self.distance = previewCamera.distance
-            self.center = center
+            self.center = previewCamera.center
             self.fovyRadians = previewCamera.fovyRadians
             self.framedDistance = previewCamera.distance
             self.framedFovyRadians = previewCamera.fovyRadians
