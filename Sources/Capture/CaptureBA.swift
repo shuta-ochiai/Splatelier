@@ -99,6 +99,70 @@ public enum CaptureBA {
         return out
     }
 
+    /// Each frame's visible `points` (in front of the camera and inside the image) as a bitset over
+    /// the point indices, for `covisibleLoopClosureCandidates`.
+    static func visiblePointBits(frames: [CapturedFrame], points: [SIMD3<Float>]) -> [[UInt64]] {
+        let words = (points.count + 63) / 64
+        return frames.map { f in
+            var bits = [UInt64](repeating: 0, count: words)
+            let v = f.viewmat, k = f.intrinsics
+            for (i, p) in points.enumerated() {
+                let z = v[8] * p.x + v[9] * p.y + v[10] * p.z + v[11]
+                guard z > 0.05 else { continue }
+                let u = k.fx * (v[0] * p.x + v[1] * p.y + v[2] * p.z + v[3]) / z + k.cx
+                let w = k.fy * (v[4] * p.x + v[5] * p.y + v[6] * p.z + v[7]) / z + k.cy
+                if u >= 0, w >= 0, u < Float(f.width), w < Float(f.height) {
+                    bits[i / 64] |= 1 << UInt64(i % 64)
+                }
+            }
+            return bits
+        }
+    }
+
+    /// Loop closure candidates by what the frames see rather than where they stand, added to
+    /// `loopClosureCandidates`: frame a's partners are the later frames that see the largest share
+    /// of a's visible points (at least `minShare`), facing a similar way. The camera-distance
+    /// candidates miss a frame shot from a metre further back, and their nearest partners come from
+    /// one stretch of the same pass, so the passes over a scene were tied only to the next one and
+    /// their drift added up. Here each frame takes up to `maxPerFrame` partners at least `minGap`
+    /// frames from it and from each other, so they come from different passes. Returns a < b.
+    static func covisibleLoopClosureCandidates(
+        viewmats: [[Float]],
+        visible: [[UInt64]],
+        minGap: Int = 30,
+        maxPerFrame: Int = 6,
+        minShare: Float = 0.1,
+        maxAngleCos: Float = 0.707
+    ) -> [(a: Int, b: Int)] {
+        let n = viewmats.count
+        precondition(visible.count == n)
+        guard n >= minGap + 2 else { return [] }
+        let forwards = viewmats.map { vm -> SIMD3<Float> in
+            let fwd = SIMD3<Float>(vm[8], vm[9], vm[10])   // Row 3 of w2c R = world view direction
+            let len = simd_length(fwd)
+            return len > 1e-6 ? fwd / len : fwd
+        }
+        let counts = visible.map { $0.reduce(0) { $0 + $1.nonzeroBitCount } }
+        var out: [(a: Int, b: Int)] = []
+        for i in 0..<n where counts[i] > 0 {
+            var cands: [(j: Int, share: Float)] = []
+            for j in (i + minGap)..<max(i + minGap, n) {
+                if simd_dot(forwards[i], forwards[j]) < maxAngleCos { continue }
+                var both = 0
+                for w in 0..<visible[i].count { both += (visible[i][w] & visible[j][w]).nonzeroBitCount }
+                let share = Float(both) / Float(counts[i])
+                if share >= minShare { cands.append((j, share)) }
+            }
+            cands.sort { $0.share > $1.share }
+            var picked: [Int] = []
+            for c in cands where picked.count < maxPerFrame && picked.allSatisfy({ abs($0 - c.j) >= minGap }) {
+                picked.append(c.j)
+            }
+            for j in picked { out.append((a: i, b: j)) }
+        }
+        return out
+    }
+
     /// Inverse depth ρ = 1/z of a keypoint (in that frame's camera coordinates) and its standard
     /// deviation
     struct KeypointDepth { let rho: Float; let sigma: Float }
@@ -454,6 +518,7 @@ public enum CaptureBA {
         fastThreshold: Float = 0.05,
         loweRatio: Float = 0.8,
         maxKeypointsPerFrame: Int = 1500,
+        coarseLoopKeypoints: Int = 600,
         useARKitTracks: Bool = true,
         lensDistortion: LensDistortionEstimation.Parameters = .disabled,
         log: (String) -> Void = { print($0) }
@@ -542,7 +607,15 @@ public enum CaptureBA {
         // end, so drift does not close; verify nearby non-adjacent frame pairs with the same
         // matching and add them.
         let consecutiveMatchCount = pairs.count
-        let loopCandidates = loopClosureCandidates(viewmats: scene.frames.map { $0.viewmat })
+        // The camera-distance pairs, plus (with ARKit's feature points, which every app capture
+        // has) the pairs that see the same points from further apart in time.
+        let nearPairs = loopClosureCandidates(viewmats: scene.frames.map { $0.viewmat })
+        let nearKeys = Set(nearPairs.map { $0.a * n + $0.b })
+        let addedPairs = scene.sparsePoints.isEmpty ? [] : covisibleLoopClosureCandidates(
+            viewmats: scene.frames.map { $0.viewmat },
+            visible: visiblePointBits(frames: scene.frames, points: scene.sparsePoints)
+        ).filter { !nearKeys.contains($0.a * n + $0.b) }
+        let loopCandidates = nearPairs + addedPairs
         // With repeated patterns (e.g. identical posters in a row) matches jump to the neighboring
         // copy along the epipolar line, and these wrong matches are mutually consistent, so IGR
         // outlier removal cannot remove them; BA then twists poses and the pattern doubles.
@@ -554,12 +627,33 @@ public enum CaptureBA {
         let gateRadius = max(16, 0.04 * longSide)
         var loopFramePairs = 0
         var gateStats = LoopGateStats()
+        // The added pairs are often shot from different distances, where single-scale ORB finds
+        // few common features, so they are matched with each frame's features plus those of
+        // coarser pyramid levels. The other pairs keep the full-resolution features only: the
+        // coarse keypoints are less precise, and with them in every pair text came out doubled.
+        // The full-resolution keypoints keep their indices, so their depths still serve the gate.
+        var loopFeatures = features
+        for f in Set(addedPairs.flatMap { [$0.a, $0.b] }).sorted() {
+            let coarse = ORBPipeline.extractCoarseLevels(
+                luma: CensusTransform.rgbToLuma(scene.frames[f].imageFloat),
+                fastThreshold: fastThreshold, maxKeypoints: coarseLoopKeypoints)
+            guard !coarse.coords.isEmpty else { continue }
+            loopFeatures[f] = ORBPipeline.FrameFeatures(
+                coords: features[f].coords + coarse.coords,
+                descriptors: MLX.concatenated([features[f].descriptors, coarse.descriptors], axis: 0))
+        }
+        // Index of the first added pair in `loopCandidates`; from there on the coarse features apply.
+        let firstAdded = nearPairs.count
         let loopRaw = ORBPipeline.matchBatch(
-            loopCandidates.map { (a: features[$0.0], b: features[$0.1], epipolar: guide($0.0, $0.1)) },
+            loopCandidates.enumerated().map { k, c in
+                let fs = k >= firstAdded ? loopFeatures : features
+                return (a: fs[c.a], b: fs[c.b], epipolar: guide(c.a, c.b))
+            },
             loweRatio: loweRatio)
-        for ((i, j), raw) in zip(loopCandidates, loopRaw) {
+        for (k, ((i, j), raw)) in zip(loopCandidates, loopRaw).enumerated() {
+            let pairFeatures = k >= firstAdded ? loopFeatures : features
             let (ms, rejected) = loopDepthGate(
-                matches: raw, a: i, b: j, features: features, depths: depths,
+                matches: raw, a: i, b: j, features: pairFeatures, depths: depths,
                 frameRanges: frameRanges,
                 frames: scene.frames, radius: gateRadius, stats: &gateStats)
             // Wrong loop matches easily break BA, so accept only pairs with a minimum number of
@@ -571,8 +665,8 @@ public enum CaptureBA {
             }
             loopFramePairs += 1
             for m in ms {
-                let pa = features[i].coords[m.queryIdx]
-                let pb = features[j].coords[m.trainIdx]
+                let pa = pairFeatures[i].coords[m.queryIdx]
+                let pb = pairFeatures[j].coords[m.trainIdx]
                 pairs.append(PairMatch(
                     camA: i, camB: j,
                     uvA: SIMD2<Float>(Float(pa.x) + 0.5, Float(pa.y) + 0.5),
@@ -581,8 +675,8 @@ public enum CaptureBA {
             }
         }
         let loopCorrespondences = pairs.count - consecutiveMatchCount
-        log(String(format: "loop closure: %d candidate(s) → %d verified frame-pair(s), +%d correspondences",
-                   loopCandidates.count, loopFramePairs, loopCorrespondences))
+        log(String(format: "loop closure: %d candidate(s) (%d by camera distance + %d by shared points) → %d verified frame-pair(s), +%d correspondences",
+                   loopCandidates.count, nearPairs.count, addedPairs.count, loopFramePairs, loopCorrespondences))
         log(String(format: "loop depth gate (r=%.0fpx): matches kept %d / rejected %d / no depth %d "
                   + "(frame depth range only %d); dropped pairs %d; distance p50 %.1f p90 %.1f max %.1f px",
                    gateRadius, gateStats.kept, gateStats.rejected, gateStats.noDepth, gateStats.rangeOnly,
