@@ -18,10 +18,10 @@ final class TrainingProfiler {
     private static let stageOrder = [
         "param_activations",
         "project_fwd", "tile_binning", "sh_eval_fwd", "rasterize_fwd",
-        "loss_eval", "loss_item",
+        "loss_target", "loss_bg", "loss_ssim", "loss_alpha", "loss_eval", "loss_item",
         "rasterize_bwd", "project_bwd", "sh_eval_bwd",
         "geo_depth_fwd", "geo_normals", "geo_loss", "geo_depth_bwd", "geo_normal_bwd", "geo_chain",
-        "adam_enqueue"
+        "geometry_reg", "adam_enqueue"
     ]
 
     private var step = Bucket()

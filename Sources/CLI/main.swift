@@ -60,6 +60,12 @@ func usage() {
     print("         MESH_HYBRID=<path.obj> after training, the MVS mesh with holes filled from the trained Gaussians;")
     print("         MESH_GOF=<path.obj> after training, the level set of the trained Gaussians' opacity field;")
     print("           MESH_GS_TSDF=<path.obj> TSDF of the same Gaussian depth maps (GOF_* knobs in MeshCapture.swift)")
+    print("         TILE_SIZE=<px> rasterizer tiles (the app's 8 by default; 8-px lists are split from sorted 16-px ones)")
+    print("         FINAL_RES=<num>/<den>|full|off FINAL_FRAC=<fraction> the last fraction of the iterations at that")
+    print("           resolution (the app's: the last 0.25 at full resolution)")
+    print("         LAMBDA_SSIM=<λ> the D-SSIM weight, keeping the app's densification")
+    print("         BENCH_STAGES=1 after training, the GPU energy of each part of a step at 1/3, 2/3 and full resolution")
+    print("         STAGE_TIMING=1 waits for the GPU after each stage and logs the stage times")
     print("         gpu energy= in the training log is the IOReport GPU energy (system-wide value)")
     print("")
     print("  splatelier gs-mesh <dataset.valset> <trained.ply>")
@@ -183,6 +189,7 @@ if let meter = gpuEnergyMeter {
 // (adds idle time between stages).
 GaussianRenderer.stageTiming = ProcessInfo.processInfo.environment["STAGE_TIMING"] == "1"
 
+
 // THERMAL_SIM=nominal|fair|serious: pins the thermalState seen by the thermal guard and reproduces
 // on the Mac iOS's slowdown at serious (sleep between steps).
 if let token = ProcessInfo.processInfo.environment["THERMAL_SIM"]?.lowercased() {
@@ -279,8 +286,10 @@ case "train-capture":
               let start = lr.first else { return nil }
         return (start, lr.count > 1 ? lr[1] : start)
     }
+    // [lambdaSSIM] or LAMBDA_SSIM=<λ> (the env keeps the app's densification).
     let lambdaSSIM: Float = args.count > 6
-        ? (Float(args[6]) ?? CaptureTraining.AppPreset.lambdaSSIM) : CaptureTraining.AppPreset.lambdaSSIM
+        ? (Float(args[6]) ?? CaptureTraining.AppPreset.lambdaSSIM)
+        : (env["LAMBDA_SSIM"].flatMap { Float($0) } ?? CaptureTraining.AppPreset.lambdaSSIM)
     MLX.Memory.peakMemory = 0
     #if os(macOS)
     // GPU energy is system-wide. If other processes are using the GPU the A/B gets mixed, so check
@@ -386,6 +395,8 @@ case "train-capture":
         let result = try CaptureTraining.train(
             geometry: geometry,
             iterations: iterations,
+            // TILE_SIZE=<px>: rasterizer tile size (the app's by default).
+            tileSize: env["TILE_SIZE"].flatMap { Int($0) } ?? CaptureTraining.AppPreset.tileSize,
             strategy: densificationStrategy,
             // REG=<w>: overrides the opacity / scale regularization weight.
             opacityReg: env["REG"].flatMap { Float($0) } ?? CaptureTraining.AppPreset.regularization,
@@ -445,6 +456,20 @@ case "train-capture":
                 }
                 return CaptureTraining.AppPreset.fineResample
             }(),
+            // FINAL_RES=<num>/<den> | full | off with FINAL_FRAC=<fraction>: the last fraction of
+            // the iterations at that resolution (the app's by default).
+            finalResample: {
+                let preset = CaptureTraining.AppPreset.finalResample
+                guard let v = env["FINAL_RES"] else {
+                    guard let f = env["FINAL_FRAC"].flatMap({ Float($0) }) else { return preset }
+                    return preset.map { (f, $0.num, $0.den) }
+                }
+                if v.lowercased() == "off" { return nil }
+                let frac = env["FINAL_FRAC"].flatMap { Float($0) } ?? preset?.fraction ?? 0.25
+                if v.lowercased() == "full" { return (frac, 1, 1) }
+                let p = v.split(separator: "/").compactMap { Int($0) }
+                return p.count == 2 && p[0] > 0 && p[1] >= p[0] ? (frac, p[0], p[1]) : nil
+            }(),
             outputPLY: outputPLY,
             // SEED_PLY=<path>: writes the pre-training seed point cloud + cameras.
             seedInspectionPLY: env["SEED_PLY"].map { URL(fileURLWithPath: $0) },
@@ -501,6 +526,12 @@ case "train-capture":
                                   to: meshOBJ, excluding: heldOutViews, log: logErr)) {
             logErr("mesh: no surface reconstructed")
         }
+        #if os(macOS)
+        // BENCH_STAGES=1: GPU energy of the parts of a step on the trained model (StepBenchmark.swift).
+        if env["BENCH_STAGES"] == "1", let session = result.session {
+            benchmarkStepStages(session: session, log: logErr)
+        }
+        #endif
         // MESH_HYBRID / MESH_GOF / MESH_GS_TSDF: meshes using the trained Gaussians (MeshCapture.swift).
         if let session = result.session {
             _ = try writeGaussianMeshes(
