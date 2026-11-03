@@ -43,13 +43,18 @@ struct SplatViewerRayCaster: Sendable {
     ///   - direction: unit vector.
     ///   - pixelAngle: angular size of one pixel (rad). Adds spread equivalent to the render's 2D
     ///     dilation (0.3 px²) so splats smaller than 1 px on screen are hit just as they appear.
+    ///   - frontOpacity: nil finds the surface (median depth). A value finds the first thing along
+    ///     the ray instead: the depth where the composited opacity reaches it, so faint floaters in
+    ///     front of the surface are hit.
     /// - Returns: distance along the ray to the surface, or nil if there is nothing.
-    func cast(origin: SIMD3<Float>, direction: SIMD3<Float>, pixelAngle: Float) -> Float? {
+    func cast(
+        origin: SIMD3<Float>, direction: SIMD3<Float>, pixelAngle: Float, frontOpacity: Float? = nil
+    ) -> Float? {
         var hits: [SplatHit] = []
         for chunk in splatChunks {
             Self.collectSplatHits(chunk, origin: origin, direction: direction, pixelAngle: pixelAngle, into: &hits)
         }
-        let splatT = Self.surfaceDepth(hits)
+        let splatT = frontOpacity.map { Self.frontDepth(hits, opacity: $0) } ?? Self.surfaceDepth(hits)
         let meshT = mesh.flatMap { Self.firstTriangleHit($0, origin: origin, direction: direction) }
         switch (splatT, meshT) {
         case let (s?, m?): return min(s, m)
@@ -139,6 +144,17 @@ struct SplatViewerRayCaster: Sendable {
             if transmittance <= stop { return hit.t }
         }
         return sorted.last?.t
+    }
+
+    /// Depth where the front-to-back composited opacity first reaches `opacity`. nil if it never
+    /// does.
+    static func frontDepth(_ hits: [SplatHit], opacity: Float) -> Float? {
+        var transmittance: Float = 1
+        for hit in hits.sorted(by: { $0.t < $1.t }) {
+            transmittance *= 1 - hit.alpha
+            if 1 - transmittance >= opacity { return hit.t }
+        }
+        return nil
     }
 
     // MARK: Mesh

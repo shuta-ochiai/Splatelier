@@ -12,7 +12,11 @@
 // which are overlaid depth-tested with `composeOverExistingContents`. Taps in measure mode cast a
 // ray against the visible layers to find the surface point (`SplatViewerRayCaster`), and
 // measurement lines are projected with the same camera as rendering and handed to SwiftUI. Double
-// tap uses the same ray test and zooms toward the hit surface as the new look-at point.
+// tap uses the same ray test and zooms toward the hit surface as the new look-at point. Taps in
+// floater mode cast against the foreground for the first thing along the ray and select the splats
+// within the brush there (`SplatViewerFloaterBrush`); Detect adds the small clusters apart from the
+// scene (`SplatViewerFloaterDetector`). The selection is baked into the foreground chunk as a
+// highlight.
 
 #if os(iOS) || os(macOS)
 
@@ -78,6 +82,21 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
     private var cropRebuild: Task<Void, Never>?
     private var sourceName = "splats"
     private var activeCropHandle: SplatViewerCropHandle?
+    // Floaters: the selected splats, as indices into the kept ones; the detector for the kept splats
+    // (worked out on the first Detect, dropped when they change); the scene size the brush is scaled
+    // by (worked out when floater mode first opens). `keptGeneration` counts changes to the kept splats, so work
+    // started before one is dropped.
+    private var floaterSelection: Set<Int32> = []
+    private var floaterDetector: SplatViewerFloaterDetector?
+    private var floaterDetectorTask: Task<SplatViewerFloaterDetector, Never>?
+    private var floaterSceneSize: Float?
+    /// Where the last tap brushed, which the brush circle sits around.
+    private var lastBrushCenter: SIMD3<Float>?
+    /// Floater mode's Undo, newest last: the selection before each change, and whether the change
+    /// was a delete (which Undo also takes back in the crop edits). Empty once the kept splats change
+    /// some other way or the mode ends.
+    private var floaterUndo: [(selection: Set<Int32>, wasDelete: Bool)] = []
+    private var keptGeneration = 0
 
     init?(view: MTKView, model: SplatViewerModel) {
         guard let device = view.device ?? MTLCreateSystemDefaultDevice(),
@@ -124,7 +143,7 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
         self.view = view
         super.init()
         model.onNeedsRedraw = { [weak self] in self?.requestRedraw() }
-        model.onMeasureTap = { [weak self] in self?.measureTap(normalized: $0) }
+        model.onTap = { [weak self] in self?.tap(normalized: $0) }
         model.onFocusTap = { [weak self] in self?.focusTap(normalized: $0) }
         model.onCropHandleBegin = { [weak self] in self?.beginCropDrag(normalized: $0) ?? false }
         model.onCropHandleDrag = { [weak self] in self?.cropDrag(normalizedDelta: $0) }
@@ -133,6 +152,11 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
         model.onCropUndo = { [weak self] in self?.undoCrop() }
         model.onCropRestore = { [weak self] in self?.restoreCrop() }
         model.onColorGradeApply = { [weak self] grade in self?.applyColorGrade(grade) }
+        model.onFloaterModeChange = { [weak self] in self?.floaterModeChanged(isOn: $0) }
+        model.onFloaterDetect = { [weak self] in self?.detectFloaters() }
+        model.onFloaterDeselectAll = { [weak self] in self?.deselectAllFloaters() }
+        model.onFloaterDelete = { [weak self] in self?.deleteFloaters() }
+        model.onFloaterUndo = { [weak self] in self?.undoFloaters() }
         #if os(iOS)
         // Redraw once when returning from background (if left paused, the screen can stay stale
         // after resuming).
@@ -146,7 +170,7 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
     /// Share entry and the rebuild order all stay in step with the edits.
     private func applyColorGrade(_ grade: SplatViewerColorGrade) {
         guard isLoaded else { return }
-        commitCropEdits()
+        commitEdits()
     }
 
     #if os(iOS)
@@ -395,9 +419,10 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
     }
 
     /// Finds, on another thread, the surface under a screen point (top-left 0 / bottom-right 1) and
-    /// passes the world point (nil if none).
+    /// passes the world point (nil if none). `frontOpacity` finds the first thing along the ray
+    /// instead (`SplatViewerRayCaster.cast`).
     private func pickSurface(
-        normalized point: SIMD2<Float>, caster: SplatViewerRayCaster,
+        normalized point: SIMD2<Float>, caster: SplatViewerRayCaster, frontOpacity: Float? = nil,
         completion: @escaping (SIMD3<Float>?) -> Void
     ) {
         let ray = camera().ray(normalized: point)
@@ -405,11 +430,23 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
         isPicking = true
         Task { [weak self] in
             let t = await Task.detached(priority: .userInitiated) {
-                caster.cast(origin: ray.origin, direction: ray.direction, pixelAngle: pixelAngle)
+                caster.cast(
+                    origin: ray.origin, direction: ray.direction, pixelAngle: pixelAngle,
+                    frontOpacity: frontOpacity)
             }.value
             guard let self else { return }
             self.isPicking = false
             completion(t.map { ray.origin + ray.direction * $0 })
+        }
+    }
+
+    /// A single tap: a measurement point in measure mode, a floater in floater mode. Ignored
+    /// otherwise.
+    func tap(normalized point: SIMD2<Float>) {
+        if model.isRemovingFloaters {
+            floaterTap(normalized: point)
+        } else {
+            measureTap(normalized: point)
         }
     }
 
@@ -500,8 +537,25 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
         commitCropEdits()
     }
 
-    /// Updates the count, the Share entry and the foreground chunk after the edits changed.
+    /// After the kept splats changed: the detector, the selection and floater mode's Undo were for
+    /// the old ones, so they go, then the edits are committed.
     private func commitCropEdits() {
+        keptChanged()
+        floaterUndo = []
+        commitEdits()
+    }
+
+    /// Drops what was worked out for the kept splats before they changed.
+    private func keptChanged() {
+        keptGeneration += 1
+        floaterDetector = nil
+        floaterDetectorTask = nil
+        floaterSelection = []
+    }
+
+    /// Updates the count, the Share entry, the floater selection and the foreground chunk after the
+    /// edits changed.
+    private func commitEdits() {
         let kept = cropEdits.kept
         let source = gsSourcePoints
         let background = backgroundSourcePoints
@@ -515,13 +569,23 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
                 export: model.cropExport, name: sourceName)
             : nil
         model.setCropState(edited: cropEdits.isEdited, canUndo: cropEdits.canUndo, shareItem: shareItem)
-        rebuildGSChunk(kept: kept, source: source, grade: grade)
+        var highlighted: [Bool]?
+        if !floaterSelection.isEmpty {
+            var mask = [Bool](repeating: false, count: kept.count)
+            for i in floaterSelection { mask[Int(i)] = true }
+            highlighted = mask
+        }
+        updateFloaterState()
+        rebuildGSChunk(kept: kept, source: source, grade: grade, highlighted: highlighted)
     }
 
-    /// Replaces the foreground chunk with the kept splats, graded. Rebuilds run one after another.
+    /// Replaces the foreground chunk with the kept splats, graded, and the selected floaters
+    /// highlighted (`highlighted` is in the order of `kept`). Rebuilds run one after another.
     /// The new chunk is built off the main actor and added before the old one is removed, so the
     /// Apply doesn't stall the view and the splats don't drop out while it builds.
-    private func rebuildGSChunk(kept: [UInt32], source: [SplatPoint], grade: SplatViewerColorGrade) {
+    private func rebuildGSChunk(
+        kept: [UInt32], source: [SplatPoint], grade: SplatViewerColorGrade, highlighted: [Bool]?
+    ) {
         guard let renderer else { return }
         let previous = cropRebuild
         let device = self.device
@@ -530,7 +594,12 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
             guard let self else { return }
             let enabled = self.appliedGS
             let built = await Task.detached(priority: .userInitiated) { () -> Result<SplatChunk, Error> in
-                Result { try SplatChunk(device: device, from: kept.map { grade.apply(to: source[Int($0)]) }) }
+                Result {
+                    try SplatChunk(device: device, from: kept.indices.map { i in
+                        let point = grade.apply(to: source[Int(kept[i])])
+                        return highlighted?[i] == true ? SplatViewerFloaterHighlight.apply(to: point) : point
+                    })
+                }
             }.value
             switch built {
             case .success(let chunk):
@@ -570,6 +639,180 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
         return SplatViewerShareItem(title: "Edited splats", systemImage: "slider.horizontal.3", options: options)
     }
 
+    // MARK: - Floaters
+
+    /// How opaque the front of the ray must get for a floater tap to hit. Floaters are faint, so
+    /// this is far below the half used for a surface.
+    private static let floaterPickOpacity: Float = 0.05
+
+    /// Opening floater mode works out the scene size, so the brush circle can be drawn before the
+    /// first tap. Leaving it drops the selection and its Undo steps (a delete stays undoable from the
+    /// Crop panel, as a crop is).
+    private func floaterModeChanged(isOn: Bool) {
+        guard isLoaded else { return }
+        if isOn {
+            guard floaterSceneSize == nil else { return }
+            let source = gsSourcePoints
+            Task {
+                let size = await Task.detached(priority: .userInitiated) {
+                    SplatViewerFloaterBrush.sceneSize(of: source.map(\.position))
+                }.value
+                floaterSceneSize = size
+                requestRedraw()
+            }
+        } else {
+            floaterUndo = []
+            floaterSelection = []
+            commitEdits()
+        }
+    }
+
+    private func updateFloaterState() {
+        model.setFloaterState(
+            selectionCount: floaterSelection.count, isFinding: floaterDetectorTask != nil,
+            canUndo: !floaterUndo.isEmpty || cropEdits.canUndo)
+    }
+
+    /// Changes the selection as one Undo step.
+    private func setFloaterSelection(_ selection: Set<Int32>) {
+        guard selection != floaterSelection else { return }
+        floaterUndo.append((floaterSelection, false))
+        floaterSelection = selection
+        commitEdits()
+    }
+
+    /// Takes back the last step: a selection change, or a delete, which brings the splats back
+    /// selected. With no step left, takes back the crop before floater mode.
+    func undoFloaters() {
+        guard isLoaded else { return }
+        guard let step = floaterUndo.popLast() else {
+            undoCrop()
+            return
+        }
+        if step.wasDelete {
+            cropEdits.undo()
+            keptChanged()
+        }
+        floaterSelection = step.selection
+        commitEdits()
+    }
+
+    /// Tap in floater mode: brushes the splats around the first thing under the screen point. A tap
+    /// on the selection lets the brushed splats go (`SplatViewerFloaterBrush.toggled`).
+    func floaterTap(normalized point: SIMD2<Float>) {
+        guard model.isRemovingFloaters, isLoaded, !isPicking else { return }
+        guard model.showGS, let gsChunk else {
+            model.showCropNotice("Show the splats first")
+            return
+        }
+        let caster = SplatViewerRayCaster(splatChunks: [gsChunk], mesh: nil)
+        pickSurface(normalized: point, caster: caster, frontOpacity: Self.floaterPickOpacity) { [weak self] hit in
+            guard let self, self.model.isRemovingFloaters else { return }
+            guard let hit else {
+                self.model.showCropNotice("No splats here")
+                return
+            }
+            self.brush(at: hit)
+        }
+    }
+
+    private func brush(at center: SIMD3<Float>) {
+        lastBrushCenter = center
+        let kept = cropEdits.kept, source = gsSourcePoints
+        let generation = keptGeneration
+        let sizeFraction = model.floaterBrushSize
+        let knownSceneSize = floaterSceneSize
+        Task {
+            let (splats, sceneSize) = await Task.detached(priority: .userInitiated) {
+                // Scaled by the scene as loaded, so a brush stays the same size after deletes.
+                let sceneSize = knownSceneSize ?? SplatViewerFloaterBrush.sceneSize(of: source.map(\.position))
+                let positions = kept.map { source[Int($0)].position }
+                return (
+                    SplatViewerFloaterBrush.splats(within: sizeFraction * sceneSize, of: center, positions: positions),
+                    sceneSize)
+            }.value
+            floaterSceneSize = sceneSize
+            guard model.isRemovingFloaters, keptGeneration == generation else { return }
+            guard !splats.isEmpty else {
+                model.showCropNotice("No splats here")
+                return
+            }
+            setFloaterSelection(SplatViewerFloaterBrush.toggled(floaterSelection, by: splats))
+        }
+    }
+
+    /// The detector for the kept splats, worked out off the main actor on first use. nil if the kept
+    /// splats changed while it was being worked out.
+    private func detectorForKept() async -> SplatViewerFloaterDetector? {
+        if let floaterDetector { return floaterDetector }
+        let task: Task<SplatViewerFloaterDetector, Never>
+        if let floaterDetectorTask {
+            task = floaterDetectorTask
+        } else {
+            let kept = cropEdits.kept, source = gsSourcePoints
+            task = Task.detached(priority: .userInitiated) {
+                SplatViewerFloaterDetector(splats: source, kept: kept)
+            }
+            floaterDetectorTask = task
+            updateFloaterState()
+        }
+        let detector = await task.value
+        guard floaterDetectorTask == task else { return nil }
+        floaterDetector = detector
+        floaterDetectorTask = nil
+        updateFloaterState()
+        return detector
+    }
+
+    /// Adds the small clusters apart from the scene to the selection.
+    func detectFloaters() {
+        guard isLoaded else { return }
+        Task {
+            guard let detector = await detectorForKept(), model.isRemovingFloaters else { return }
+            let selection = floaterSelection.union(detector.floaterSplats)
+            guard selection.count > floaterSelection.count else {
+                model.showCropNotice("No more floaters found")
+                return
+            }
+            setFloaterSelection(selection)
+        }
+    }
+
+    func deselectAllFloaters() {
+        setFloaterSelection([])
+    }
+
+    /// Removes the selected splats. Undo brings them back, selected.
+    func deleteFloaters() {
+        guard isLoaded, !floaterSelection.isEmpty else { return }
+        let kept = cropEdits.kept
+        let removed = Set(floaterSelection.map { kept[Int($0)] })
+        switch cropEdits.apply({ !removed.contains($0) }) {
+        case .applied:
+            let selection = floaterSelection
+            keptChanged()
+            floaterUndo.append((selection, true))
+            commitEdits()
+        case .unchanged:
+            model.showCropNotice("Nothing to remove here")
+        case .emptied:
+            model.showCropNotice("That would remove every splat")
+        }
+    }
+
+    /// The brush circle while it is shown: around the last tapped point if it is on screen, else
+    /// around the look-at point.
+    private func brushFrame(camera: SplatViewerCamera) -> SplatBrushFrame? {
+        guard model.isRemovingFloaters, model.isShowingBrush, let sceneSize = floaterSceneSize else { return nil }
+        let radius = model.floaterBrushSize * sceneSize
+        if let lastBrushCenter,
+           let frame = SplatBrushFrame.make(anchor: lastBrushCenter, radius: radius, camera: camera),
+           frame.isOnScreen {
+            return frame
+        }
+        return SplatBrushFrame.make(anchor: model.center, radius: radius, camera: camera)
+    }
+
     // MARK: - Double-tap zoom
 
     /// Zoom factor per double tap.
@@ -595,14 +838,15 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
     /// hidden) the look-at point stays and it zooms to half. Does nothing in measure mode (the
     /// first tap places a measurement point; so as not to delay measurement points, single taps
     /// don't wait for the double tap to fail).
+    /// Floater mode ignores it too, since its taps select.
     func focusTap(normalized point: SIMD2<Float>) {
-        guard !model.isMeasuring, isLoaded, !isPicking else { return }
+        guard !model.isMeasuring, !model.isRemovingFloaters, isLoaded, !isPicking else { return }
         guard let caster = visibleRayCaster() else {
             animateFocus(to: camera().focused(on: nil, zoom: Self.focusZoom))
             return
         }
         pickSurface(normalized: point, caster: caster) { [weak self] hit in
-            guard let self, !self.model.isMeasuring else { return }
+            guard let self, !self.model.isMeasuring, !self.model.isRemovingFloaters else { return }
             // Even if rotated during the test, zoom from the camera at that moment.
             self.animateFocus(to: self.camera().focused(on: hit, zoom: Self.focusZoom))
         }
@@ -712,6 +956,7 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
         } else {
             model.cropProjection.update(SplatCropFrame())
         }
+        model.brushProjection.update(brushFrame(camera: camera))
         let colorTexture = view.multisampleColorTexture ?? drawable.texture
         let colorStoreAction: MTLStoreAction = view.multisampleColorTexture == nil ? .store : .multisampleResolve
         if let meshLayer, let depthTexture = view.depthStencilTexture {

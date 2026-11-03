@@ -45,6 +45,7 @@ public struct SplatViewerScreen: View {
     @State private var showEditOptions = false
     @State private var showColorHelp = false
     @State private var showCropHelp = false
+    @State private var showFloaterHelp = false
     @State private var renameText = ""
     @StateObject private var model: SplatViewerModel
     #if os(iOS)
@@ -109,7 +110,7 @@ public struct SplatViewerScreen: View {
             #if os(macOS)
                 .gesture(orbitGesture)
                 .simultaneousGesture(zoomGesture)
-                .simultaneousGesture(measureTapGesture)
+                .simultaneousGesture(tapGesture)
                 .simultaneousGesture(focusTapGesture)
                 .onGeometryChange(for: CGSize.self) { $0.size } action: { metalViewSize = $0 }
             #endif
@@ -117,6 +118,8 @@ public struct SplatViewerScreen: View {
             SplatMeasureOverlay(projection: model.measureProjection)
                 .ignoresSafeArea()
             SplatCropOverlay(projection: model.cropProjection)
+                .ignoresSafeArea()
+            SplatBrushOverlay(projection: model.brushProjection)
                 .ignoresSafeArea()
 
             overlay
@@ -250,12 +253,14 @@ public struct SplatViewerScreen: View {
             hintRow("scope", "Focus", "Double-tap a point to zoom in and orbit around it")
             hintRow("ruler", "Measure", "Turn on Measure, then tap 2 points")
             hintRow("crop", "Crop", "Edit, then Crop, then drag a handle of the box or sphere")
+            hintRow("aqi.medium", "Floaters", "Edit, then Floaters, then tap a floater or Auto Detect")
             #else
             hintRow("cursorarrow.motionlines", "Rotate", "Drag")
             hintRow("arrow.up.left.and.arrow.down.right", "Zoom", "Pinch or scroll")
             hintRow("scope", "Focus", "Double-click a point to zoom in and orbit around it")
             hintRow("ruler", "Measure", "Turn on Measure, then click 2 points")
             hintRow("crop", "Crop", "Edit, then Crop, then drag a handle of the box or sphere")
+            hintRow("aqi.medium", "Floaters", "Edit, then Floaters, then click a floater or Auto Detect")
             #endif
         }
         .padding(16)
@@ -320,6 +325,9 @@ public struct SplatViewerScreen: View {
                 }
                 if model.isCropping {
                     cropControls
+                }
+                if model.isRemovingFloaters {
+                    floaterControls
                 }
                 if model.isColoring {
                     SplatViewerColorPanel(model: model) { model.isColoring = false }
@@ -429,11 +437,13 @@ public struct SplatViewerScreen: View {
             if !showEditOptions {
                 model.isCropping = false
                 model.isColoring = false
+                model.isRemovingFloaters = false
             }
         }
     }
 
-    /// Color and Crop, shown once Edit is on. Color opens its panel; Crop turns on the handles.
+    /// Color, Crop and Floaters, shown once Edit is on. Color opens its panel; Crop turns on the
+    /// handles; Floaters makes taps select floaters.
     /// Each has a ? beside it that explains what it does, so the explanations stay out of the way.
     private var editOptions: some View {
         HStack(spacing: 6) {
@@ -450,6 +460,13 @@ public struct SplatViewerScreen: View {
                 }
                 helpButton(isPresented: $showCropHelp,
                            text: "Drag a handle to resize the box or sphere. Drag anywhere else to rotate the view. Keep inside or remove inside decides which splats are kept.")
+            }
+            HStack(spacing: 2) {
+                toggleCapsule("Floaters", systemImage: "aqi.medium", isOn: model.isRemovingFloaters) {
+                    model.isRemovingFloaters.toggle()
+                }
+                helpButton(isPresented: $showFloaterHelp,
+                           text: "Tap a floater to select the splats around it (orange); Selection size sets how far. Tap orange to unselect, or ⊗ to clear. Auto Detect selects the small floaters apart from the scene for you. Delete removes the orange splats. Undo takes back the last step, a selection or a delete; Reset brings back every splat.")
             }
         }
     }
@@ -595,6 +612,124 @@ public struct SplatViewerScreen: View {
         .padding(.bottom, 4)
     }
 
+    /// The floater panel, in the same card as Crop. The line under the title is about the
+    /// selection: what a tap does or how many splats are selected (with an ⊗ that lets them all go),
+    /// and Detect, which adds to it. Then Selection size, the radius a tap selects within, and the
+    /// actions: Undo takes back the last step (a selection change or a delete), Reset brings back
+    /// every splat as loaded (as Crop's does), Delete removes the selection, Finish leaves. Delete
+    /// leaves the count to the line above, so the row fits a phone.
+    private var floaterControls: some View {
+        VStack(spacing: 10) {
+            HStack {
+                Text("Floaters")
+                    .font(.caption.weight(.semibold))
+                Spacer(minLength: 0)
+                if model.isFindingFloaters {
+                    ProgressView().controlSize(.small)
+                }
+            }
+            floaterSelectionLine
+            if let notice = model.cropNotice {
+                Text(notice)
+                    .font(.caption)
+                    .foregroundStyle(Color.yellow)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            HStack(spacing: 8) {
+                Text("Selection size")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                // While it moves, a circle on the view shows how far a tap reaches.
+                Slider(value: $model.floaterBrushSize, in: SplatViewerFloaterBrush.sizeRange) {
+                    model.setBrushSizeEditing($0)
+                }
+                .tint(SplatViewerPanelButtonStyle.fill)
+            }
+            HStack(spacing: 6) {
+                Button {
+                    model.onFloaterUndo?()
+                } label: {
+                    Label("Undo", systemImage: "arrow.uturn.backward")
+                }
+                .buttonStyle(SplatViewerPanelButtonStyle())
+                .disabled(!model.floaterCanUndo)
+                Button {
+                    model.onCropRestore?()
+                } label: {
+                    Label("Reset", systemImage: "arrow.counterclockwise")
+                }
+                .buttonStyle(SplatViewerPanelButtonStyle())
+                .disabled(!model.cropEdited)
+                Spacer(minLength: 0)
+                Button {
+                    model.onFloaterDelete?()
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+                .buttonStyle(SplatViewerPanelButtonStyle())
+                .disabled(model.floaterSelectionCount == 0)
+                Button {
+                    model.isRemovingFloaters = false
+                    showEditOptions = false
+                } label: {
+                    Label("Finish", systemImage: "flag.checkered")
+                }
+                .buttonStyle(SplatViewerPanelButtonStyle(prominent: true))
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: 360)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .padding(.horizontal, 12)
+        .padding(.bottom, 4)
+    }
+
+    /// The colour selected splats are drawn in.
+    private static let highlightColor: Color = {
+        let c = SplatViewerFloaterHighlight.color
+        return Color(red: Double(c.x), green: Double(c.y), blue: Double(c.z))
+    }()
+
+    /// What is selected, with an ⊗ that lets it all go, or with nothing selected what a tap does;
+    /// then Detect on the right.
+    private var floaterSelectionLine: some View {
+        HStack(spacing: 6) {
+            if model.floaterSelectionCount > 0 {
+                Text("\(model.floaterSelectionCount.formatted()) splats selected")
+                    .foregroundStyle(Self.highlightColor)
+                Button {
+                    model.onFloaterDeselectAll?()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Clear selection")
+            } else {
+                Text(floaterHint)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+            Button {
+                model.onFloaterDetect?()
+            } label: {
+                Label("Auto Detect", systemImage: "wand.and.stars")
+            }
+            .buttonStyle(SplatViewerPanelButtonStyle())
+            .disabled(model.isFindingFloaters)
+        }
+        .font(.caption)
+        .lineLimit(1)
+    }
+
+    private var floaterHint: String {
+        #if os(iOS)
+        "Tap a floater to select it"
+        #else
+        "Click a floater to select it"
+        #endif
+    }
+
     /// Fill of a button that is on: the kikyo purple, with white text on it.
     private static let onFill = SplatViewerPanelButtonStyle.fill
 
@@ -673,15 +808,15 @@ public struct SplatViewerScreen: View {
             .onEnded { _ in zoomBase = nil }
     }
 
-    /// Click in measure mode (the renderer ignores it outside measure mode).
-    private var measureTapGesture: some Gesture {
+    /// Click in measure or floater mode (the renderer ignores it otherwise).
+    private var tapGesture: some Gesture {
         SpatialTapGesture()
             .onEnded { value in
-                if let p = normalized(value.location) { model.onMeasureTap?(p) }
+                if let p = normalized(value.location) { model.onTap?(p) }
             }
     }
 
-    /// Double click zooms to that point (the renderer ignores it in measure mode).
+    /// Double click zooms to that point (the renderer ignores it in measure and floater mode).
     private var focusTapGesture: some Gesture {
         SpatialTapGesture(count: 2)
             .onEnded { value in
@@ -791,12 +926,12 @@ private struct SplatMetalView: SplatViewRepresentable {
             g.scale = 1
         }
 
-        /// The renderer ignores it outside measure mode.
+        /// The renderer ignores it outside measure and floater mode.
         @objc private func handleTap(_ g: UITapGestureRecognizer) {
-            if let p = normalized(g) { renderer?.measureTap(normalized: p) }
+            if let p = normalized(g) { renderer?.tap(normalized: p) }
         }
 
-        /// The renderer ignores it in measure mode.
+        /// The renderer ignores it in measure and floater mode.
         @objc private func handleDoubleTap(_ g: UITapGestureRecognizer) {
             if let p = normalized(g) { renderer?.focusTap(normalized: p) }
         }

@@ -19,6 +19,9 @@ struct SplatViewerPanelButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
+            // One line at its full width: a tight row must not break a label mid-word.
+            .lineLimit(1)
+            .fixedSize()
             .font(.caption.weight(prominent ? .semibold : .regular))
             .foregroundStyle(prominent ? Color.white : Color.primary)
             .padding(.horizontal, 10).padding(.vertical, 6)
