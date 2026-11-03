@@ -155,3 +155,23 @@ func brushCircleMatchesTheViewAtItsDepth() {
     #expect(frame?.isOnScreen == true)
     #expect(SplatBrushFrame.make(anchor: camera.eye + camera.axis(2), radius: 0.2, camera: camera) == nil)
 }
+
+/// The tint pulls the colour toward the orange but keeps the splat's opacity and its other bands.
+@Test
+func tintKeepsOpacityAndBands() {
+    let point = SplatPoint(
+        position: SIMD3(1, 2, 3),
+        color: .sphericalHarmonicFloat([SIMD3(0.5, 0.5, 0.5), SIMD3(0.1, 0.2, 0.3)]),
+        opacity: .linearFloat(0.9),
+        scale: .linearFloat(SIMD3(repeating: 0.01)),
+        rotation: simd_quatf(ix: 0, iy: 0, iz: 0, r: 1))
+    let t = SplatViewerFloaterHighlight.tint(point)
+    #expect(t.opacity.asLinearFloat == point.opacity.asLinearFloat)
+    #expect(t.color.asSphericalHarmonicFloat.dropFirst() == point.color.asSphericalHarmonicFloat.dropFirst())
+    let own = point.color.asSRGBFloat, tinted = t.color.asSRGBFloat
+    let orange = SplatViewerFloaterHighlight.color
+    // Between its own colour and the orange, not either end.
+    #expect(simd_length(tinted - orange) < simd_length(own - orange))
+    #expect(simd_length(tinted - own) > 0.05)
+    #expect(simd_length(tinted - orange) > 0.05)
+}

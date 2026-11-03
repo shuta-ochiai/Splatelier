@@ -241,6 +241,8 @@ enum SplatViewerFloaterHighlight {
     /// show clearly.
     static let color = SIMD3<Float>(1, 0.42, 0.1)
     static let opacity: Float = 0.6
+    /// The same orange for the Lasso loop once it is joined.
+    static var swiftUIColor: Color { Color(red: Double(color.x), green: Double(color.y), blue: Double(color.z)) }
 
     /// The splat drawn as selected. The SH bands are kept in number (a chunk wants them alike) but
     /// zeroed, so the colour doesn't shift with the view.
@@ -252,6 +254,23 @@ enum SplatViewerFloaterHighlight {
         for i in coefficients.indices.dropFirst() { coefficients[i] = .zero }
         p.color = .sphericalHarmonicFloat(coefficients)
         p.opacity = .linearFloat(max(point.opacity.asLinearFloat, opacity))
+        return p
+    }
+
+    /// How much of the orange a tinted splat takes, against its own colour.
+    static let tintStrength: Float = 0.55
+
+    /// The splat drawn as selected by Lasso: its own colour pulled toward the orange, with its
+    /// opacity and its view-dependent bands left alone, so the shape of what is selected still
+    /// shows. (Selected floaters are drawn flat instead, because faint ones must stand out.)
+    static func tint(_ point: SplatPoint) -> SplatPoint {
+        var p = point
+        var coefficients = point.color.asSphericalHarmonicFloat
+        if coefficients.isEmpty { coefficients = [.zero] }
+        let own = point.color.asSRGBFloat
+        let mixed = own + (color - own) * tintStrength
+        coefficients[0] = (mixed - 0.5) * SplatPoint.Color.INV_SH_C0
+        p.color = .sphericalHarmonicFloat(coefficients)
         return p
     }
 }
