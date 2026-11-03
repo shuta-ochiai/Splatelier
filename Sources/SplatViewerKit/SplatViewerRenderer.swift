@@ -82,6 +82,8 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
     private var cropRebuild: Task<Void, Never>?
     private var sourceName = "splats"
     private var activeCropHandle: SplatViewerCropHandle?
+    /// Where the finger drawing the Lasso loop is now (normalized coordinates). nil when none is.
+    private var lassoTouch: SIMD2<Float>?
     // Floaters: the selected splats, as indices into the kept ones; the detector for the kept splats
     // (worked out on the first Detect, dropped when they change); the scene size the brush is scaled
     // by (worked out when floater mode first opens). `keptGeneration` counts changes to the kept splats, so work
@@ -151,6 +153,7 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
         model.onCropApply = { [weak self] in self?.applyCrop() }
         model.onCropUndo = { [weak self] in self?.undoCrop() }
         model.onCropRestore = { [weak self] in self?.restoreCrop() }
+        model.onLassoClear = { [weak self] in self?.clearLassoSelection() }
         model.onColorGradeApply = { [weak self] grade in self?.applyColorGrade(grade) }
         model.onFloaterModeChange = { [weak self] in self?.floaterModeChanged(isOn: $0) }
         model.onFloaterDetect = { [weak self] in self?.detectFloaters() }
@@ -520,9 +523,16 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
     }
 
     /// Start of a drag (normalized coordinates). Grabs the nearest handle within reach. false leaves
-    /// the drag to the camera.
+    /// the drag to the camera. In Lasso every drag draws a new loop, so the camera is moved with two
+    /// fingers there.
     func beginCropDrag(normalized point: SIMD2<Float>) -> Bool {
-        guard model.isCropping, isLoaded, let region = model.cropRegion else { return false }
+        guard model.isCropping, isLoaded else { return false }
+        if model.cropShape == .lasso {
+            lassoTouch = point
+            model.cropProjection.setLasso([point])
+            return true
+        }
+        guard let region = model.cropRegion else { return false }
         let camera = self.camera()
         let size = pixelSize
         let nearest = region.handles(camera: camera).compactMap { item -> (SplatViewerCropHandle, Float)? in
@@ -537,6 +547,15 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
 
     /// Drag of the grabbed handle. `delta` is the touch movement normalized by the view size.
     func cropDrag(normalizedDelta delta: SIMD2<Float>) {
+        if let touch = lassoTouch {
+            let moved = simd_clamp(touch + delta, .zero, SIMD2(repeating: 1))
+            lassoTouch = moved
+            let size = pixelSize
+            model.cropProjection.setLasso(
+                SplatViewerLasso.appending(
+                    moved, to: model.cropProjection.lasso, aspect: size.x / max(size.y, 1)))
+            return
+        }
         guard let handle = activeCropHandle, let region = model.cropRegion else { return }
         model.cropRegion = region.dragged(
             handle, byPixels: delta * pixelSize, camera: camera(), viewSize: pixelSize)
@@ -544,14 +563,34 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
 
     func endCropDrag() {
         activeCropHandle = nil
+        if lassoTouch != nil {
+            lassoTouch = nil
+            // A scribble that encloses nothing is dropped; a loop turns into a selection.
+            let loop = model.cropProjection.lasso
+            model.cropProjection.setLasso([])
+            if SplatViewerLasso.isUsable(loop) { selectWithLasso(loop) }
+        }
     }
 
     /// Removes what the region doesn't keep (or keeps, if "remove inside" is off).
     func applyCrop() {
-        guard isLoaded, let region = model.cropRegion else { return }
+        guard isLoaded else { return }
         let keepsInside = model.cropKeepsInside
         let source = gsSourcePoints
-        switch cropEdits.apply({ region.contains(source[Int($0)].position) == keepsInside }) {
+        let isInside: (UInt32) -> Bool
+        if model.cropShape == .lasso {
+            guard !floaterSelection.isEmpty else {
+                model.showCropNotice("Draw a loop around what to crop")
+                return
+            }
+            let kept = cropEdits.kept
+            let selected = Set(floaterSelection.map { kept[Int($0)] })
+            isInside = { selected.contains($0) }
+        } else {
+            guard let region = model.cropRegion else { return }
+            isInside = { region.contains(source[Int($0)].position) }
+        }
+        switch cropEdits.apply({ isInside($0) == keepsInside }) {
         case .applied:
             commitCropEdits()
         case .unchanged:
@@ -559,6 +598,27 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
         case .emptied:
             model.showCropNotice("That would remove every splat")
         }
+    }
+
+    /// Selects the kept splats whose center is inside the loop, as seen from the camera now. They
+    /// turn orange, and move with the scene when the view does.
+    private func selectWithLasso(_ loop: [SIMD2<Float>]) {
+        let kept = cropEdits.kept, source = gsSourcePoints
+        let test = SplatViewerLasso.test(polygon: loop, camera: camera())
+        let selection = Set(kept.indices.lazy.filter { test(source[Int(kept[$0])].position) }.map(Int32.init))
+        guard !selection.isEmpty else {
+            model.showCropNotice("No splats inside the loop")
+            return
+        }
+        floaterSelection = selection
+        commitEdits()
+    }
+
+    /// Lets the Lasso selection go, when Lasso is left (another shape, or Crop closed).
+    private func clearLassoSelection() {
+        guard isLoaded, !model.isRemovingFloaters, !floaterSelection.isEmpty else { return }
+        floaterSelection = []
+        commitEdits()
     }
 
     func undoCrop() {
@@ -626,6 +686,8 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
         guard let renderer else { return }
         let previous = cropRebuild
         let device = self.device
+        // Lasso tints the selection; floaters paint it flat.
+        let tinted = model.isCropping
         cropRebuild = Task { [weak self] in
             await previous?.value
             guard let self else { return }
@@ -634,7 +696,8 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
                 Result {
                     try SplatChunk(device: device, from: kept.indices.map { i in
                         let point = grade.apply(to: source[Int(kept[i])])
-                        return highlighted?[i] == true ? SplatViewerFloaterHighlight.apply(to: point) : point
+                        guard highlighted?[i] == true else { return point }
+                        return tinted ? SplatViewerFloaterHighlight.tint(point) : SplatViewerFloaterHighlight.apply(to: point)
                     })
                 }
             }.value
@@ -988,7 +1051,7 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
             model.isMeasuring
                 ? SplatMeasureProjection.frame(points: model.measurePoints, camera: camera)
                 : SplatMeasureProjection.Frame())
-        if model.isCropping, let region = model.cropRegion {
+        if model.isCropping, model.cropShape != .lasso, let region = model.cropRegion {
             model.cropProjection.update(SplatCropFrame.make(region: region, camera: camera))
         } else {
             model.cropProjection.update(SplatCropFrame())

@@ -548,26 +548,24 @@ public struct SplatViewerScreen: View {
     }
 
     /// Crop-mode controls: the hint, the shape and keep/remove pickers, and Apply with Undo and
-    /// Restore (the last only once something is cropped).
+    /// Reset (the last only once something is cropped).
     /// The crop panel. It has the same card and foot row as the Color panel: a title, the two
-    /// settings, then Undo and Restore on the left and Apply on the right. Undo and Restore stay in
-    /// place and are disabled when there is nothing to undo or restore, so the layout doesn't jump.
+    /// settings, then Undo and Reset on the left and Apply on the right. Undo and Reset stay in
+    /// place and are disabled when there is nothing to undo or reset, so the layout doesn't jump.
     private var cropControls: some View {
         VStack(spacing: 10) {
             Text("Crop")
                 .font(.caption.weight(.semibold))
                 .frame(maxWidth: .infinity, alignment: .leading)
-            Picker("Shape", selection: Binding(
-                get: { model.cropShape }, set: { model.setCropShape($0) })
-            ) {
-                ForEach(SplatViewerCropShape.allCases) { Text($0.title).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            Picker("Mode", selection: $model.cropKeepsInside) {
-                Text("Keep inside").tag(true)
-                Text("Remove inside").tag(false)
-            }
-            .pickerStyle(.segmented)
+            SplatViewerSegmentedChoice(
+                options: SplatViewerCropShape.allCases.map { ($0, $0.title, $0.systemImage) },
+                selection: Binding(get: { model.cropShape }, set: { model.setCropShape($0) }))
+            SplatViewerSegmentedChoice(
+                options: [
+                    (true, "Keep inside", "square.dashed.inset.filled"),
+                    (false, "Remove inside", "square.dashed"),
+                ],
+                selection: $model.cropKeepsInside)
             if let notice = model.cropNotice {
                 Text(notice)
                     .font(.caption)
@@ -584,7 +582,7 @@ public struct SplatViewerScreen: View {
                 Button {
                     model.onCropRestore?()
                 } label: {
-                    Label("Restore", systemImage: "arrow.counterclockwise")
+                    Label("Reset", systemImage: "arrow.counterclockwise")
                 }
                 .buttonStyle(SplatViewerPanelButtonStyle())
                 .disabled(!model.cropEdited)
@@ -1013,3 +1011,35 @@ public struct SplatViewerScreen: View {
 }
 
 #endif
+
+/// A segmented choice whose segments carry an icon beside the title, which a segmented Picker does
+/// not show.
+private struct SplatViewerSegmentedChoice<Value: Hashable>: View {
+    let options: [(value: Value, title: String, systemImage: String)]
+    @Binding var selection: Value
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(options.indices, id: \.self) { index in
+                let option = options[index]
+                let isOn = option.value == selection
+                Button {
+                    selection = option.value
+                } label: {
+                    Label(option.title, systemImage: option.systemImage)
+                        .lineLimit(1)
+                        .font(.caption.weight(isOn ? .semibold : .regular))
+                        .foregroundStyle(isOn ? Color.white : Color.primary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                        .background(
+                            isOn ? AnyShapeStyle(SplatViewerPanelButtonStyle.fill) : AnyShapeStyle(.clear),
+                            in: Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(2)
+        .background(.ultraThinMaterial, in: Capsule())
+    }
+}
