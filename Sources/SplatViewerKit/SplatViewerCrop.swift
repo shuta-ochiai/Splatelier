@@ -17,6 +17,8 @@ import simd
 enum SplatViewerCropShape: String, CaseIterable, Identifiable {
     case box
     case sphere
+    /// A loop drawn on screen (see `SplatViewerLasso`). It has no region in the world.
+    case lasso
 
     var id: String { rawValue }
 
@@ -24,6 +26,15 @@ enum SplatViewerCropShape: String, CaseIterable, Identifiable {
         switch self {
         case .box: "Box"
         case .sphere: "Sphere"
+        case .lasso: "Lasso"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .box: "cube"
+        case .sphere: "circle"
+        case .lasso: "lasso"
         }
     }
 }
@@ -56,7 +67,17 @@ struct SplatViewerCropRegion: Equatable {
             return d.x <= halfExtent.x && d.y <= halfExtent.y && d.z <= halfExtent.z
         case .sphere:
             return simd_distance_squared(p, center) <= radius * radius
+        case .lasso:
+            return false
         }
+    }
+
+    /// The kept splats inside the region, as indices into `kept`. `position` gives a splat's center
+    /// by its index in the loaded splats.
+    func insideIndices(kept: [UInt32], position: (UInt32) -> SIMD3<Float>) -> Set<Int32> {
+        var inside = Set<Int32>()
+        for i in kept.indices where contains(position(kept[i])) { inside.insert(Int32(i)) }
+        return inside
     }
 
     /// The same region as the other shape. A box becomes a sphere with its largest half size; a
@@ -64,6 +85,9 @@ struct SplatViewerCropRegion: Equatable {
     func converted(to shape: SplatViewerCropShape) -> SplatViewerCropRegion {
         guard shape != self.shape else { return self }
         switch shape {
+        case .lasso:
+            // The region keeps its box or sphere, so coming back from Lasso finds it as it was.
+            return self
         case .box:
             return SplatViewerCropRegion(
                 shape: .box, center: center, halfExtent: SIMD3(repeating: radius), radius: radius)
@@ -110,6 +134,8 @@ struct SplatViewerCropRegion: Equatable {
                 (.center, center),
                 (.radius, center + camera.axis(0) * radius),
             ]
+        case .lasso:
+            return []
         }
     }
 
@@ -295,6 +321,8 @@ struct SplatCropFrame: Equatable {
                 }
             }
             return edges
+        case .lasso:
+            return []
         }
     }
 }
@@ -303,6 +331,13 @@ struct SplatCropFrame: Equatable {
 @MainActor
 final class SplatCropProjection: ObservableObject {
     @Published private(set) var frame = SplatCropFrame()
+    /// The Lasso loop being drawn, in normalized screen coordinates. It lives on the screen, not in
+    /// the world, and is empty once the finger lifts and the loop has become a selection.
+    @Published private(set) var lasso: [SIMD2<Float>] = []
+
+    func setLasso(_ points: [SIMD2<Float>]) {
+        lasso = points
+    }
 
     func update(_ newFrame: SplatCropFrame) {
         if newFrame != frame { frame = newFrame }
@@ -323,8 +358,21 @@ struct SplatCropOverlay: View {
                 outline.move(to: point(segment.a))
                 outline.addLine(to: point(segment.b))
             }
+            let lasso = projection.lasso
+            // Once the end meets the start the loop closes and takes the colour of the selection.
+            let joined = SplatViewerLasso.isJoined(lasso, aspect: Float(size.width / max(size.height, 1)))
+            if let first = lasso.first {
+                outline.move(to: point(first))
+                for p in lasso.dropFirst() { outline.addLine(to: point(p)) }
+                if joined {
+                    outline.closeSubpath()
+                    context.fill(outline, with: .color(SplatViewerFloaterHighlight.swiftUIColor.opacity(0.18)))
+                }
+            }
             context.stroke(outline, with: .color(.black.opacity(0.5)), lineWidth: 3)
-            context.stroke(outline, with: .color(.white), lineWidth: 1.5)
+            context.stroke(
+                outline, with: .color(joined ? SplatViewerFloaterHighlight.swiftUIColor : .white),
+                lineWidth: joined ? 2.5 : 1.5)
             for h in projection.frame.handles {
                 let c = point(h)
                 let dot = Path(ellipseIn: CGRect(x: c.x - 9, y: c.y - 9, width: 18, height: 18))

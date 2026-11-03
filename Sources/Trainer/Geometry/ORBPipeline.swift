@@ -3,7 +3,7 @@
 //
 // ORB pipeline (PocketGS Appendix A.b): FAST → steered BRIEF → brute-force Hamming match + Lowe
 // ratio + mutual cross-check, done in GPU kernels. Steered BRIEF is implemented from
-// Rublee et al. 2011 §3.2-4.1. Single scale (no pyramid).
+// Rublee et al. 2011 §3.2-4.1. Single scale; `extractCoarseLevels` adds coarser pyramid levels.
 
 import Foundation
 import MLX
@@ -92,6 +92,41 @@ public enum ORBPipeline {
             outputDTypes: [.int32]
         )
         let desc = outputs[0].reshaped([coords.count, 8])
+        eval(desc)
+        return FrameFeatures(coords: coords, descriptors: desc)
+    }
+
+    /// `extract` on `levels` coarser levels of an image pyramid (each 2/3 of the one above: 2/3,
+    /// 4/9, … of `luma`), merged, with coordinates on `luma`. The keypoint budget is split by level
+    /// area.
+    public static func extractCoarseLevels(
+        luma: MLXArray, fastThreshold: Float = 0.05, maxKeypoints: Int = 600, levels: Int = 2
+    ) -> FrameFeatures {
+        let areas = (1...max(1, levels)).map { pow(Float(4) / 9, Float($0)) }
+        let total = areas.reduce(0, +)
+        var coords: [(x: Int, y: Int)] = []
+        var descriptors: [MLXArray] = []
+        var level = luma
+        var scale: Float = 1   // level pixels per pixel of `luma`
+        for area in areas {
+            level = TrainingDriver.resampleRational(level.expandedDimensions(axis: 2), num: 2, den: 3)
+                .squeezed(axis: 2)
+            scale *= Float(2) / 3
+            guard level.shape[0] > 40, level.shape[1] > 40 else { break }
+            let f = extract(luma: level, fastThreshold: fastThreshold,
+                            maxKeypoints: max(1, Int(Float(maxKeypoints) * area / total)))
+            guard !f.coords.isEmpty else { continue }
+            // Pixel centers are at index + 0.5 on both levels.
+            coords += f.coords.map { c in
+                (x: Int(((Float(c.x) + 0.5) / scale - 0.5).rounded()),
+                 y: Int(((Float(c.y) + 0.5) / scale - 0.5).rounded()))
+            }
+            descriptors.append(f.descriptors)
+        }
+        guard !descriptors.isEmpty else {
+            return FrameFeatures(coords: [], descriptors: MLXArray.zeros([0, 8], dtype: .int32))
+        }
+        let desc = MLX.concatenated(descriptors, axis: 0)
         eval(desc)
         return FrameFeatures(coords: coords, descriptors: desc)
     }

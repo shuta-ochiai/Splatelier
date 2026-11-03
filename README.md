@@ -30,9 +30,9 @@ and compiled to Metal.
   seed points, and the Gaussians are trained on the iPhone's GPU, with each frame's exposure and
   white balance compensated. Training adapts to the device's temperature, and a finished model can
   be trained further.
-- **Built-in viewer**: orbit the result, choose the layers to show, measure distances, and grade the
-  colours or crop the splats. The Library lists your captures and opens `.ply`, `.splat` and `.spz`
-  files you import.
+- **Built-in viewer**: orbit the result, choose the layers to show, measure distances, grade the
+  colours, crop the splats with a box, sphere or lasso, and select and delete floaters. The Library
+  lists your captures and opens `.ply`, `.splat` and `.spz` files you import.
 - **Export**: share the splats as a standard 3DGS PLY, compressed PLY, SPZ, `.splat`, glTF (GLB), SOG
   or OpenUSD (`.usda`), and the mesh (OBJ) generated from the trained scene.
 - **Mac tools**: retrain a capture from the app on a Mac, train and evaluate on COLMAP scenes, and
@@ -146,8 +146,9 @@ sources. It does not run the tests, because most of them need a Metal GPU: run `
 - **Frame selection**: frames whose recorded camera motion would blur them by more than 3 px over the
   exposure are left out (for datasets without the motion, an image-based blur test); badly exposed
   frames are left out too.
-- **Poses and seed points**: bundle adjustment over ORB and ARKit feature tracks (the points are
-  eliminated by per-point QR and the reduced system is solved with Accelerate), and dense seed
+- **Poses and seed points**: bundle adjustment over ORB and ARKit feature tracks, with loop closures
+  between frames that see the same ARKit feature points (the points are eliminated by per-point QR
+  and the reduced system is solved with Accelerate), and dense seed
   points from multi-view stereo (plane sweep + SGM). With the experimental LiDAR switch, LiDAR depth,
   reprojected with the refined poses, joins the seed points.
 - **Training**: PocketGS disc-like initialization; a hybrid of MCMC and ImprovedGS+

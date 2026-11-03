@@ -3,7 +3,7 @@
 //
 // Public entry point. SwiftUI screen that shows a trained PLY (any format SplatIO can read) with an
 // orbit camera. The seed point cloud, capture cameras and mesh (OBJ) can be overlaid in the same
-// scene and toggled from the "Display" menu, where the trained background can be hidden and the mesh
+// scene and toggled from the "Display" row, where the trained background can be hidden and the mesh
 // switched to shaded. The "Measure" button at the bottom enters measure mode to measure the distance
 // between 2 tapped points. Double tap (double click on macOS) zooms in, making that point the center
 // of rotation.
@@ -43,8 +43,10 @@ public struct SplatViewerScreen: View {
     @State private var showHint = false
     @State private var showTrainMoreConfirm = false
     @State private var showEditOptions = false
+    @State private var showDisplayOptions = false
     @State private var showColorHelp = false
     @State private var showCropHelp = false
+    @State private var showFloaterHelp = false
     @State private var renameText = ""
     @StateObject private var model: SplatViewerModel
     #if os(iOS)
@@ -109,7 +111,7 @@ public struct SplatViewerScreen: View {
             #if os(macOS)
                 .gesture(orbitGesture)
                 .simultaneousGesture(zoomGesture)
-                .simultaneousGesture(measureTapGesture)
+                .simultaneousGesture(tapGesture)
                 .simultaneousGesture(focusTapGesture)
                 .onGeometryChange(for: CGSize.self) { $0.size } action: { metalViewSize = $0 }
             #endif
@@ -117,6 +119,8 @@ public struct SplatViewerScreen: View {
             SplatMeasureOverlay(projection: model.measureProjection)
                 .ignoresSafeArea()
             SplatCropOverlay(projection: model.cropProjection)
+                .ignoresSafeArea()
+            SplatBrushOverlay(projection: model.brushProjection)
                 .ignoresSafeArea()
 
             overlay
@@ -250,12 +254,14 @@ public struct SplatViewerScreen: View {
             hintRow("scope", "Focus", "Double-tap a point to zoom in and orbit around it")
             hintRow("ruler", "Measure", "Turn on Measure, then tap 2 points")
             hintRow("crop", "Crop", "Edit, then Crop, then drag a handle of the box or sphere")
+            hintRow("aqi.medium", "Floaters", "Edit, then Floaters, then tap a floater or Auto Detect")
             #else
             hintRow("cursorarrow.motionlines", "Rotate", "Drag")
             hintRow("arrow.up.left.and.arrow.down.right", "Zoom", "Pinch or scroll")
             hintRow("scope", "Focus", "Double-click a point to zoom in and orbit around it")
             hintRow("ruler", "Measure", "Turn on Measure, then click 2 points")
             hintRow("crop", "Crop", "Edit, then Crop, then drag a handle of the box or sphere")
+            hintRow("aqi.medium", "Floaters", "Edit, then Floaters, then click a floater or Auto Detect")
             #endif
         }
         .padding(16)
@@ -321,9 +327,15 @@ public struct SplatViewerScreen: View {
                 if model.isCropping {
                     cropControls
                 }
+                if model.isRemovingFloaters {
+                    floaterControls
+                }
                 if model.isColoring {
                     SplatViewerColorPanel(model: model) { model.isColoring = false }
                         .padding(.bottom, 4)
+                }
+                if hasDisplayOptions && showDisplayOptions {
+                    displayOptions
                 }
                 bottomBar
                     .padding(.horizontal, 12).padding(.vertical)
@@ -331,61 +343,66 @@ public struct SplatViewerScreen: View {
         }
     }
 
-    /// Display options (layer visibility, mesh appearance) in one menu, so the bottom edge doesn't
-    /// fill up with a row of toggles. Background and Shading sit in their parent layer's section and are disabled (not hidden)
-    /// while that layer is off, so rows don't jump. The menu stays open after each pick, letting
-    /// several layers be switched in one go.
-    private var displayMenu: some View {
-        Menu {
+    /// Display reveals a row of layer switches just above the bottom bar rather than a Menu: a Menu
+    /// covers the view, so a switch couldn't be seen taking effect.
+    private var displayButton: some View {
+        toggleCapsule("Display", systemImage: "eye", isOn: showDisplayOptions) {
+            showDisplayOptions.toggle()
+        }
+    }
+
+    /// One line of layer switches, so the model stays in view while they are flipped. It scrolls
+    /// sideways when it doesn't fit and is centered when it does. Background and Shaded are disabled
+    /// (not hidden) while their layer is off, so the switches don't move.
+    private var displayOptions: some View {
+        let row = HStack(spacing: 6) {
             if model.hasGS {
-                Section("Gaussian splats") {
-                    Toggle(isOn: $model.showGS) { Label("Splats", systemImage: "cube.fill") }
-                    if model.hasBackground {
-                        Toggle(isOn: $model.showBackground) { Label("Background", systemImage: "globe") }
-                            .disabled(!model.showGS)
+                toggleCapsule("Splats", systemImage: "cube.fill", isOn: model.showGS) {
+                    model.showGS.toggle()
+                }
+                if model.hasBackground {
+                    toggleCapsule("Background", systemImage: "globe", isOn: model.showBackground) {
+                        model.showBackground.toggle()
                     }
+                    .disabled(!model.showGS)
+                    .opacity(model.showGS ? 1 : 0.4)
                 }
             }
             if model.hasMesh {
-                Section("Mesh") {
-                    Toggle(isOn: $model.showMesh) { Label("Mesh", systemImage: "triangle") }
-                    Picker(selection: $model.meshShaded) {
-                        Label("Vertex colors", systemImage: "paintpalette").tag(false)
-                        Label("Shaded", systemImage: "light.max").tag(true)
-                    } label: {
-                        Text("Appearance")
-                    }
-                    .pickerStyle(.inline)
-                    .disabled(!model.showMesh)
+                if model.hasGS { displayDivider }
+                toggleCapsule("Mesh", systemImage: "triangle", isOn: model.showMesh) {
+                    model.showMesh.toggle()
                 }
+                toggleCapsule("Shaded", systemImage: "light.max", isOn: model.meshShaded) {
+                    model.meshShaded.toggle()
+                }
+                .disabled(!model.showMesh)
+                .opacity(model.showMesh ? 1 : 0.4)
             }
             if model.hasSeed || model.hasCameraMarkers {
-                Section("Capture") {
-                    if model.hasSeed {
-                        Toggle(isOn: $model.showSeed) { Label("Seed points", systemImage: "circle.grid.3x3.fill") }
+                if model.hasGS || model.hasMesh { displayDivider }
+                if model.hasSeed {
+                    toggleCapsule("Seed points", systemImage: "circle.grid.3x3.fill", isOn: model.showSeed) {
+                        model.showSeed.toggle()
                     }
-                    if model.hasCameraMarkers {
-                        Toggle(isOn: $model.showCameraMarkers) { Label("Cameras", systemImage: "camera.fill") }
+                }
+                if model.hasCameraMarkers {
+                    toggleCapsule("Cameras", systemImage: "camera.fill", isOn: model.showCameraMarkers) {
+                        model.showCameraMarkers.toggle()
                     }
                 }
             }
-        } label: {
-            Label("Display", systemImage: "eye")
-                .font(.caption)
-                .padding(.horizontal, 10).padding(.vertical, 6)
-                .background(.ultraThinMaterial, in: Capsule())
         }
-        #if os(iOS)
-        // Stay open after each pick, so several layers can be switched at once.
-        .menuActionDismissBehavior(.disabled)
-        // Opening upward from the bottom bar, iOS would otherwise flip the sections bottom-up.
-        .menuOrder(.fixed)
-        #endif
-        #if os(macOS)
-        .menuStyle(.button)
-        .menuIndicator(.hidden)
-        #endif
-        .buttonStyle(.plain)
+        .padding(.horizontal, 12)
+        return ViewThatFits(in: .horizontal) {
+            row
+            ScrollView(.horizontal, showsIndicators: false) { row }
+        }
+    }
+
+    /// Separates the splat, mesh and capture groups in the Display row.
+    private var displayDivider: some View {
+        Divider().frame(height: 16)
     }
 
     /// Bottom edge: Display, Edit, Measure and Reset, centered. The splat and triangle counts are
@@ -395,11 +412,15 @@ public struct SplatViewerScreen: View {
             .frame(maxWidth: .infinity)
     }
 
-    /// Display and Edit menus, measure-mode toggle and Reset.
+    private var hasDisplayOptions: Bool {
+        model.hasGS || model.hasSeed || model.hasCameraMarkers || model.hasMesh
+    }
+
+    /// Display and Edit buttons, measure-mode toggle and Reset.
     private var trailingControls: some View {
         HStack(spacing: 6) {
-            if model.hasGS || model.hasSeed || model.hasCameraMarkers || model.hasMesh {
-                displayMenu
+            if hasDisplayOptions {
+                displayButton
             }
             toggleCapsule("Measure", systemImage: "ruler", isOn: model.isMeasuring) {
                 model.isMeasuring.toggle()
@@ -429,11 +450,13 @@ public struct SplatViewerScreen: View {
             if !showEditOptions {
                 model.isCropping = false
                 model.isColoring = false
+                model.isRemovingFloaters = false
             }
         }
     }
 
-    /// Color and Crop, shown once Edit is on. Color opens its panel; Crop turns on the handles.
+    /// Color, Crop and Floaters, shown once Edit is on. Color opens its panel; Crop turns on the
+    /// handles; Floaters makes taps select floaters.
     /// Each has a ? beside it that explains what it does, so the explanations stay out of the way.
     private var editOptions: some View {
         HStack(spacing: 6) {
@@ -450,6 +473,13 @@ public struct SplatViewerScreen: View {
                 }
                 helpButton(isPresented: $showCropHelp,
                            text: "Drag a handle to resize the box or sphere. Drag anywhere else to rotate the view. Keep inside or remove inside decides which splats are kept.")
+            }
+            HStack(spacing: 2) {
+                toggleCapsule("Floaters", systemImage: "aqi.medium", isOn: model.isRemovingFloaters) {
+                    model.isRemovingFloaters.toggle()
+                }
+                helpButton(isPresented: $showFloaterHelp,
+                           text: "Tap a floater to select the splats around it (orange); Selection size sets how far. Tap orange to unselect, or ⊗ to clear. Auto Detect selects the small floaters apart from the scene for you. Delete removes the orange splats. Undo takes back the last step, a selection or a delete; Reset brings back every splat.")
             }
         }
     }
@@ -531,26 +561,24 @@ public struct SplatViewerScreen: View {
     }
 
     /// Crop-mode controls: the hint, the shape and keep/remove pickers, and Apply with Undo and
-    /// Restore (the last only once something is cropped).
+    /// Reset (the last only once something is cropped).
     /// The crop panel. It has the same card and foot row as the Color panel: a title, the two
-    /// settings, then Undo and Restore on the left and Apply on the right. Undo and Restore stay in
-    /// place and are disabled when there is nothing to undo or restore, so the layout doesn't jump.
+    /// settings, then Undo and Reset on the left and Apply on the right. Undo and Reset stay in
+    /// place and are disabled when there is nothing to undo or reset, so the layout doesn't jump.
     private var cropControls: some View {
         VStack(spacing: 10) {
             Text("Crop")
                 .font(.caption.weight(.semibold))
                 .frame(maxWidth: .infinity, alignment: .leading)
-            Picker("Shape", selection: Binding(
-                get: { model.cropShape }, set: { model.setCropShape($0) })
-            ) {
-                ForEach(SplatViewerCropShape.allCases) { Text($0.title).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            Picker("Mode", selection: $model.cropKeepsInside) {
-                Text("Keep inside").tag(true)
-                Text("Remove inside").tag(false)
-            }
-            .pickerStyle(.segmented)
+            SplatViewerSegmentedChoice(
+                options: SplatViewerCropShape.allCases.map { ($0, $0.title, $0.systemImage) },
+                selection: Binding(get: { model.cropShape }, set: { model.setCropShape($0) }))
+            SplatViewerSegmentedChoice(
+                options: [
+                    (true, "Keep inside", "square.dashed.inset.filled"),
+                    (false, "Remove inside", "square.dashed"),
+                ],
+                selection: $model.cropKeepsInside)
             if let notice = model.cropNotice {
                 Text(notice)
                     .font(.caption)
@@ -567,7 +595,7 @@ public struct SplatViewerScreen: View {
                 Button {
                     model.onCropRestore?()
                 } label: {
-                    Label("Restore", systemImage: "arrow.counterclockwise")
+                    Label("Reset", systemImage: "arrow.counterclockwise")
                 }
                 .buttonStyle(SplatViewerPanelButtonStyle())
                 .disabled(!model.cropEdited)
@@ -593,6 +621,124 @@ public struct SplatViewerScreen: View {
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
         .padding(.horizontal, 12)
         .padding(.bottom, 4)
+    }
+
+    /// The floater panel, in the same card as Crop. The line under the title is about the
+    /// selection: what a tap does or how many splats are selected (with an ⊗ that lets them all go),
+    /// and Detect, which adds to it. Then Selection size, the radius a tap selects within, and the
+    /// actions: Undo takes back the last step (a selection change or a delete), Reset brings back
+    /// every splat as loaded (as Crop's does), Delete removes the selection, Finish leaves. Delete
+    /// leaves the count to the line above, so the row fits a phone.
+    private var floaterControls: some View {
+        VStack(spacing: 10) {
+            HStack {
+                Text("Floaters")
+                    .font(.caption.weight(.semibold))
+                Spacer(minLength: 0)
+                if model.isFindingFloaters {
+                    ProgressView().controlSize(.small)
+                }
+            }
+            floaterSelectionLine
+            if let notice = model.cropNotice {
+                Text(notice)
+                    .font(.caption)
+                    .foregroundStyle(Color.yellow)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            HStack(spacing: 8) {
+                Text("Selection size")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                // While it moves, a circle on the view shows how far a tap reaches.
+                Slider(value: $model.floaterBrushSize, in: SplatViewerFloaterBrush.sizeRange) {
+                    model.setBrushSizeEditing($0)
+                }
+                .tint(SplatViewerPanelButtonStyle.fill)
+            }
+            HStack(spacing: 6) {
+                Button {
+                    model.onFloaterUndo?()
+                } label: {
+                    Label("Undo", systemImage: "arrow.uturn.backward")
+                }
+                .buttonStyle(SplatViewerPanelButtonStyle())
+                .disabled(!model.floaterCanUndo)
+                Button {
+                    model.onCropRestore?()
+                } label: {
+                    Label("Reset", systemImage: "arrow.counterclockwise")
+                }
+                .buttonStyle(SplatViewerPanelButtonStyle())
+                .disabled(!model.cropEdited)
+                Spacer(minLength: 0)
+                Button {
+                    model.onFloaterDelete?()
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+                .buttonStyle(SplatViewerPanelButtonStyle())
+                .disabled(model.floaterSelectionCount == 0)
+                Button {
+                    model.isRemovingFloaters = false
+                    showEditOptions = false
+                } label: {
+                    Label("Finish", systemImage: "flag.checkered")
+                }
+                .buttonStyle(SplatViewerPanelButtonStyle(prominent: true))
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: 360)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .padding(.horizontal, 12)
+        .padding(.bottom, 4)
+    }
+
+    /// The colour selected splats are drawn in.
+    private static let highlightColor: Color = {
+        let c = SplatViewerFloaterHighlight.color
+        return Color(red: Double(c.x), green: Double(c.y), blue: Double(c.z))
+    }()
+
+    /// What is selected, with an ⊗ that lets it all go, or with nothing selected what a tap does;
+    /// then Detect on the right.
+    private var floaterSelectionLine: some View {
+        HStack(spacing: 6) {
+            if model.floaterSelectionCount > 0 {
+                Text("\(model.floaterSelectionCount.formatted()) splats selected")
+                    .foregroundStyle(Self.highlightColor)
+                Button {
+                    model.onFloaterDeselectAll?()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Clear selection")
+            } else {
+                Text(floaterHint)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+            Button {
+                model.onFloaterDetect?()
+            } label: {
+                Label("Auto Detect", systemImage: "wand.and.stars")
+            }
+            .buttonStyle(SplatViewerPanelButtonStyle())
+            .disabled(model.isFindingFloaters)
+        }
+        .font(.caption)
+        .lineLimit(1)
+    }
+
+    private var floaterHint: String {
+        #if os(iOS)
+        "Tap a floater to select it"
+        #else
+        "Click a floater to select it"
+        #endif
     }
 
     /// Fill of a button that is on: the kikyo purple, with white text on it.
@@ -673,15 +819,15 @@ public struct SplatViewerScreen: View {
             .onEnded { _ in zoomBase = nil }
     }
 
-    /// Click in measure mode (the renderer ignores it outside measure mode).
-    private var measureTapGesture: some Gesture {
+    /// Click in measure or floater mode (the renderer ignores it otherwise).
+    private var tapGesture: some Gesture {
         SpatialTapGesture()
             .onEnded { value in
-                if let p = normalized(value.location) { model.onMeasureTap?(p) }
+                if let p = normalized(value.location) { model.onTap?(p) }
             }
     }
 
-    /// Double click zooms to that point (the renderer ignores it in measure mode).
+    /// Double click zooms to that point (the renderer ignores it in measure and floater mode).
     private var focusTapGesture: some Gesture {
         SpatialTapGesture(count: 2)
             .onEnded { value in
@@ -791,12 +937,12 @@ private struct SplatMetalView: SplatViewRepresentable {
             g.scale = 1
         }
 
-        /// The renderer ignores it outside measure mode.
+        /// The renderer ignores it outside measure and floater mode.
         @objc private func handleTap(_ g: UITapGestureRecognizer) {
-            if let p = normalized(g) { renderer?.measureTap(normalized: p) }
+            if let p = normalized(g) { renderer?.tap(normalized: p) }
         }
 
-        /// The renderer ignores it in measure mode.
+        /// The renderer ignores it in measure and floater mode.
         @objc private func handleDoubleTap(_ g: UITapGestureRecognizer) {
             if let p = normalized(g) { renderer?.focusTap(normalized: p) }
         }
@@ -878,3 +1024,35 @@ public struct SplatViewerScreen: View {
 }
 
 #endif
+
+/// A segmented choice whose segments carry an icon beside the title, which a segmented Picker does
+/// not show.
+private struct SplatViewerSegmentedChoice<Value: Hashable>: View {
+    let options: [(value: Value, title: String, systemImage: String)]
+    @Binding var selection: Value
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(options.indices, id: \.self) { index in
+                let option = options[index]
+                let isOn = option.value == selection
+                Button {
+                    selection = option.value
+                } label: {
+                    Label(option.title, systemImage: option.systemImage)
+                        .lineLimit(1)
+                        .font(.caption.weight(isOn ? .semibold : .regular))
+                        .foregroundStyle(isOn ? Color.white : Color.primary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                        .background(
+                            isOn ? AnyShapeStyle(SplatViewerPanelButtonStyle.fill) : AnyShapeStyle(.clear),
+                            in: Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(2)
+        .background(.ultraThinMaterial, in: Capsule())
+    }
+}

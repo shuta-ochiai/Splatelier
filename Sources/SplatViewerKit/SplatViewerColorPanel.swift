@@ -11,7 +11,7 @@ import Foundation
 import SwiftUI
 import simd
 
-/// Buttons at the foot of the Color and Crop panels. Reset, Undo and Restore sit on the left as
+/// Buttons at the foot of the Color and Crop panels. Reset and Undo sit on the left as
 /// plain buttons; the one that finishes the panel, Apply, is the filled button on the right.
 struct SplatViewerPanelButtonStyle: ButtonStyle {
     static let fill = Color(red: 0x7C / 255, green: 0x5C / 255, blue: 0xE6 / 255)
@@ -19,6 +19,9 @@ struct SplatViewerPanelButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
+            // One line at its full width: a tight row must not break a label mid-word.
+            .lineLimit(1)
+            .fixedSize()
             .font(.caption.weight(prominent ? .semibold : .regular))
             .foregroundStyle(prominent ? Color.white : Color.primary)
             .padding(.horizontal, 10).padding(.vertical, 6)

@@ -16,6 +16,10 @@ struct SplatViewerPreviewCamera {
     let elevation: Float
     let distance: Float
     let fovyRadians: Float
+    /// Orbit pivot on the source view's optical axis, `distance` ahead of its eye, so the orbit
+    /// camera starts exactly at the training camera's position rather than on a line through the
+    /// scene center.
+    let center: SIMD3<Float>
 
     private struct Metadata: Decodable {
         let version: Int
@@ -57,7 +61,8 @@ struct SplatViewerPreviewCamera {
             azimuth: angles.azimuth,
             elevation: angles.elevation,
             distance: distance,
-            fovyRadians: fovy
+            fovyRadians: fovy,
+            center: eye + forward * distance
         )
     }
 
@@ -150,7 +155,7 @@ final class SplatViewerModel: ObservableObject {
     /// next time it is turned on.
     @Published var isMeasuring = false {
         didSet {
-            if isMeasuring { isCropping = false }
+            if isMeasuring { isCropping = false; isRemovingFloaters = false }
             onNeedsRedraw?()
         }
     }
@@ -162,8 +167,9 @@ final class SplatViewerModel: ObservableObject {
     /// Positions of the measurement lines overlaid on screen (updated by the renderer on every
     /// draw).
     let measureProjection = SplatMeasureProjection()
-    /// Receiver of taps (normalized coordinates) in measure mode. Set by the renderer.
-    var onMeasureTap: ((SIMD2<Float>) -> Void)?
+    /// Receiver of taps (normalized coordinates): measurement points in measure mode, floater
+    /// selection in floater mode. Set by the renderer.
+    var onTap: ((SIMD2<Float>) -> Void)?
     private var measureNoticeID = 0
 
     func addMeasurePoint(_ point: SIMD3<Float>) {
@@ -197,7 +203,9 @@ final class SplatViewerModel: ObservableObject {
     /// orbits. Turning it on turns measure mode off.
     @Published var isCropping = false {
         didSet {
-            if isCropping { isMeasuring = false; isColoring = false }
+            if isCropping { isMeasuring = false; isColoring = false; isRemovingFloaters = false }
+            if !isCropping { cropProjection.setLasso([]) }
+            onCropSelectionRefresh?()
             onNeedsRedraw?()
         }
     }
@@ -205,10 +213,10 @@ final class SplatViewerModel: ObservableObject {
     @Published private(set) var cropShape: SplatViewerCropShape = .box
     /// true keeps the splats inside the region; false removes them.
     @Published var cropKeepsInside = true
-    /// Colour panel open. It and Crop are never on together: opening one closes the other.
+    /// Colour panel open. It, Crop and Floaters are never on together: opening one closes the others.
     @Published var isColoring = false {
         didSet {
-            if isColoring { isCropping = false }
+            if isColoring { isCropping = false; isRemovingFloaters = false }
             onNeedsRedraw?()
         }
     }
@@ -219,7 +227,8 @@ final class SplatViewerModel: ObservableObject {
     @Published private(set) var cropCanUndo = false
     /// Share entry for the cropped splats (PLY). nil until a crop is applied.
     @Published private(set) var cropShareItem: SplatViewerShareItem?
-    /// Transient hint, e.g. when a crop would remove nothing or everything.
+    /// Transient hint, e.g. when a crop would remove nothing or everything. The Floaters panel
+    /// shows it too.
     @Published private(set) var cropNotice: String?
     let cropProjection = SplatCropProjection()
     /// Drag of a crop handle (normalized coordinates). The begin returns whether a handle was grabbed.
@@ -228,8 +237,12 @@ final class SplatViewerModel: ObservableObject {
     var onCropHandleDrag: ((SIMD2<Float>) -> Void)?
     var onCropHandleEnd: (() -> Void)?
     var onCropApply: (() -> Void)?
+    /// Undo and Reset step through every edit to the kept splats, crops and floater deletes alike.
     var onCropUndo: (() -> Void)?
     var onCropRestore: (() -> Void)?
+    /// The orange selection of Crop has to be worked out again: Crop opened or closed, or its shape
+    /// changed.
+    var onCropSelectionRefresh: (() -> Void)?
     private var cropNoticeID = 0
 
     /// Changes the shape of the region, keeping its center and size.
@@ -237,6 +250,8 @@ final class SplatViewerModel: ObservableObject {
         guard shape != cropShape else { return }
         cropShape = shape
         cropRegion = cropRegion?.converted(to: shape)
+        cropProjection.setLasso([])
+        onCropSelectionRefresh?()
     }
 
     func setCropState(edited: Bool, canUndo: Bool, shareItem: SplatViewerShareItem?) {
@@ -255,6 +270,60 @@ final class SplatViewerModel: ObservableObject {
             guard let self, self.cropNoticeID == id else { return }
             self.cropNotice = nil
         }
+    }
+
+    // MARK: Floaters
+
+    /// Floater mode. A tap selects the splats within the brush (a tap on the selection lets them
+    /// go); Detect selects the small clusters apart from the scene; Delete removes the selection.
+    /// The selection is drawn highlighted and is dropped when the mode ends.
+    @Published var isRemovingFloaters = false {
+        didSet {
+            guard isRemovingFloaters != oldValue else { return }
+            if isRemovingFloaters { isMeasuring = false; isCropping = false; isColoring = false }
+            onFloaterModeChange?(isRemovingFloaters)
+            onNeedsRedraw?()
+        }
+    }
+    /// Splats in the selection.
+    @Published private(set) var floaterSelectionCount = 0
+    /// Radius of the brush a tap selects with, as a fraction of the scene's size ("Selection size").
+    @Published var floaterBrushSize = SplatViewerFloaterBrush.defaultSize { didSet { onNeedsRedraw?() } }
+    /// The brush circle is on screen: while Selection size is being changed, and a moment after.
+    @Published private(set) var isShowingBrush = false { didSet { onNeedsRedraw?() } }
+    /// Position and size of the brush circle (updated by the renderer on every draw).
+    let brushProjection = SplatBrushProjection()
+    private var brushHideID = 0
+    /// Detect is working out the clusters (the first Detect after the splats changed).
+    @Published private(set) var isFindingFloaters = false
+    /// Set by the renderer.
+    var onFloaterModeChange: ((Bool) -> Void)?
+    var onFloaterDetect: (() -> Void)?
+    var onFloaterDeselectAll: (() -> Void)?
+    var onFloaterDelete: (() -> Void)?
+    /// Takes back the last selection change or delete in floater mode.
+    var onFloaterUndo: (() -> Void)?
+    @Published private(set) var floaterCanUndo = false
+
+    /// Shows the brush circle while Selection size is being changed, and hides it a moment after.
+    func setBrushSizeEditing(_ editing: Bool) {
+        brushHideID += 1
+        guard !editing else {
+            isShowingBrush = true
+            return
+        }
+        let id = brushHideID
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(0.8))
+            guard let self, self.brushHideID == id else { return }
+            self.isShowingBrush = false
+        }
+    }
+
+    func setFloaterState(selectionCount: Int, isFinding: Bool, canUndo: Bool) {
+        floaterSelectionCount = selectionCount
+        isFindingFloaters = isFinding
+        floaterCanUndo = canUndo
     }
 
     // orbit camera (written by gestures, read by the renderer). `framed*` are the values at framing
@@ -296,13 +365,13 @@ final class SplatViewerModel: ObservableObject {
 
     /// Records the auto-framing computed from the loaded splats.
     func frame(center: SIMD3<Float>, distance: Float, previewCamera: SplatViewerPreviewCamera?) {
-        self.framedCenter = center
         self.previewCamera = previewCamera
+        self.framedCenter = previewCamera?.center ?? center
         if let previewCamera {
             self.azimuth = previewCamera.azimuth
             self.elevation = previewCamera.elevation
             self.distance = previewCamera.distance
-            self.center = center
+            self.center = previewCamera.center
             self.fovyRadians = previewCamera.fovyRadians
             self.framedDistance = previewCamera.distance
             self.framedFovyRadians = previewCamera.fovyRadians

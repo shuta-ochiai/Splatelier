@@ -154,3 +154,41 @@ func orbPipelineMatchBatchEqualsPerPairMatch() {
     #expect(batched[0].count == frames[0].coords.count, "an image matched against itself matches every keypoint")
     #expect(batched.last!.isEmpty)
 }
+
+/// A texture shot 1.5× larger matches the original through the coarse pyramid level, and the
+/// coarse keypoints come back in the larger image's coordinates.
+@Test
+func orbCoarseLevelsMatchAcrossScale() {
+    // The same smooth random texture rendered at two scales (sums of sinusoids, so both are exact).
+    var lcg = TestLCG(seed: 7)
+    let waves = (0..<24).map { _ in (kx: (lcg.next() - 0.5) * 0.9, ky: (lcg.next() - 0.5) * 0.9, phase: lcg.next() * 6.28) }
+    func texture(size: Int, scale: Float) -> MLXArray {
+        var pixels = [Float](repeating: 0, count: size * size)
+        for y in 0..<size {
+            for x in 0..<size {
+                let u = (Float(x) + 0.5) / scale, v = (Float(y) + 0.5) / scale
+                var s: Float = 0
+                for w in waves { s += sin(w.kx * u + w.ky * v + w.phase) }
+                pixels[y * size + x] = 0.5 + 0.08 * s
+            }
+        }
+        return MLXArray(pixels, [size, size])
+    }
+    let small = texture(size: 160, scale: 1)
+    let large = texture(size: 240, scale: 1.5)
+
+    let a = ORBPipeline.extract(luma: small, fastThreshold: 0.03, maxKeypoints: 400)
+    let b = ORBPipeline.extractCoarseLevels(luma: large, fastThreshold: 0.03, maxKeypoints: 400, levels: 1)
+    #expect(a.coords.count > 20 && b.coords.count > 20, "keypoints \(a.coords.count) / \(b.coords.count)")
+    #expect(b.coords.allSatisfy { $0.x >= 0 && $0.x < 240 && $0.y >= 0 && $0.y < 240 },
+            "coarse keypoints are in the large image's coordinates")
+
+    let matches = ORBPipeline.match(a: a, b: b, loweRatio: 0.8)
+    // The same texture point: (index + 0.5) × 1.5 − 0.5 in the large image.
+    let errors = matches.map { m -> Float in
+        let p = a.coords[m.queryIdx], q = b.coords[m.trainIdx]
+        return hypot((Float(p.x) + 0.5) * 1.5 - 0.5 - Float(q.x), (Float(p.y) + 0.5) * 1.5 - 0.5 - Float(q.y))
+    }.sorted()
+    #expect(matches.count >= 10, "only \(matches.count) matches across scale")
+    #expect((errors.isEmpty ? .infinity : errors[errors.count / 2]) <= 2, "median position error \(errors.isEmpty ? -1 : errors[errors.count / 2]) px")
+}
