@@ -402,14 +402,23 @@ final class TrainingViewModel: ObservableObject {
                     + "disc-init uncapped, coarse 1/\(CaptureTraining.AppPreset.coarseToFineFactor), strategy Hybrid")
                 let geometry = CaptureTraining.prepareGeometry(scene: captured, log: logHandler)
                 geometryCache.geometry = geometry
+                // Unattended A/B runs launched with devicectl can override the resolution plan:
+                // SPLATELIER_FINAL_FRAC=<fraction> of the iterations at the captured resolution
+                // (0: none) and SPLATELIER_TILE=<px> for the rasterizer tiles.
+                let env = ProcessInfo.processInfo.environment
+                let finalResample = env["SPLATELIER_FINAL_FRAC"].flatMap { Float($0) }
+                    .map { $0 > 0 ? ($0, 1, 1) : nil } ?? CaptureTraining.AppPreset.finalResample
+                let tileSize = env["SPLATELIER_TILE"].flatMap { Int($0) } ?? CaptureTraining.AppPreset.tileSize
                 let result = try CaptureTraining.train(
                     geometry: geometry,
                     iterations: effectiveIterations,
+                    tileSize: tileSize,
                     strategy: strategy,
                     // The rest is the default, the app's configuration (AppPreset / MVSMode).
                     // Start from 5/6 of the cap (actual init = min(seed point count, that)); edge
                     // splits grow it to the cap.
                     maxInitGaussians: initCap,
+                    finalResample: finalResample,
                     outputPLY: plyURL,
                     thumbnailPNG: thumbURL,
                     // Always save the pre-training seed point cloud + camera poses to a PLY for

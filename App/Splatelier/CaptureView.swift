@@ -87,6 +87,7 @@ struct CaptureView: View {
         .onAppear {
             checkForRecoverableDataset()
             refreshValidationSets()
+            startAutoTrainingIfRequested()
             // Compile the shaders for the splat display during capture ahead of time (so the first
             // capture start does not wait)
             CaptureSurfelRenderer.prewarm()
@@ -648,8 +649,19 @@ struct CaptureView: View {
         validationSets = out.sorted { $0.modifiedAt > $1.modifiedAt }
     }
 
+    /// For unattended runs launched with `devicectl … --environment-variables`:
+    /// SPLATELIER_AUTOTRAIN=<file or display name of a validation dataset> loads it and starts
+    /// training, as tapping it in the list and then Start training would.
+    private func startAutoTrainingIfRequested() {
+        guard trainer == nil, loadingValidationURL == nil,
+              let key = ProcessInfo.processInfo.environment["SPLATELIER_AUTOTRAIN"], !key.isEmpty,
+              let entry = validationSets.first(where: { $0.url.lastPathComponent.contains(key) || $0.name == key })
+        else { return }
+        loadValidationDataset(entry.url, startTraining: true)
+    }
+
     /// Load a validation dataset in the background and open the training panel for it.
-    private func loadValidationDataset(_ url: URL) {
+    private func loadValidationDataset(_ url: URL, startTraining: Bool = false) {
         guard loadingValidationURL == nil else { return }
         loadingValidationURL = url
         Task.detached {
@@ -661,6 +673,7 @@ struct CaptureView: View {
                     startStoredTraining(
                         scene: scene, url: url, preserve: true,
                         name: CaptureMetadataName.load(for: url) ?? "")
+                    if startTraining { trainer?.start() }
                 }
             } catch {
                 await MainActor.run {
