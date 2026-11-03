@@ -68,3 +68,54 @@ func loopClosureEmptyForLinearPan() {
     #expect(!cands.contains { $0.a == 0 && $0.b == n - 1 },
             "linear pan endpoints are far apart; (0, n-1) must not be a candidate")
 }
+
+/// Bitset of the point indices in `indices`, for `covisibleLoopClosureCandidates`.
+private func bits(_ indices: Range<Int>, total: Int) -> [UInt64] {
+    var b = [UInt64](repeating: 0, count: (total + 63) / 64)
+    for i in indices { b[i / 64] |= 1 << UInt64(i % 64) }
+    return b
+}
+
+/// A capture that starts with frames seeing one part of the scene from far back, looks elsewhere,
+/// and comes back to it from close up: the camera-distance candidates miss the return, the
+/// co-visibility candidates find it, and a frame's partners are spread over the passes.
+@Test
+func covisibleLoopClosurePairsFramesThatSeeTheSamePoints() {
+    let n = 120, total = 300
+    // Frames 0-19 stand 2 m back and see points 0-99; 20-79 see 100-299; 80-119 stand close and
+    // see points 0-99 again. All face +z.
+    let vms = (0..<n).map { i -> [Float] in
+        let z: Float = i < 20 ? -2 : (i >= 80 ? 0 : -1)
+        return [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, -z, 0, 0, 0, 1]
+    }
+    let visible = (0..<n).map { i in i < 20 || i >= 80 ? bits(0..<100, total: total) : bits(100..<300, total: total) }
+
+    let byDistance = CaptureBA.loopClosureCandidates(viewmats: vms)
+    #expect(!byDistance.contains { $0.a < 20 && $0.b >= 80 }, "camera distance should miss the return from close up")
+
+    let cands = CaptureBA.covisibleLoopClosureCandidates(viewmats: vms, visible: visible)
+    #expect(cands.contains { $0.a < 20 && $0.b >= 80 }, "frames seeing the same points should pair")
+    #expect(!cands.contains { ($0.a < 20 || $0.a >= 80) && ($0.b >= 20 && $0.b < 80) },
+            "frames that share no points must not pair")
+    #expect(cands.allSatisfy { $0.b - $0.a >= 30 }, "partners are at least minGap frames away")
+    for a in Set(cands.map(\.a)) {
+        let partners = cands.filter { $0.a == a }.map(\.b).sorted()
+        #expect(partners.count <= 6)
+        #expect(zip(partners, partners.dropFirst()).allSatisfy { $1 - $0 >= 30 },
+                "frame \(a)'s partners \(partners) should be spread over the capture")
+    }
+}
+
+/// Frames facing away from each other do not pair even when they share points.
+@Test
+func covisibleLoopClosureSkipsOppositeViews() {
+    let n = 80, total = 64
+    let vms = (0..<n).map { i -> [Float] in
+        let s: Float = i < 40 ? 1 : -1   // the second half faces -z
+        return [s, 0, 0, 0, 0, 1, 0, 0, 0, 0, s, 0, 0, 0, 0, 1]
+    }
+    let visible = (0..<n).map { _ in bits(0..<64, total: total) }
+    let cands = CaptureBA.covisibleLoopClosureCandidates(viewmats: vms, visible: visible)
+    #expect(!cands.isEmpty, "frames facing the same way should pair")
+    #expect(cands.allSatisfy { ($0.a < 40) == ($0.b < 40) }, "opposite views must not pair: \(cands)")
+}
