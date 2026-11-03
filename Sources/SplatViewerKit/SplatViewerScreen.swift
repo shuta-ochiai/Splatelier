@@ -3,7 +3,7 @@
 //
 // Public entry point. SwiftUI screen that shows a trained PLY (any format SplatIO can read) with an
 // orbit camera. The seed point cloud, capture cameras and mesh (OBJ) can be overlaid in the same
-// scene and toggled from the "Display" menu, where the trained background can be hidden and the mesh
+// scene and toggled from the "Display" row, where the trained background can be hidden and the mesh
 // switched to shaded. The "Measure" button at the bottom enters measure mode to measure the distance
 // between 2 tapped points. Double tap (double click on macOS) zooms in, making that point the center
 // of rotation.
@@ -43,6 +43,7 @@ public struct SplatViewerScreen: View {
     @State private var showHint = false
     @State private var showTrainMoreConfirm = false
     @State private var showEditOptions = false
+    @State private var showDisplayOptions = false
     @State private var showColorHelp = false
     @State private var showCropHelp = false
     @State private var showFloaterHelp = false
@@ -333,67 +334,75 @@ public struct SplatViewerScreen: View {
                     SplatViewerColorPanel(model: model) { model.isColoring = false }
                         .padding(.bottom, 4)
                 }
+                if hasDisplayOptions && showDisplayOptions {
+                    displayOptions
+                }
                 bottomBar
                     .padding(.horizontal, 12).padding(.vertical)
             }
         }
     }
 
-    /// Display options (layer visibility, mesh appearance) in one menu, so the bottom edge doesn't
-    /// fill up with a row of toggles. Background and Shading sit in their parent layer's section and are disabled (not hidden)
-    /// while that layer is off, so rows don't jump. The menu stays open after each pick, letting
-    /// several layers be switched in one go.
-    private var displayMenu: some View {
-        Menu {
+    /// Display reveals a row of layer switches just above the bottom bar rather than a Menu: a Menu
+    /// covers the view, so a switch couldn't be seen taking effect.
+    private var displayButton: some View {
+        toggleCapsule("Display", systemImage: "eye", isOn: showDisplayOptions) {
+            showDisplayOptions.toggle()
+        }
+    }
+
+    /// One line of layer switches, so the model stays in view while they are flipped. It scrolls
+    /// sideways when it doesn't fit and is centered when it does. Background and Shaded are disabled
+    /// (not hidden) while their layer is off, so the switches don't move.
+    private var displayOptions: some View {
+        let row = HStack(spacing: 6) {
             if model.hasGS {
-                Section("Gaussian splats") {
-                    Toggle(isOn: $model.showGS) { Label("Splats", systemImage: "cube.fill") }
-                    if model.hasBackground {
-                        Toggle(isOn: $model.showBackground) { Label("Background", systemImage: "globe") }
-                            .disabled(!model.showGS)
+                toggleCapsule("Splats", systemImage: "cube.fill", isOn: model.showGS) {
+                    model.showGS.toggle()
+                }
+                if model.hasBackground {
+                    toggleCapsule("Background", systemImage: "globe", isOn: model.showBackground) {
+                        model.showBackground.toggle()
                     }
+                    .disabled(!model.showGS)
+                    .opacity(model.showGS ? 1 : 0.4)
                 }
             }
             if model.hasMesh {
-                Section("Mesh") {
-                    Toggle(isOn: $model.showMesh) { Label("Mesh", systemImage: "triangle") }
-                    Picker(selection: $model.meshShaded) {
-                        Label("Vertex colors", systemImage: "paintpalette").tag(false)
-                        Label("Shaded", systemImage: "light.max").tag(true)
-                    } label: {
-                        Text("Appearance")
-                    }
-                    .pickerStyle(.inline)
-                    .disabled(!model.showMesh)
+                if model.hasGS { displayDivider }
+                toggleCapsule("Mesh", systemImage: "triangle", isOn: model.showMesh) {
+                    model.showMesh.toggle()
                 }
+                toggleCapsule("Shaded", systemImage: "light.max", isOn: model.meshShaded) {
+                    model.meshShaded.toggle()
+                }
+                .disabled(!model.showMesh)
+                .opacity(model.showMesh ? 1 : 0.4)
             }
             if model.hasSeed || model.hasCameraMarkers {
-                Section("Capture") {
-                    if model.hasSeed {
-                        Toggle(isOn: $model.showSeed) { Label("Seed points", systemImage: "circle.grid.3x3.fill") }
+                if model.hasGS || model.hasMesh { displayDivider }
+                if model.hasSeed {
+                    toggleCapsule("Seed points", systemImage: "circle.grid.3x3.fill", isOn: model.showSeed) {
+                        model.showSeed.toggle()
                     }
-                    if model.hasCameraMarkers {
-                        Toggle(isOn: $model.showCameraMarkers) { Label("Cameras", systemImage: "camera.fill") }
+                }
+                if model.hasCameraMarkers {
+                    toggleCapsule("Cameras", systemImage: "camera.fill", isOn: model.showCameraMarkers) {
+                        model.showCameraMarkers.toggle()
                     }
                 }
             }
-        } label: {
-            Label("Display", systemImage: "eye")
-                .font(.caption)
-                .padding(.horizontal, 10).padding(.vertical, 6)
-                .background(.ultraThinMaterial, in: Capsule())
         }
-        #if os(iOS)
-        // Stay open after each pick, so several layers can be switched at once.
-        .menuActionDismissBehavior(.disabled)
-        // Opening upward from the bottom bar, iOS would otherwise flip the sections bottom-up.
-        .menuOrder(.fixed)
-        #endif
-        #if os(macOS)
-        .menuStyle(.button)
-        .menuIndicator(.hidden)
-        #endif
-        .buttonStyle(.plain)
+        .padding(.horizontal, 12)
+        return ViewThatFits(in: .horizontal) {
+            row
+            ScrollView(.horizontal, showsIndicators: false) { row }
+        }
+    }
+
+    /// Separates the splat, mesh and capture groups in the Display row.
+    private var displayDivider: some View {
+        Divider().frame(height: 16)
     }
 
     /// Bottom edge: Display, Edit, Measure and Reset, centered. The splat and triangle counts are
@@ -403,11 +412,15 @@ public struct SplatViewerScreen: View {
             .frame(maxWidth: .infinity)
     }
 
-    /// Display and Edit menus, measure-mode toggle and Reset.
+    private var hasDisplayOptions: Bool {
+        model.hasGS || model.hasSeed || model.hasCameraMarkers || model.hasMesh
+    }
+
+    /// Display and Edit buttons, measure-mode toggle and Reset.
     private var trailingControls: some View {
         HStack(spacing: 6) {
-            if model.hasGS || model.hasSeed || model.hasCameraMarkers || model.hasMesh {
-                displayMenu
+            if hasDisplayOptions {
+                displayButton
             }
             toggleCapsule("Measure", systemImage: "ruler", isOn: model.isMeasuring) {
                 model.isMeasuring.toggle()
