@@ -204,7 +204,8 @@ final class SplatViewerModel: ObservableObject {
     @Published var isCropping = false {
         didSet {
             if isCropping { isMeasuring = false; isColoring = false; isRemovingFloaters = false }
-            else { cropProjection.setLasso([]); onLassoClear?() }
+            if !isCropping { cropProjection.setLasso([]) }
+            onCropSelectionRefresh?()
             onNeedsRedraw?()
         }
     }
@@ -239,8 +240,9 @@ final class SplatViewerModel: ObservableObject {
     /// Undo and Reset step through every edit to the kept splats, crops and floater deletes alike.
     var onCropUndo: (() -> Void)?
     var onCropRestore: (() -> Void)?
-    /// Lasso was left: its selection goes.
-    var onLassoClear: (() -> Void)?
+    /// The orange selection of Crop has to be worked out again: Crop opened or closed, or its shape
+    /// changed.
+    var onCropSelectionRefresh: (() -> Void)?
     private var cropNoticeID = 0
 
     /// Changes the shape of the region, keeping its center and size.
@@ -249,7 +251,7 @@ final class SplatViewerModel: ObservableObject {
         cropShape = shape
         cropRegion = cropRegion?.converted(to: shape)
         cropProjection.setLasso([])
-        onLassoClear?()
+        onCropSelectionRefresh?()
     }
 
     func setCropState(edited: Bool, canUndo: Bool, shareItem: SplatViewerShareItem?) {
