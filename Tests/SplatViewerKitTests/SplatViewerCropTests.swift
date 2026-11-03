@@ -138,3 +138,15 @@ func editsApplyUndoAndRestore() {
     #expect(edits.kept == [0, 1, 2, 3, 4])
     #expect(!edits.isEdited && !edits.canUndo)
 }
+
+/// The orange selection of a Box or Sphere is the kept splats inside the region, by their place in
+/// the kept list, not in the loaded splats.
+@Test
+func regionSelectsTheKeptSplatsInside() {
+    let positions: [SIMD3<Float>] = [SIMD3(0, 0, 0), SIMD3(5, 0, 0), SIMD3(0.5, 0.5, 0), SIMD3(9, 9, 9)]
+    let box = SplatViewerCropRegion(shape: .box, center: .zero, halfExtent: SIMD3(1, 1, 1), radius: 1)
+    // Splat 2 and 0 are inside; splat 1 was cropped away already, so it is not in `kept`.
+    let kept: [UInt32] = [0, 2, 3]
+    #expect(box.insideIndices(kept: kept) { positions[Int($0)] } == [0, 1])
+    #expect(box.converted(to: .sphere).insideIndices(kept: kept) { positions[Int($0)] } == [0, 1])
+}

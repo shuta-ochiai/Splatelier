@@ -72,6 +72,14 @@ struct SplatViewerCropRegion: Equatable {
         }
     }
 
+    /// The kept splats inside the region, as indices into `kept`. `position` gives a splat's center
+    /// by its index in the loaded splats.
+    func insideIndices(kept: [UInt32], position: (UInt32) -> SIMD3<Float>) -> Set<Int32> {
+        var inside = Set<Int32>()
+        for i in kept.indices where contains(position(kept[i])) { inside.insert(Int32(i)) }
+        return inside
+    }
+
     /// The same region as the other shape. A box becomes a sphere with its largest half size; a
     /// sphere becomes a box with its radius on every side.
     func converted(to shape: SplatViewerCropShape) -> SplatViewerCropRegion {

@@ -153,7 +153,7 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
         model.onCropApply = { [weak self] in self?.applyCrop() }
         model.onCropUndo = { [weak self] in self?.undoCrop() }
         model.onCropRestore = { [weak self] in self?.restoreCrop() }
-        model.onLassoClear = { [weak self] in self?.clearLassoSelection() }
+        model.onCropSelectionRefresh = { [weak self] in self?.refreshCropSelection() }
         model.onColorGradeApply = { [weak self] grade in self?.applyColorGrade(grade) }
         model.onFloaterModeChange = { [weak self] in self?.floaterModeChanged(isOn: $0) }
         model.onFloaterDetect = { [weak self] in self?.detectFloaters() }
@@ -525,7 +525,10 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
     }
 
     func endCropDrag() {
-        activeCropHandle = nil
+        if activeCropHandle != nil {
+            activeCropHandle = nil
+            refreshCropSelection()
+        }
         if lassoTouch != nil {
             lassoTouch = nil
             // A scribble that encloses nothing is dropped; a loop turns into a selection.
@@ -577,10 +580,21 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
         commitEdits()
     }
 
-    /// Lets the Lasso selection go, when Lasso is left (another shape, or Crop closed).
-    private func clearLassoSelection() {
-        guard isLoaded, !model.isRemovingFloaters, !floaterSelection.isEmpty else { return }
-        floaterSelection = []
+    /// The selection Crop shows in orange: for Box and Sphere, the kept splats inside the region;
+    /// for Lasso none until a loop is drawn (so none when Lasso is picked, or Crop is closed).
+    private func cropSelection() -> Set<Int32> {
+        guard model.isCropping, model.cropShape != .lasso, let region = model.cropRegion else { return [] }
+        let source = gsSourcePoints
+        return region.insideIndices(kept: cropEdits.kept) { source[Int($0)].position }
+    }
+
+    /// Paints the selection again after the region was let go of, the shape changed, or Crop was
+    /// opened or closed. Floater mode keeps its own selection.
+    private func refreshCropSelection() {
+        guard isLoaded, !model.isRemovingFloaters else { return }
+        let selection = cropSelection()
+        guard selection != floaterSelection else { return }
+        floaterSelection = selection
         commitEdits()
     }
 
@@ -602,6 +616,7 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
     private func commitCropEdits() {
         keptChanged()
         floaterUndo = []
+        floaterSelection = cropSelection()
         commitEdits()
     }
 
