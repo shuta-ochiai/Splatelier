@@ -53,6 +53,9 @@ struct ThermalGovernor {
         TrainingDriver.simulatedThermalState ?? ProcessInfo.processInfo.thermalState
     }
 
+    /// serious or critical: the device is shedding heat, so expensive work should wait.
+    var isHot: Bool { thermalState == .serious || thermalState == .critical }
+
     private mutating func notify(_ s: ThermalThrottleState) {
         guard s != notified else { return }
         notified = s

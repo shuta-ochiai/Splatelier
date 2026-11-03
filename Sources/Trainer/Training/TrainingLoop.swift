@@ -36,6 +36,11 @@ extension TrainingDriver {
         // Resolution factor num/den for the fine phase (from coarseUntil on) (default (1,1) = full,
         // e.g. (2,3)).
         fineResample: (num: Int, den: Int) = (1, 1),
+        // The last `fraction` of the iterations at num/den instead of `fineResample` (e.g. the
+        // captured resolution at the end of a run whose fine phase is 2/3). Steps taken while the
+        // device is serious or critical stay at `fineResample`, so the costlier steps do not add to
+        // the heat. nil: none.
+        finalResample: (fraction: Float, num: Int, den: Int)? = nil,
         // Bring the SH degree warm-up forward (half the interval), so even short runs learn
         // view-dependent color.
         useEarlySH: Bool = false,
@@ -158,6 +163,13 @@ extension TrainingDriver {
                 + "(\(iterations - coarseUntil) iters at "
                 + (fineResample.num < fineResample.den ? "fine-resample" : "full res") + ")")
         }
+        let finalFrom = finalResample.map {
+            iterations - Int(Float(iterations) * Swift.min(1, Swift.max(0, $0.fraction)))
+        } ?? iterations
+        if let f = finalResample, finalFrom < iterations, let v0 = views.first {
+            let fw = v0.camera.width / f.den * f.num, fh = v0.camera.height / f.den * f.num
+            log("final phase: iter [\(finalFrom)..<\(iterations)] at \(f.num)/\(f.den) → \(fw)x\(fh)")
+        }
         if fineResample.num < fineResample.den, let v0 = views.first {
             let fw = v0.camera.width / fineResample.den * fineResample.num
             let fh = v0.camera.height / fineResample.den * fineResample.num
@@ -190,6 +202,7 @@ extension TrainingDriver {
         var lastPreviewAt = Date.distantPast
         var previewsSent = 0
         var thermal = ThermalGovernor(seriousThrottleFactor: seriousThrottleFactor, onChange: onThermalThrottle)
+        var finalHeldBack = false
         for it in 0..<iterations {
             thermal.beforeStep(iteration: it, lastStepSeconds: lastStepSeconds, log: log)
             // Enable diagnostics only on steps that log (every step would add sync barriers).
@@ -214,6 +227,18 @@ extension TrainingDriver {
             let v = views[viewIndex]
             let fitGain = photometricGains != nil && it >= gainStart
             let cf = it < coarseUntil ? coarseToFineFactor : 1
+            var fine = fineResample
+            if it >= finalFrom, let f = finalResample {
+                if thermal.isHot {
+                    if !finalHeldBack {
+                        log("[thermal] hot → final-phase steps stay at \(fineResample.num)/\(fineResample.den) (iter \(it))")
+                        finalHeldBack = true
+                    }
+                } else {
+                    fine = (f.num, f.den)
+                    finalHeldBack = false
+                }
+            }
             // The coarse phase box-averages the uint8 v.image directly (no full-res float32); the
             // fine phase uses fineResample.
             let stepCamera: Camera
@@ -224,10 +249,10 @@ extension TrainingDriver {
                 stepCamera = coarseCamera(v.camera, factor: cf)
                 stepTarget = coarseDownsample(v.image, factor: cf)
                 stepToFullRes = Float(cf)
-            } else if fineResample.num < fineResample.den {
-                stepCamera = coarseCameraScaled(v.camera, num: fineResample.num, den: fineResample.den)
-                stepTarget = resampleRational(v.image, num: fineResample.num, den: fineResample.den)
-                stepToFullRes = Float(fineResample.den) / Float(fineResample.num)
+            } else if fine.num < fine.den {
+                stepCamera = coarseCameraScaled(v.camera, num: fine.num, den: fine.den)
+                stepTarget = resampleRational(v.image, num: fine.num, den: fine.den)
+                stepToFullRes = Float(fine.den) / Float(fine.num)
             } else {
                 stepCamera = v.camera
                 stepTarget = v.imageFloat   // full-res (uint8→float[0,1])

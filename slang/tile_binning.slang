@@ -313,3 +313,94 @@ void tile_lower_bound(uint3 tid : SV_DispatchThreadID)
     }
     tile_offsets[t] = lo;
 }
+
+// ---- 4. Split 16-px tiles into 8-px tiles --------------------------------------
+// Sorting the pairs is the costly part of binning, and 8-px tiles have about 2.3× the pairs of
+// 16-px ones; 8-px tiles rasterize at about 60% of the cost, since a small Gaussian's tile then
+// costs 64 pixels instead of 256. So the pairs are sorted for 16-px tiles and each tile's list is
+// split into its four 8-px quadrants, in order (the depth order carries over): tile_split_mask
+// marks the quadrants each pair covers (the same ellipse-and-band test as the scanline count, on
+// 8-px rows), MLX counts and offsets them (cumsum), and tile_split_scatter writes the lists.
+
+StructuredBuffer<int>   sp_flatten;      // [n16] Gaussian index per pair, sorted
+StructuredBuffer<int>   sp_tile;         // [n16] 16-px tile of each pair
+StructuredBuffer<float> sp_means2d;      // [N, 2]
+StructuredBuffer<int>   sp_radii;        // [N, 2]
+StructuredBuffer<float> sp_conics;       // [N, 3]
+StructuredBuffer<float> sp_opacities;    // [N]
+StructuredBuffer<int>   sp_dims;         // [4] : numTilesX16, n16, numTilesX8, numTilesY8
+
+RWStructuredBuffer<int> sp_mask;         // [4, n16] 1 where pair k covers quadrant q = qy·2 + qx
+
+[shader("compute")]
+[numthreads(256, 1, 1)]
+void tile_split_mask(uint3 tid : SV_DispatchThreadID)
+{
+    int k = int(tid.x);
+    if (k >= sp_dims[1]) { return; }
+    int numTilesX16 = sp_dims[0];
+    int numTilesX8 = sp_dims[2];
+    int numTilesY8 = sp_dims[3];
+    int gi = sp_flatten[k];
+    int t = sp_tile[k];
+    int tx = t % numTilesX16;
+    int ty = t / numTilesX16;
+
+    float px = sp_means2d[gi * 2 + 0];
+    float py = sp_means2d[gi * 2 + 1];
+    int rx = sp_radii[gi * 2 + 0];
+    int ry = sp_radii[gi * 2 + 1];
+    float ca = sp_conics[gi * 3 + 0];
+    float cb = sp_conics[gi * 3 + 1];
+    float cc = sp_conics[gi * 3 + 2];
+    float rr = ellipse_rr(sp_opacities[gi]);
+    int xMin = max(0, int(floor((px - float(rx)) / 8.0)));
+    int xMax = min(numTilesX8 - 1, int(floor((px + float(rx)) / 8.0)));
+    int yMin = max(0, int(floor((py - float(ry)) / 8.0)));
+    int yMax = min(numTilesY8 - 1, int(floor((py + float(ry)) / 8.0)));
+
+    [unroll] for (int qy = 0; qy < 2; ++qy) {
+        int row = ty * 2 + qy;
+        int2 r = int2(1, 0);
+        if (row >= yMin && row <= yMax) {
+            r = scanline_tile_range(row, true, px, py, ca, cb, cc, rr, rx, ry, 8, xMin, yMin, xMax, yMax);
+        }
+        [unroll] for (int qx = 0; qx < 2; ++qx) {
+            int col = tx * 2 + qx;
+            sp_mask[(qy * 2 + qx) * sp_dims[1] + k] = (col >= r.x && col <= r.y) ? 1 : 0;
+        }
+    }
+}
+
+StructuredBuffer<int> ss_flatten;        // [n16]
+StructuredBuffer<int> ss_tile;           // [n16]
+StructuredBuffer<int> ss_mask;           // [4, n16]
+StructuredBuffer<int> ss_rank;           // [4, n16] exclusive cumsum of the mask over all pairs
+StructuredBuffer<int> ss_tile_start;     // [numTiles16] first pair of each 16-px tile
+StructuredBuffer<int> ss_offsets8;       // [numTiles8 + 1] start of each 8-px tile's list
+StructuredBuffer<int> ss_dims;           // [3] : numTilesX16, n16, numTilesX8
+
+RWStructuredBuffer<int> ss_flatten8;     // [4 · n16] (upper bound; ss_offsets8 tells the used part)
+
+[shader("compute")]
+[numthreads(256, 1, 1)]
+void tile_split_scatter(uint3 tid : SV_DispatchThreadID)
+{
+    int k = int(tid.x);
+    if (k >= ss_dims[1]) { return; }
+    int numTilesX16 = ss_dims[0];
+    int numTilesX8 = ss_dims[2];
+    int t = ss_tile[k];
+    int tx = t % numTilesX16;
+    int ty = t / numTilesX16;
+    int start = ss_tile_start[t];
+    int gi = ss_flatten[k];
+    [unroll] for (int q = 0; q < 4; ++q) {
+        int n16 = ss_dims[1];
+        if (ss_mask[q * n16 + k] != 0) {
+            int t8 = (ty * 2 + q / 2) * numTilesX8 + tx * 2 + q % 2;
+            int pos = ss_offsets8[t8] + ss_rank[q * n16 + k] - ss_rank[q * n16 + start];
+            ss_flatten8[pos] = gi;
+        }
+    }
+}
