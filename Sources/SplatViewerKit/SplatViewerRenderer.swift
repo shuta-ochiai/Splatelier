@@ -191,64 +191,31 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
     func load(_ url: URL?, seedURL: URL?, meshURL: URL? = nil) {
         guard !didLoad, let renderer else { return }
         didLoad = true
+        let device = self.device
+        let cropShape = model.cropShape
         Task { [weak self] in
             do {
-                // Sidecars name how many splats at the end of the PLY are camera markers
-                // (seedmeta; seed PLY order is scene point cloud → camera markers) and background
-                // (background; GS PLY order is foreground → background). Splits them off.
-                func read(_ u: URL) async throws -> ReadSplats {
-                    let raw = try await Task.detached(priority: .userInitiated) {
-                        try await AutodetectSceneReader(u).readAll()
-                    }.value
-                    func finite(_ ps: ArraySlice<SplatPoint>) -> [SplatPoint] {
-                        ps.filter { $0.position.x.isFinite && $0.position.y.isFinite && $0.position.z.isFinite }
-                    }
-                    let camCount = Self.trailingSplatCount(siblingOf: u, sidecar: "seedmeta", key: .camera)
-                    let camSplit = (camCount > 0 && camCount < raw.count) ? (raw.count - camCount) : raw.count
-                    let bgCount = Self.trailingSplatCount(siblingOf: u, sidecar: "background", key: .background)
-                    let bgSplit = (bgCount > 0 && bgCount < camSplit) ? (camSplit - bgCount) : camSplit
-                    return ReadSplats(
-                        scene: finite(raw[0..<bgSplit]),
-                        background: finite(raw[bgSplit..<camSplit]),
-                        camera: finite(raw[camSplit...]))
-                }
-
-                var main = ReadSplats()
-                if let url {
-                    main = try await read(url)
-                }
-                var seed = ReadSplats()
-                if let seedURL {
-                    seed = try await read(seedURL)
-                }
-                var mesh: LoadedMesh?
-                var meshError: Error?
-                if let meshURL {
-                    do {
-                        mesh = try await Task.detached(priority: .userInitiated) {
-                            try OBJMeshLoader.load(meshURL)
-                        }.value
-                    } catch {
-                        meshError = error
-                    }
-                }
+                // Everything that grows with the splat count runs off the main actor: for a large
+                // scene it takes seconds on a phone, and the push into the viewer froze meanwhile.
+                let scene = try await Task.detached(priority: .userInitiated) {
+                    try await Self.prepare(
+                        url: url, seedURL: seedURL, meshURL: meshURL, device: device, cropShape: cropShape)
+                }.value
                 guard let self else { return }
 
-                let gsPoints = main.scene
-                // Without a foreground there is nothing for it to sit behind.
-                let backgroundPoints = gsPoints.isEmpty ? [] : main.background
-                let seedPoints = seed.scene
-                // Camera markers are normally only on the seed side, but allow both.
-                let cameraPoints = main.camera + seed.camera
+                let gsPoints = scene.gs.points
+                let backgroundPoints = scene.background.points
+                let seedPoints = scene.seed.points
+                let cameraPoints = scene.camera.points
+                var meshError = scene.meshError
                 self.gsSourcePoints = gsPoints
                 self.backgroundSourcePoints = backgroundPoints
                 self.cropEdits = SplatViewerCropEdits(count: gsPoints.count)
                 self.sourceName = url?.deletingPathExtension().lastPathComponent ?? "splats"
-                if !gsPoints.isEmpty {
-                    self.model.cropRegion = SplatViewerCropRegion.initial(
-                        shape: self.model.cropShape, positions: gsPoints.map(\.position))
+                if let cropRegion = scene.cropRegion {
+                    self.model.cropRegion = cropRegion
                 }
-                if let mesh {
+                if let mesh = scene.mesh {
                     do {
                         self.meshLayer = try SplatViewerMeshLayer(
                             device: self.device, mesh: mesh,
@@ -269,33 +236,27 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
                 }
 
                 // Framing uses whichever exists, in the order GS → seed + cameras → mesh.
-                let splatFramePoints = !gsPoints.isEmpty ? gsPoints : (seedPoints + cameraPoints)
-                let (center, distance) = if let layer = self.meshLayer, splatFramePoints.isEmpty {
-                    (layer.center, framingDistance(radius: layer.radius))
-                } else {
-                    boundingFrame(splatFramePoints)
-                }
+                let (center, distance) = scene.splatFrame
+                    ?? self.meshLayer.map { ($0.center, framingDistance(radius: $0.radius)) }
+                    ?? (SIMD3<Float>(0, 0, 0), 4)
                 let previewCamera = url.flatMap {
                     SplatViewerPreviewCamera.load(siblingOf: $0, center: center, defaultDistance: distance)
                 }
                 self.model.frame(center: center, distance: distance, previewCamera: previewCamera)
 
-                if !gsPoints.isEmpty {
-                    let chunk = try SplatChunk(device: self.device, from: gsPoints)
+                if let chunk = scene.gs.chunk {
                     self.gsChunkID = await renderer.addChunk(chunk)
                     self.gsChunk = chunk
                 }
-                if !backgroundPoints.isEmpty {
-                    self.backgroundChunkID = await renderer.addChunk(
-                        try SplatChunk(device: self.device, from: backgroundPoints))
+                if let chunk = scene.background.chunk {
+                    self.backgroundChunkID = await renderer.addChunk(chunk)
                 }
-                if !seedPoints.isEmpty {
-                    let chunk = try SplatChunk(device: self.device, from: seedPoints)
+                if let chunk = scene.seed.chunk {
                     self.seedChunkID = await renderer.addChunk(chunk)
                     self.seedChunk = chunk
                 }
-                if !cameraPoints.isEmpty {
-                    self.cameraChunkID = await renderer.addChunk(try SplatChunk(device: self.device, from: cameraPoints))
+                if let chunk = scene.camera.chunk {
+                    self.cameraChunkID = await renderer.addChunk(chunk)
                 }
 
                 // Initially show GS only. Without GS show seed to avoid an empty view, and if
@@ -337,6 +298,82 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
         var scene: [SplatPoint] = []
         var background: [SplatPoint] = []
         var camera: [SplatPoint] = []
+    }
+
+    /// One layer's splats and the chunk built from them (nil when there are none).
+    private struct PreparedSplats: Sendable {
+        let points: [SplatPoint]
+        let chunk: SplatChunk?
+
+        init(_ points: [SplatPoint], device: MTLDevice) throws {
+            self.points = points
+            chunk = points.isEmpty ? nil : try SplatChunk(device: device, from: points)
+        }
+    }
+
+    /// What `load` needs from the files, worked out off the main actor.
+    private struct PreparedScene: Sendable {
+        let gs: PreparedSplats
+        let background: PreparedSplats
+        let seed: PreparedSplats
+        let camera: PreparedSplats
+        let cropRegion: SplatViewerCropRegion?
+        /// Framing of the splats; nil when there are none (the mesh frames the view then).
+        let splatFrame: (center: SIMD3<Float>, distance: Float)?
+        let mesh: LoadedMesh?
+        let meshError: Error?
+    }
+
+    nonisolated private static func prepare(
+        url: URL?, seedURL: URL?, meshURL: URL?, device: MTLDevice, cropShape: SplatViewerCropShape
+    ) async throws -> PreparedScene {
+        // Sidecars name how many splats at the end of the PLY are camera markers (seedmeta; seed
+        // PLY order is scene point cloud → camera markers) and background (background; GS PLY order
+        // is foreground → background). Splits them off.
+        func read(_ u: URL?) async throws -> ReadSplats {
+            guard let u else { return ReadSplats() }
+            let raw = try await AutodetectSceneReader(u).readAll()
+            func finite(_ ps: ArraySlice<SplatPoint>) -> [SplatPoint] {
+                ps.filter { $0.position.x.isFinite && $0.position.y.isFinite && $0.position.z.isFinite }
+            }
+            let camCount = trailingSplatCount(siblingOf: u, sidecar: "seedmeta", key: .camera)
+            let camSplit = (camCount > 0 && camCount < raw.count) ? (raw.count - camCount) : raw.count
+            let bgCount = trailingSplatCount(siblingOf: u, sidecar: "background", key: .background)
+            let bgSplit = (bgCount > 0 && bgCount < camSplit) ? (camSplit - bgCount) : camSplit
+            return ReadSplats(
+                scene: finite(raw[0..<bgSplit]),
+                background: finite(raw[bgSplit..<camSplit]),
+                camera: finite(raw[camSplit...]))
+        }
+
+        let main = try await read(url)
+        let seed = try await read(seedURL)
+        var mesh: LoadedMesh?
+        var meshError: Error?
+        if let meshURL {
+            do {
+                mesh = try OBJMeshLoader.load(meshURL)
+            } catch {
+                meshError = error
+            }
+        }
+
+        let gsPoints = main.scene
+        // Without a foreground there is nothing for it to sit behind.
+        let backgroundPoints = gsPoints.isEmpty ? [] : main.background
+        // Camera markers are normally only on the seed side, but allow both.
+        let cameraPoints = main.camera + seed.camera
+        let framePoints = !gsPoints.isEmpty ? gsPoints : (seed.scene + cameraPoints)
+        return PreparedScene(
+            gs: try PreparedSplats(gsPoints, device: device),
+            background: try PreparedSplats(backgroundPoints, device: device),
+            seed: try PreparedSplats(seed.scene, device: device),
+            camera: try PreparedSplats(cameraPoints, device: device),
+            cropRegion: gsPoints.isEmpty
+                ? nil : SplatViewerCropRegion.initial(shape: cropShape, positions: gsPoints.map(\.position)),
+            splatFrame: framePoints.isEmpty ? nil : boundingFrame(framePoints),
+            mesh: mesh,
+            meshError: meshError)
     }
 
     private enum TrailingSplatKey: String {
