@@ -266,8 +266,18 @@ final class TrainingViewModel: ObservableObject {
         CaptureMetadataName.save(captureName, for: url)
     }
 
+    /// Launched for an unattended run (`SPLATELIER_AUTOTRAIN`): no naming popup; the capture is
+    /// named after its resolution plan instead.
+    private let unattended = ProcessInfo.processInfo.environment["SPLATELIER_AUTOTRAIN"] != nil
+
     func start() {
         guard case .idle = phase, !isGeneratingMesh else { return }
+        if unattended && captureName.isEmpty {
+            let env = ProcessInfo.processInfo.environment
+            let tile = env["SPLATELIER_TILE"] ?? "\(CaptureTraining.AppPreset.tileSize)"
+            let final = env["SPLATELIER_FINAL_FRAC"] ?? "\(CaptureTraining.AppPreset.finalResample?.fraction ?? 0)"
+            captureName = "auto \(tile)px final \(final)"
+        }
         phase = .running(iter: 0, latestLoss: nil)
         elapsedSec = 0
         peakMemoryBytes = 0
@@ -402,14 +412,23 @@ final class TrainingViewModel: ObservableObject {
                     + "disc-init uncapped, coarse 1/\(CaptureTraining.AppPreset.coarseToFineFactor), strategy Hybrid")
                 let geometry = CaptureTraining.prepareGeometry(scene: captured, log: logHandler)
                 geometryCache.geometry = geometry
+                // Unattended A/B runs launched with devicectl can override the resolution plan:
+                // SPLATELIER_FINAL_FRAC=<fraction> of the iterations at the captured resolution
+                // (0: none) and SPLATELIER_TILE=<px> for the rasterizer tiles.
+                let env = ProcessInfo.processInfo.environment
+                let finalResample = env["SPLATELIER_FINAL_FRAC"].flatMap { Float($0) }
+                    .map { $0 > 0 ? ($0, 1, 1) : nil } ?? CaptureTraining.AppPreset.finalResample
+                let tileSize = env["SPLATELIER_TILE"].flatMap { Int($0) } ?? CaptureTraining.AppPreset.tileSize
                 let result = try CaptureTraining.train(
                     geometry: geometry,
                     iterations: effectiveIterations,
+                    tileSize: tileSize,
                     strategy: strategy,
                     // The rest is the default, the app's configuration (AppPreset / MVSMode).
                     // Start from 5/6 of the cap (actual init = min(seed point count, that)); edge
                     // splits grow it to the cap.
                     maxInitGaussians: initCap,
+                    finalResample: finalResample,
                     outputPLY: plyURL,
                     thumbnailPNG: thumbURL,
                     // Always save the pre-training seed point cloud + camera poses to a PLY for
@@ -419,6 +438,11 @@ final class TrainingViewModel: ObservableObject {
                     onPreview: previewHandler,
                     log: logHandler
                 )
+                // SPLATELIER_BENCH=1 (unattended runs): time the parts of a step on the trained
+                // model into the log.
+                if env["SPLATELIER_BENCH"] == "1", let session = result.session {
+                    TrainingDriver.benchmarkStepStages(session: session, log: logHandler)
+                }
                 try? logHandle?.close()
                 // Completed successfully, so delete the preserved data (validation datasets are
                 // kept). The frames may still read their images from it (meshing, training
@@ -470,7 +494,7 @@ final class TrainingViewModel: ObservableObject {
                         finalLoss: result.lossHistory.last
                     )
                     self.completedPlyURL = plyURL
-                    self.needsNamePrompt = true
+                    self.needsNamePrompt = !self.unattended
                     self.generateMesh()
                 }
             } catch {

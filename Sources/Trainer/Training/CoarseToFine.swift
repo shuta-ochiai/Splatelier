@@ -33,7 +33,7 @@ extension TrainingDriver {
     /// transposed copies and no full-res float32. It runs every step (the step target), and the
     /// earlier matmul formulation cost several times the GPU energy while being accurate only to
     /// ~1e-3 (float32 matmul on the GPU).
-    static func resampleRational(_ img: MLXArray, num: Int, den: Int) -> MLXArray {
+    public static func resampleRational(_ img: MLXArray, num: Int, den: Int) -> MLXArray {
         if num >= den { return img.dtype == .uint8 ? img.asType(.float32) / 255.0 : img }
         let h = img.shape[0], w = img.shape[1]
         let hC = (h / den) * den, wC = (w / den) * den
@@ -97,7 +97,7 @@ extension TrainingDriver {
 
     /// Rational-ratio version of coarseCamera (intrinsics and resolution × num/den). Resolution
     /// must follow the same crop rule as resampleRational (width/den*num) so they match.
-    static func coarseCameraScaled(_ cam: Camera, num: Int, den: Int) -> Camera {
+    public static func coarseCameraScaled(_ cam: Camera, num: Int, den: Int) -> Camera {
         Camera(
             viewmat: cam.viewmat, intrinsics: cam.intrinsics * (Float(num) / Float(den)),
             width: cam.width / den * num, height: cam.height / den * num,

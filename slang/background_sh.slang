@@ -118,12 +118,15 @@ void background_sh_fwd(uint3 tid : SV_DispatchThreadID)
     float bs[25];
     bgBasis(dir, deg, bs);
 
-    // The coefficient buffer only holds (deg+1)² bands, so stop at nb (avoids OOB)
+    // The coefficient buffer only holds (deg+1)² bands, so stop at nb (avoids OOB). The loop is
+    // unrolled with a guard rather than bounded by nb: indexing bs with a runtime bound moves it
+    // out of registers.
     uint nb = uint((deg + 1) * (deg + 1));
-    if (nb > 25u) { nb = 25u; }
     float3 bg = float3(0.0, 0.0, 0.0);
-    for (uint b = 0; b < nb; ++b) {
-        bg += bs[b] * float3(coeffs_fwd[b * 3 + 0], coeffs_fwd[b * 3 + 1], coeffs_fwd[b * 3 + 2]);
+    [unroll] for (uint b = 0; b < 25; ++b) {
+        if (b < nb) {
+            bg += bs[b] * float3(coeffs_fwd[b * 3 + 0], coeffs_fwd[b * 3 + 1], coeffs_fwd[b * 3 + 2]);
+        }
     }
 
     float oma = 1.0 - render_alpha[p];
@@ -137,15 +140,17 @@ void background_sh_fwd(uint3 tid : SV_DispatchThreadID)
 }
 
 // ---- Backward (coefficient gradients only) ------------------------------------
-// dL/dcoeff_{b,c} = Σ_px basis_b · vRender_c · (1-alpha). Reduced within each threadgroup and
-// written to partials; the sum across groups is done on the MLX side. dL/dalpha is computed on the
-// MLX side from bg_out.
+// dL/dcoeff_{b,c} = Σ_px basis_b · vRender_c · (1-alpha). Each thread sums its pixels (dims[3] per
+// thread, a threadgroup's pixels interleaved so neighbouring threads read neighbouring pixels),
+// then the sums are reduced within each threadgroup and written to partials; the sum across groups
+// is done on the MLX side. One pixel per thread spent most of the time in the 75 SIMD-group sums.
+// dL/dalpha is computed on the MLX side from bg_out.
 
 StructuredBuffer<float> cot_color_bwd;    // [P, 3]  vRender = dL/dcomposited
 StructuredBuffer<float> render_alpha_bwd; // [P]
 StructuredBuffer<float> viewmat_bwd;      // [16]
 StructuredBuffer<float> intr_bwd;         // [4]
-StructuredBuffer<int> dims_bwd;           // [3]  W, H, degree
+StructuredBuffer<int> dims_bwd;           // [4]  W, H, degree, pixels per thread
 RWStructuredBuffer<float> partials;       // [numGroups, 75]  per-threadgroup partial sums (25 bands × 3)
 
 // Per-simdgroup partial sums (64 threads, at most 4 simdgroups when laneCount >= 16).
@@ -159,13 +164,15 @@ void background_sh_bwd(uint3 tid : SV_DispatchThreadID, uint lidx : SV_GroupInde
     uint H = uint(dims_bwd[1]);
     int  deg = dims_bwd[2];
     uint P = W * H;
-    uint p = tid.x;
-    bool active = (p < P);
+    uint perThread = uint(max(1, dims_bwd[3]));
+    uint groupBase = (tid.x / 64u) * 64u * perThread;   // assumes numthreads(64)
 
     float gsh[75];
     [unroll] for (uint k = 0; k < 75; ++k) { gsh[k] = 0.0; }
 
-    if (active) {
+    for (uint j = 0; j < perThread; ++j) {
+        uint p = groupBase + j * 64u + lidx;
+        if (p >= P) { break; }
         uint x = p % W;
         uint y = p / W;
 
@@ -188,9 +195,9 @@ void background_sh_bwd(uint3 tid : SV_DispatchThreadID, uint lidx : SV_GroupInde
 
         // Bands above deg get bs = 0. The MLX side slices partials to bands*3.
         [unroll] for (uint b = 0; b < 25; ++b) {
-            gsh[b * 3 + 0] = bs[b] * cot.x;
-            gsh[b * 3 + 1] = bs[b] * cot.y;
-            gsh[b * 3 + 2] = bs[b] * cot.z;
+            gsh[b * 3 + 0] += bs[b] * cot.x;
+            gsh[b * 3 + 1] += bs[b] * cot.y;
+            gsh[b * 3 + 2] += bs[b] * cot.z;
         }
     }
 

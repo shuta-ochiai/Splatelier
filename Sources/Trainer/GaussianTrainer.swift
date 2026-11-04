@@ -238,6 +238,11 @@ public final class GaussianTrainer: GaussianParamStore {
         // vAlpha / the alpha loss in backward.
         let composited: MLXArray
         var bgImage: MLXArray? = nil        // [H,W,3]
+        // With STAGE_TIMING the loss is timed in parts (loss_bg / loss_ssim / loss_alpha), each
+        // waited for; loss_eval then only holds what is left.
+        let partTiming = GaussianRenderer.stageTiming
+        var tPart = Date()
+        if partTiming { eval(targetImage); mark("loss_target", since: tPart); tPart = Date() }
         if enableBackgroundSH, let bgK = bgKernels {
             let vm = camera.viewmat.asArray(Float.self)
             let intr = camera.intrinsics.asArray(Float.self)
@@ -262,6 +267,10 @@ public final class GaussianTrainer: GaussianParamStore {
                                    (composited * composited).sum(axes: [0, 1])])
         }
         let predicted = gainArray.map { composited * $0 } ?? composited
+        if partTiming {
+            if let gainFit { eval(predicted, gainFit) } else { eval(predicted) }
+            mark("loss_bg", since: tPart); tPart = Date()
+        }
 
         // Image loss and dL/d(predicted). L1 is closed-form; D-SSIM uses the fused SSIM kernel.
         let target = targetImage
@@ -324,6 +333,7 @@ public final class GaussianTrainer: GaussianParamStore {
         }
 
         let vRender = gainArray.map { vLoss * $0 } ?? vLoss
+        if partTiming { eval(vRender, lossArray); mark("loss_ssim", since: tPart); tPart = Date() }
 
         // Alpha cotangent and bg-SH coefficient gradients. With bg-SH on, ∂final/∂alpha = -bg gives
         // dL/dalpha = -Σ_c(vRender·bg), plus the alpha loss. When off, vAlpha = zeros (cached by
@@ -364,6 +374,10 @@ public final class GaussianTrainer: GaussianParamStore {
                 vAlphaZeroCache[vAlphaKey] = z
                 vAlpha = z
             }
+        }
+        if partTiming {
+            if let dBgCoeffs { eval(vAlpha, lossArrayFinal, dBgCoeffs) } else { eval(vAlpha, lossArrayFinal) }
+            mark("loss_alpha", since: tPart)
         }
         let tLossEval = Date()
         if let gainFit { eval(lossArrayFinal, vRender, vAlpha, gainFit) } else { eval(lossArrayFinal, vRender, vAlpha) }
@@ -437,6 +451,9 @@ public final class GaussianTrainer: GaussianParamStore {
         }
         // Scale cap after the Adam step.
         if maxScale > 0 { model.logScales = MLX.minimum(model.logScales, MLXArray(logMaxScale)) }
+        if GaussianRenderer.stageTiming {
+            eval(model.means, model.quats, model.logScales, model.logitOpacities, model.sh0, model.shN)
+        }
         mark("adam_enqueue", since: tAdam)
 
         return StepOutput(loss: loss, cache: cache)

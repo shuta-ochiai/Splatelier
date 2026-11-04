@@ -45,6 +45,22 @@ extension CaptureTraining {
         /// Fine-phase resolution: 2/3 of the capture = 720×540. It matches full resolution in PSNR
         /// at well under half the energy.
         public static let fineResample: (num: Int, den: Int) = (2, 3)
+        /// The last quarter of the iterations at the captured resolution (1080×810), after the
+        /// fine phase at 2/3, so the Gaussians fit the full-resolution detail: +0.002 held-out SSIM
+        /// on average over four captures (none lower) and -0.05 dB PSNR (one capture -0.17 dB).
+        /// A full-resolution step costs about 1.6× a fine one; with 8-px tiles the run costs about
+        /// the GPU energy of a 16-px-tile run without this phase (+3%), where a whole fine phase at
+        /// full resolution costs 30% more. Starting it earlier, so that the last splits see full
+        /// resolution, did not help. Steps taken while the device is serious stay at the fine
+        /// resolution.
+        public static let finalResample: (fraction: Float, num: Int, den: Int)? = (0.25, 1, 1)
+        /// Rasterizer tile size in pixels. A pair's cost is per pixel of its tile and most Gaussians
+        /// are small, so 8×8 tiles rasterize at about 60% of the cost of 16×16. Their lists are split
+        /// from sorted 16×16 ones (`TileBinning.binSplit`), which keeps the extra pairs out of the
+        /// sort. 15% less GPU energy per run on a Mac than 16×16 tiles at the same held-out PSNR /
+        /// SSIM (within run-to-run noise); on an iPhone 16 Pro the rasterizer is 9-17% faster but a
+        /// whole step only 3-4%, since binning and the sort take about a third of it there.
+        public static let tileSize = 8
         /// Geometric regularization (G³S surface depth with normal consistency and the MVS depth,
         /// every 8 iterations from 30% of training), so the Gaussians' surface depth gives a flat
         /// TSDF mesh (generated after training in the app), at a small cost in GPU energy and held-out PSNR.
