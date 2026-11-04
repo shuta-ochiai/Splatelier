@@ -57,8 +57,9 @@ extension CaptureTraining {
         /// Rasterizer tile size in pixels. A pair's cost is per pixel of its tile and most Gaussians
         /// are small, so 8×8 tiles rasterize at about 60% of the cost of 16×16. Their lists are split
         /// from sorted 16×16 ones (`TileBinning.binSplit`), which keeps the extra pairs out of the
-        /// sort. 15% less GPU energy per run than 16×16 tiles at the same held-out PSNR / SSIM
-        /// (within run-to-run noise).
+        /// sort. 15% less GPU energy per run on a Mac than 16×16 tiles at the same held-out PSNR /
+        /// SSIM (within run-to-run noise); on an iPhone 16 Pro the rasterizer is 9-17% faster but a
+        /// whole step only 3-4%, since binning and the sort take about a third of it there.
         public static let tileSize = 8
         /// Geometric regularization (G³S surface depth with normal consistency and the MVS depth,
         /// every 8 iterations from 30% of training), so the Gaussians' surface depth gives a flat
