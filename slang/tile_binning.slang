@@ -318,89 +318,133 @@ void tile_lower_bound(uint3 tid : SV_DispatchThreadID)
 // Sorting the pairs is the costly part of binning, and 8-px tiles have about 2.3× the pairs of
 // 16-px ones; 8-px tiles rasterize at about 60% of the cost, since a small Gaussian's tile then
 // costs 64 pixels instead of 256. So the pairs are sorted for 16-px tiles and each tile's list is
-// split into its four 8-px quadrants, in order (the depth order carries over): tile_split_mask
-// marks the quadrants each pair covers (the same ellipse-and-band test as the scanline count, on
-// 8-px rows), MLX counts and offsets them (cumsum), and tile_split_scatter writes the lists.
+// split into its four 8-px quadrants, in order (the depth order carries over). One threadgroup
+// takes one 16-px tile: tile_split_count counts the pairs of each quadrant, MLX turns the counts
+// into list offsets (a cumsum over the 8-px tiles), and tile_split_write walks the list again in
+// chunks of 256 and writes each pair to the quadrants it covers, ranked by a prefix sum within the
+// chunk. A pair covers a quadrant when the ellipse reaches one of its 8-px rows' tile columns (the
+// same ellipse-and-band test as the scanline count).
 
-StructuredBuffer<int>   sp_flatten;      // [n16] Gaussian index per pair, sorted
-StructuredBuffer<int>   sp_tile;         // [n16] 16-px tile of each pair
-StructuredBuffer<float> sp_means2d;      // [N, 2]
-StructuredBuffer<int>   sp_radii;        // [N, 2]
-StructuredBuffer<float> sp_conics;       // [N, 3]
-StructuredBuffer<float> sp_opacities;    // [N]
-StructuredBuffer<int>   sp_dims;         // [4] : numTilesX16, n16, numTilesX8, numTilesY8
+static const int SPLIT_GROUP = 256;
 
-RWStructuredBuffer<int> sp_mask;         // [4, n16] 1 where pair k covers quadrant q = qy·2 + qx
-
-[shader("compute")]
-[numthreads(256, 1, 1)]
-void tile_split_mask(uint3 tid : SV_DispatchThreadID)
+// 4-bit mask of the quadrants (bit qy·2 + qx) of 16-px tile (tx, ty) that a Gaussian covers.
+int quadrant_mask(float px, float py, int rx, int ry, float ca, float cb, float cc, float opac,
+                  int tx, int ty, int numTilesX8, int numTilesY8)
 {
-    int k = int(tid.x);
-    if (k >= sp_dims[1]) { return; }
-    int numTilesX16 = sp_dims[0];
-    int numTilesX8 = sp_dims[2];
-    int numTilesY8 = sp_dims[3];
-    int gi = sp_flatten[k];
-    int t = sp_tile[k];
-    int tx = t % numTilesX16;
-    int ty = t / numTilesX16;
-
-    float px = sp_means2d[gi * 2 + 0];
-    float py = sp_means2d[gi * 2 + 1];
-    int rx = sp_radii[gi * 2 + 0];
-    int ry = sp_radii[gi * 2 + 1];
-    float ca = sp_conics[gi * 3 + 0];
-    float cb = sp_conics[gi * 3 + 1];
-    float cc = sp_conics[gi * 3 + 2];
-    float rr = ellipse_rr(sp_opacities[gi]);
+    float rr = ellipse_rr(opac);
     int xMin = max(0, int(floor((px - float(rx)) / 8.0)));
     int xMax = min(numTilesX8 - 1, int(floor((px + float(rx)) / 8.0)));
     int yMin = max(0, int(floor((py - float(ry)) / 8.0)));
     int yMax = min(numTilesY8 - 1, int(floor((py + float(ry)) / 8.0)));
-
+    int mask = 0;
     [unroll] for (int qy = 0; qy < 2; ++qy) {
         int row = ty * 2 + qy;
-        int2 r = int2(1, 0);
-        if (row >= yMin && row <= yMax) {
-            r = scanline_tile_range(row, true, px, py, ca, cb, cc, rr, rx, ry, 8, xMin, yMin, xMax, yMax);
-        }
+        if (row < yMin || row > yMax) { continue; }
+        int2 r = scanline_tile_range(row, true, px, py, ca, cb, cc, rr, rx, ry, 8, xMin, yMin, xMax, yMax);
         [unroll] for (int qx = 0; qx < 2; ++qx) {
             int col = tx * 2 + qx;
-            sp_mask[(qy * 2 + qx) * sp_dims[1] + k] = (col >= r.x && col <= r.y) ? 1 : 0;
+            if (col >= r.x && col <= r.y) { mask |= 1 << (qy * 2 + qx); }
         }
     }
+    return mask;
 }
 
-StructuredBuffer<int> ss_flatten;        // [n16]
-StructuredBuffer<int> ss_tile;           // [n16]
-StructuredBuffer<int> ss_mask;           // [4, n16]
-StructuredBuffer<int> ss_rank;           // [4, n16] exclusive cumsum of the mask over all pairs
-StructuredBuffer<int> ss_tile_start;     // [numTiles16] first pair of each 16-px tile
-StructuredBuffer<int> ss_offsets8;       // [numTiles8 + 1] start of each 8-px tile's list
-StructuredBuffer<int> ss_dims;           // [3] : numTilesX16, n16, numTilesX8
+StructuredBuffer<int>   sc_flatten;      // [n16] Gaussian index per pair, sorted
+StructuredBuffer<int>   sc_offsets;      // [numTiles16 + 1]
+StructuredBuffer<float> sc_means2d;      // [N, 2]
+StructuredBuffer<int>   sc_radii;        // [N, 2]
+StructuredBuffer<float> sc_conics;       // [N, 3]
+StructuredBuffer<float> sc_opacities;    // [N]
+StructuredBuffer<int>   sc_dims;         // [3] : numTilesX16, numTilesX8, numTilesY8
 
-RWStructuredBuffer<int> ss_flatten8;     // [4 · n16] (upper bound; ss_offsets8 tells the used part)
+RWStructuredBuffer<int> sc_counts;       // [numTiles16, 4] pairs per quadrant
+
+groupshared int sc_partial[(SPLIT_GROUP / 32) * 4];
 
 [shader("compute")]
 [numthreads(256, 1, 1)]
-void tile_split_scatter(uint3 tid : SV_DispatchThreadID)
+void tile_split_count(uint3 gid : SV_GroupID, uint lidx : SV_GroupIndex)
 {
-    int k = int(tid.x);
-    if (k >= ss_dims[1]) { return; }
-    int numTilesX16 = ss_dims[0];
-    int numTilesX8 = ss_dims[2];
-    int t = ss_tile[k];
-    int tx = t % numTilesX16;
-    int ty = t / numTilesX16;
-    int start = ss_tile_start[t];
-    int gi = ss_flatten[k];
+    int t = int(gid.x);
+    int numTilesX16 = sc_dims[0];
+    int tx = t % numTilesX16, ty = t / numTilesX16;
+    int start = sc_offsets[t], end = sc_offsets[t + 1];
+    int c0 = 0, c1 = 0, c2 = 0, c3 = 0;
+    for (int k = start + int(lidx); k < end; k += SPLIT_GROUP) {
+        int gi = sc_flatten[k];
+        int m = quadrant_mask(sc_means2d[gi * 2], sc_means2d[gi * 2 + 1], sc_radii[gi * 2], sc_radii[gi * 2 + 1],
+                              sc_conics[gi * 3], sc_conics[gi * 3 + 1], sc_conics[gi * 3 + 2], sc_opacities[gi],
+                              tx, ty, sc_dims[1], sc_dims[2]);
+        c0 += m & 1; c1 += (m >> 1) & 1; c2 += (m >> 2) & 1; c3 += (m >> 3) & 1;
+    }
+    c0 = WaveActiveSum(c0); c1 = WaveActiveSum(c1); c2 = WaveActiveSum(c2); c3 = WaveActiveSum(c3);
+    uint simd = lidx / 32u;
+    if (WaveGetLaneIndex() == 0u) {
+        sc_partial[simd * 4 + 0] = c0; sc_partial[simd * 4 + 1] = c1;
+        sc_partial[simd * 4 + 2] = c2; sc_partial[simd * 4 + 3] = c3;
+    }
+    GroupMemoryBarrierWithGroupSync();
+    if (lidx < 4u) {
+        int sum = 0;
+        for (int s = 0; s < SPLIT_GROUP / 32; ++s) { sum += sc_partial[s * 4 + int(lidx)]; }
+        sc_counts[t * 4 + int(lidx)] = sum;
+    }
+}
+
+StructuredBuffer<int>   sw_flatten;      // [n16]
+StructuredBuffer<int>   sw_offsets;      // [numTiles16 + 1]
+StructuredBuffer<float> sw_means2d;
+StructuredBuffer<int>   sw_radii;
+StructuredBuffer<float> sw_conics;
+StructuredBuffer<float> sw_opacities;
+StructuredBuffer<int>   sw_offsets8;     // [numTiles8 + 1] start of each 8-px tile's list
+StructuredBuffer<int>   sw_dims;         // [3] : numTilesX16, numTilesX8, numTilesY8
+
+RWStructuredBuffer<int> sw_flatten8;     // [4 · n16] (upper bound; sw_offsets8 tells the used part)
+
+groupshared int sw_simd_total[(SPLIT_GROUP / 32) * 4];
+
+[shader("compute")]
+[numthreads(256, 1, 1)]
+void tile_split_write(uint3 gid : SV_GroupID, uint lidx : SV_GroupIndex)
+{
+    int t = int(gid.x);
+    int numTilesX16 = sw_dims[0], numTilesX8 = sw_dims[1];
+    int tx = t % numTilesX16, ty = t / numTilesX16;
+    int start = sw_offsets[t], end = sw_offsets[t + 1];
+    // Write position of the next pair of each quadrant.
+    int base[4];
     [unroll] for (int q = 0; q < 4; ++q) {
-        int n16 = ss_dims[1];
-        if (ss_mask[q * n16 + k] != 0) {
-            int t8 = (ty * 2 + q / 2) * numTilesX8 + tx * 2 + q % 2;
-            int pos = ss_offsets8[t8] + ss_rank[q * n16 + k] - ss_rank[q * n16 + start];
-            ss_flatten8[pos] = gi;
+        base[q] = sw_offsets8[(ty * 2 + q / 2) * numTilesX8 + tx * 2 + q % 2];
+    }
+    uint simd = lidx / 32u;
+    for (int chunk = start; chunk < end; chunk += SPLIT_GROUP) {
+        int k = chunk + int(lidx);
+        int gi = -1, m = 0;
+        if (k < end) {
+            gi = sw_flatten[k];
+            m = quadrant_mask(sw_means2d[gi * 2], sw_means2d[gi * 2 + 1], sw_radii[gi * 2], sw_radii[gi * 2 + 1],
+                              sw_conics[gi * 3], sw_conics[gi * 3 + 1], sw_conics[gi * 3 + 2], sw_opacities[gi],
+                              tx, ty, sw_dims[1], sw_dims[2]);
         }
+        int rank[4];
+        [unroll] for (int q = 0; q < 4; ++q) {
+            int bit = (m >> q) & 1;
+            rank[q] = WavePrefixSum(bit);
+            int total = WaveActiveSum(bit);
+            if (WaveGetLaneIndex() == 0u) { sw_simd_total[simd * 4 + q] = total; }
+        }
+        GroupMemoryBarrierWithGroupSync();
+        [unroll] for (int q = 0; q < 4; ++q) {
+            int before = 0, all = 0;
+            for (int s = 0; s < SPLIT_GROUP / 32; ++s) {
+                int v = sw_simd_total[s * 4 + q];
+                if (s < int(simd)) { before += v; }
+                all += v;
+            }
+            if (((m >> q) & 1) != 0) { sw_flatten8[base[q] + before + rank[q]] = gi; }
+            base[q] += all;
+        }
+        GroupMemoryBarrierWithGroupSync();
     }
 }

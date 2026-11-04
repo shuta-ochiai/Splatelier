@@ -71,6 +71,28 @@ extension TrainingDriver {
                 eval(ssim.backward(t, t, dLdMap: MLXArray.zeros(like: map) - 1e-6, cache: cache,
                                    oneMinusLambda: 0.5, invN: 1e-6))
             })
+            // Binning by stage (each stage waited for), on projections computed beforehand.
+            for v in variants {
+                var stages: [(String, Double)] = []
+                TileBinning.stageHook = { name, ms in
+                    if let i = stages.firstIndex(where: { $0.0 == name }) { stages[i].1 += ms } else { stages.append((name, ms)) }
+                }
+                for i in 0..<reps {
+                    let (cam, _) = scaled(views[i % views.count], r, tile: v.tile)
+                    let n = trainer.model.count
+                    let p = renderer.projectOnly(model: trainer.model, camera: cam)
+                    let op = trainer.model.opacities()
+                    eval(p + [op])
+                    if i == 0 { stages.removeAll() }
+                    _ = TileBinning.bin(means2d: p[0].reshaped([n, 2]), radii: p[3].reshaped([n, 2]), depths: p[2],
+                                        conics: p[1].reshaped([n, 3]), opacities: op,
+                                        imageWidth: cam.width, imageHeight: cam.height, tileSize: cam.tileSize)
+                }
+                TileBinning.stageHook = nil
+                log("[bench \(r.num)/\(r.den)] \(v.label) binning stages (ms): "
+                    + stages.filter { $0.0 != "inputs" }
+                        .map { String(format: "%@ %.2f", $0.0, $0.1 / Double(reps - 1)) }.joined(separator: ", "))
+            }
             // Each variant twice, in forward then reverse order; the lines show the mean.
             var sums: [String: [(ms: Double, mj: Double?)]] = [:]
             var pairs: [String: Int] = [:]

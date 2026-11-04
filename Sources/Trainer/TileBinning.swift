@@ -25,9 +25,20 @@ public enum TileBinning {
 
     private static let lowerBoundKernel = SlangCompiledKernel.required("tile_lower_bound")
 
-    private static let splitMaskKernel = SlangCompiledKernel.required("tile_split_mask")
+    private static let splitCountKernel = SlangCompiledKernel.required("tile_split_count")
 
-    private static let splitScatterKernel = SlangCompiledKernel.required("tile_split_scatter")
+    private static let splitWriteKernel = SlangCompiledKernel.required("tile_split_write")
+
+    /// Benchmarks only: when set, `bin` waits for the GPU after each stage and reports its time
+    /// (ms) here.
+    nonisolated(unsafe) public static var stageHook: ((String, Double) -> Void)?
+
+    private static func stage(_ name: String, _ arrays: [MLXArray], _ t: inout Date) {
+        guard let hook = stageHook else { return }
+        eval(arrays)
+        hook(name, Date().timeIntervalSince(t) * 1000)
+        t = Date()
+    }
 
     /// Same values as the projection near/far cull (nearPlane / farPlane in slang/gs_math.slang).
     /// Depths of Gaussians reaching binning fall within this range, so it is used as the key
@@ -83,17 +94,18 @@ public enum TileBinning {
                          tileSize: tileSize).result
     }
 
-    /// 8-px tiles from the sorted pairs of 16-px tiles (`tile_split_mask` / `tile_split_scatter`
-    /// in tile_binning.slang). Sorting is the costly part of binning and 8-px tiles have about 2.3×
-    /// the pairs of 16-px ones, so this sorts the fewer pairs. The lists hold the same Gaussians as
-    /// binning 8-px tiles directly, in depth order with the 16-px tiles' key precision (two more
-    /// depth bits). `flattenIds` is sized for the upper bound (4 × the 16-px pairs), so it has
-    /// unused entries at the end; `tileOffsets` delimits the lists.
+    /// 8-px tiles from the sorted pairs of 16-px tiles (`tile_split_count` / `tile_split_write`
+    /// in tile_binning.slang, one threadgroup per 16-px tile). Sorting is the costly part of
+    /// binning and 8-px tiles have about 2.3× the pairs of 16-px ones, so this sorts the fewer
+    /// pairs. The lists hold the same Gaussians as binning 8-px tiles directly, in depth order with
+    /// the 16-px tiles' key precision (two more depth bits). `flattenIds` is sized for the upper
+    /// bound (4 × the 16-px pairs), so it has unused entries at the end; `tileOffsets` delimits the
+    /// lists.
     static func binSplit(
         means2d: MLXArray, radii: MLXArray, depths: MLXArray, conics: MLXArray, opacities: MLXArray,
         imageWidth: Int, imageHeight: Int
     ) -> TileBinningResult {
-        let (r16, tileIds16) = binSorted(
+        let (r16, _) = binSorted(
             means2d: means2d, radii: radii, depths: depths, conics: conics, opacities: opacities,
             imageWidth: imageWidth, imageHeight: imageHeight, tileSize: 16)
         let numTilesX = r16.numTilesX * 2, numTilesY = r16.numTilesY * 2
@@ -105,34 +117,27 @@ public enum TileBinning {
                 numTilesX: numTilesX, numTilesY: numTilesY)
         }
         let n = means2d.shape[0]
-        let mask = splitMaskKernel(
-            [r16.flattenIds, tileIds16, means2d.reshaped([n * 2]), radii.reshaped([n * 2]),
-             conics.reshaped([n * 3]), opacities.reshaped([n]),
-             MLXArray([Int32(r16.numTilesX), Int32(n16), Int32(numTilesX), Int32(numTilesY)], [4])],
-            grid: (n16, 1, 1), threadGroup: (256, 1, 1),
-            outputShapes: [[n16 * 4]], outputDTypes: [.int32])[0].reshaped([4, n16])
-        // Rank of each pair within its quadrant list: the exclusive cumsum over all pairs (quadrant
-        // rows are contiguous, so the scans run along rows), less its value at the tile's first
-        // pair. Counts per 16-px tile and quadrant from the inclusive one.
-        let inclusive = MLX.cumsum(mask, axis: 1)
-        let exclusive = inclusive - mask
-        let withZero = MLX.concatenated([MLXArray.zeros([4, 1], dtype: .int32), inclusive], axis: 1)
-        let numTiles16 = r16.numTiles
-        let starts = r16.tileOffsets[0 ..< numTiles16]
-        let ends = r16.tileOffsets[1 ... numTiles16]
-        let counts = withZero.take(ends, axis: 1) - withZero.take(starts, axis: 1)   // [4, tiles16]
-        // Into 8-px tile order: (qy, qx, ty, tx) → (ty, qy, tx, qx).
-        let counts8 = counts.reshaped([2, 2, r16.numTilesY, r16.numTilesX])
-            .transposed(2, 0, 3, 1).reshaped([numTilesX * numTilesY])
+        var t = Date()
+        let gaussians = [means2d.reshaped([n * 2]), radii.reshaped([n * 2]), conics.reshaped([n * 3]),
+                         opacities.reshaped([n])]
+        let dims = MLXArray([Int32(r16.numTilesX), Int32(numTilesX), Int32(numTilesY)], [3])
+        let group = 256
+        let counts = splitCountKernel(
+            [r16.flattenIds, r16.tileOffsets] + gaussians + [dims],
+            grid: (r16.numTiles * group, 1, 1), threadGroup: (group, 1, 1),
+            outputShapes: [[r16.numTiles * 4]], outputDTypes: [.int32])[0]
+        stage("split count", [counts], &t)
+        // Into 8-px tile order: (ty, tx, qy, qx) → (ty, qy, tx, qx), then list offsets.
+        let counts8 = counts.reshaped([r16.numTilesY, r16.numTilesX, 2, 2])
+            .transposed(0, 2, 1, 3).reshaped([numTilesX * numTilesY])
         let offsets8 = MLX.concatenated(
             [MLXArray.zeros([1], dtype: .int32), MLX.cumsum(counts8, axis: 0)], axis: 0)
-        let flatten8 = splitScatterKernel(
-            [r16.flattenIds, tileIds16, mask.reshaped([n16 * 4]), exclusive.reshaped([n16 * 4]),
-             starts, offsets8,
-             MLXArray([Int32(r16.numTilesX), Int32(n16), Int32(numTilesX)], [3])],
-            grid: (n16, 1, 1), threadGroup: (256, 1, 1),
+        stage("split scan", [offsets8], &t)
+        let flatten8 = splitWriteKernel(
+            [r16.flattenIds, r16.tileOffsets] + gaussians + [offsets8, dims],
+            grid: (r16.numTiles * group, 1, 1), threadGroup: (group, 1, 1),
             outputShapes: [[n16 * 4]], outputDTypes: [.int32])[0]
-        eval(flatten8, offsets8)
+        stage("split write", [flatten8], &t)
         return TileBinningResult(
             flattenIds: flatten8, tileOffsets: offsets8, numTilesX: numTilesX, numTilesY: numTilesY)
     }
@@ -169,6 +174,8 @@ public enum TileBinning {
             ), MLXArray.zeros([0], dtype: .int32))
         }
 
+        var t = Date()
+        stage("inputs", [means2d, radii, depths] + [conics, opacities].compactMap { $0 }, &t)
         // 1. AABB and intersected tile count. In scanline mode only tiles covered by the ellipse
         //    are counted.
         let scanline = conics != nil && opacities != nil
@@ -193,6 +200,7 @@ public enum TileBinning {
         )
         let aabb = aabbOut[0]
         let countArr = aabbOut[1]
+        stage("aabb count", [aabb, countArr], &t)
 
         // 2. Exclusive prefix sum (starts[0] = 0).
         let inclusive = MLX.cumsum(countArr, axis: 0)
@@ -207,6 +215,7 @@ public enum TileBinning {
         let nIsects: Int
         eval(inclusive)
         nIsects = Int(inclusive[n - 1].item(Int32.self))
+        stage("cumsum readback", [starts], &t)
 
         if nIsects == 0 {
             return (TileBinningResult(
@@ -233,15 +242,18 @@ public enum TileBinning {
         let tileIds = emitOut[0]
         let sortKeys = emitOut[1]
         let gaussIndices = emitOut[2]
+        stage("emit", [tileIds, sortKeys, gaussIndices], &t)
 
         // 4. Sort on a single 31-bit non-negative int32 key (half the bandwidth of a 64-bit key,
         //    and MLX's sort blocks
         //    become twice as large).
         let sortedIdx = MLX.argSort(sortKeys)
+        stage("argsort", [sortedIdx], &t)
         let flattenIds = gaussIndices[sortedIdx]
 
         // 5. tileOffsets via lower_bound on the sorted tile_ids (the last entry is n_isects).
         let sortedTileIds = tileIds[sortedIdx]
+        stage("gather", [flattenIds, sortedTileIds], &t)
         let lbDims = MLXArray([Int32(nIsects), Int32(numTiles)], [2])
         let lbOut = lowerBoundKernel(
             [sortedTileIds, lbDims],
@@ -251,7 +263,8 @@ public enum TileBinning {
             outputDTypes: [.int32]
         )
         let tileOffsets = lbOut[0]
-        eval(flattenIds, tileOffsets)
+        // Not waited for: the rasterizer's kernels queue up behind these on the GPU.
+        stage("lower bound", [flattenIds, tileOffsets], &t)
 
         return (TileBinningResult(
             flattenIds: flattenIds,
