@@ -31,6 +31,9 @@ struct CaptureView: View {
     @State private var pendingDatasetURL: URL?
     @State private var showAbout = false
     @State private var didCheckRecovery = false
+    @Environment(\.scenePhase) private var scenePhase
+    /// An unattended run (`SPLATELIER_AUTOTRAIN`) has started loading its dataset.
+    @State private var autoTrainStarted = false
     @State private var recoveryError: String?
 
     // MARK: validation datasets
@@ -87,10 +90,17 @@ struct CaptureView: View {
         .onAppear {
             checkForRecoverableDataset()
             refreshValidationSets()
-            startAutoTrainingIfRequested()
+            startAutoTrainingIfRequested(trigger: "appear")
             // Compile the shaders for the splat display during capture ahead of time (so the first
             // capture start does not wait)
             CaptureSurfelRenderer.prewarm()
+        }
+        // A launch from devicectl can come while the app is not in front, before the screen has
+        // been laid out; try again whenever it becomes active.
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            refreshValidationSets()
+            startAutoTrainingIfRequested(trigger: "active")
         }
         // The capture just made becomes the thing to train.
         .onChange(of: vm.capturedScene != nil) { _, hasScene in
@@ -652,12 +662,35 @@ struct CaptureView: View {
     /// For unattended runs launched with `devicectl … --environment-variables`:
     /// SPLATELIER_AUTOTRAIN=<file or display name of a validation dataset> loads it and starts
     /// training, as tapping it in the list and then Start training would.
-    private func startAutoTrainingIfRequested() {
-        guard trainer == nil, loadingValidationURL == nil,
-              let key = ProcessInfo.processInfo.environment["SPLATELIER_AUTOTRAIN"], !key.isEmpty,
-              let entry = validationSets.first(where: { $0.url.lastPathComponent.contains(key) || $0.name == key })
-        else { return }
+    /// Each step is appended to Documents/autotrain.log, which devicectl can copy back.
+    private func startAutoTrainingIfRequested(trigger: String) {
+        guard let key = ProcessInfo.processInfo.environment["SPLATELIER_AUTOTRAIN"], !key.isEmpty,
+              !autoTrainStarted else { return }
+        guard trainer == nil, loadingValidationURL == nil else {
+            Self.autoTrainLog("\(trigger): a training panel is open or a dataset is loading")
+            return
+        }
+        guard let entry = validationSets.first(where: { $0.url.lastPathComponent.contains(key) || $0.name == key })
+        else {
+            Self.autoTrainLog("\(trigger): no validation dataset matches \(key) (\(validationSets.count) listed)")
+            return
+        }
+        autoTrainStarted = true
+        Self.autoTrainLog("\(trigger): loading \(entry.url.lastPathComponent)")
         loadValidationDataset(entry.url, startTraining: true)
+    }
+
+    nonisolated static func autoTrainLog(_ message: String) {
+        let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("autotrain.log")
+        let line = Data("\(ISO8601DateFormatter().string(from: Date())) \(message)\n".utf8)
+        if let h = try? FileHandle(forWritingTo: url) {
+            h.seekToEndOfFile()
+            h.write(line)
+            try? h.close()
+        } else {
+            try? line.write(to: url)
+        }
     }
 
     /// Load a validation dataset in the background and open the training panel for it.
@@ -673,9 +706,13 @@ struct CaptureView: View {
                     startStoredTraining(
                         scene: scene, url: url, preserve: true,
                         name: CaptureMetadataName.load(for: url) ?? "")
-                    if startTraining { trainer?.start() }
+                    if startTraining {
+                        trainer?.start()
+                        Self.autoTrainLog("loaded \(scene.frames.count) frames, training started: \(trainer != nil)")
+                    }
                 }
             } catch {
+                if startTraining { Self.autoTrainLog("loading failed: \(error)") }
                 await MainActor.run {
                     loadingValidationURL = nil
                     showValidationList = false
