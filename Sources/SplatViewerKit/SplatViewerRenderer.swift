@@ -517,6 +517,8 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
     /// How far a touch may be from a handle and still grab it, as a fraction of the shorter side of
     /// the drawable. A fixed pixel count shrinks to about 15 points on a Retina iPhone.
     private static let cropGrabFraction: Float = 0.09
+    /// The same for the rings of a box.
+    private static let cropRingGrabFraction: Float = 0.05
 
     private var pixelSize: SIMD2<Float> {
         SIMD2(Float(drawableSize.width), Float(drawableSize.height))
@@ -540,9 +542,17 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
             return (item.handle, simd_distance(s * size, point * size))
         }.min { $0.1 < $1.1 }
         let reach = Self.cropGrabFraction * min(size.x, size.y)
-        guard let nearest, nearest.1 <= reach else { return false }
-        activeCropHandle = nearest.0
-        return true
+        if let nearest, nearest.1 <= reach {
+            activeCropHandle = nearest.0
+            return true
+        }
+        // A ring has to be touched closer, so most of the ground stays with the camera.
+        if let ring = region.nearestRing(to: point, camera: camera, viewSize: size),
+           ring.distance <= Self.cropRingGrabFraction * min(size.x, size.y) {
+            activeCropHandle = ring.handle
+            return true
+        }
+        return false
     }
 
     /// Drag of the grabbed handle. `delta` is the touch movement normalized by the view size.

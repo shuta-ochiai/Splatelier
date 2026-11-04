@@ -472,7 +472,7 @@ public struct SplatViewerScreen: View {
                     model.isCropping.toggle()
                 }
                 helpButton(isPresented: $showCropHelp,
-                           text: "Drag a handle to resize the box or sphere. Drag anywhere else to rotate the view. Keep inside or remove inside decides which splats are kept.")
+                           text: "Drag a handle to resize or move the box or sphere, or a ring to turn the box about one axis. Drag anywhere else to rotate the view. Keep inside or remove inside decides which splats are kept.")
             }
             HStack(spacing: 2) {
                 toggleCapsule("Floaters", systemImage: "aqi.medium", isOn: model.isRemovingFloaters) {
