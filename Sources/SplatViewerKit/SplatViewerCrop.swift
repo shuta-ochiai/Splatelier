@@ -218,15 +218,17 @@ struct SplatViewerCropRegion: Equatable {
     /// of the other two axes, and an increasing angle turns the right-handed way about `axis`.
     func ringPoint(axis: Int, angle: Float) -> SIMD3<Float> {
         let u = axisDirection((axis + 1) % 3), v = axisDirection((axis + 2) % 3)
-        return center + (u * cosf(angle) + v * sinf(angle)) * ringRadius
+        let radial: SIMD3<Float> = u * cosf(angle) + v * sinf(angle)
+        return center + radial * ringRadius
     }
 
     /// The part of a ring that is drawn and grabbed: angles and world points. It is fixed on the
     /// box, around the direction of its +X +Y +Z corner, so the three arcs gather at that corner,
     /// stay put when the camera moves and turn with the box.
     func ringArc(axis: Int) -> [(angle: Float, point: SIMD3<Float>)] {
-        (0...Self.ringArcSteps).map { k in
-            let angle = Self.ringArcMiddle + (2 * Float(k) / Float(Self.ringArcSteps) - 1) * Self.ringArcHalfSpan
+        (0...Self.ringArcSteps).map { (k: Int) -> (angle: Float, point: SIMD3<Float>) in
+            let along: Float = 2 * Float(k) / Float(Self.ringArcSteps) - 1
+            let angle: Float = Self.ringArcMiddle + along * Self.ringArcHalfSpan
             return (angle, ringPoint(axis: axis, angle: angle))
         }
     }
@@ -379,12 +381,13 @@ struct SplatCropFrame: Equatable {
         switch region.shape {
         case .box:
             let h = region.halfExtent, c = region.center
-            let corners: [SIMD3<Float>] = (0..<8).map { i in
-                c + SIMD3(
-                    (i & 1 == 0 ? -1 : 1) * h.x,
-                    (i & 2 == 0 ? -1 : 1) * h.y,
-                    (i & 4 == 0 ? -1 : 1) * h.z)
-            }.map { region.center + region.rotation.act($0 - region.center) }
+            let corners: [SIMD3<Float>] = (0..<8).map { (i: Int) -> SIMD3<Float> in
+                let sx: Float = i & 1 == 0 ? -1 : 1
+                let sy: Float = i & 2 == 0 ? -1 : 1
+                let sz: Float = i & 4 == 0 ? -1 : 1
+                let offset = SIMD3<Float>(sx * h.x, sy * h.y, sz * h.z)
+                return c + region.rotation.act(offset)
+            }
             // Corners that differ in one bit are joined by an edge.
             var edges: [(SIMD3<Float>, SIMD3<Float>)] = []
             for i in 0..<8 {
