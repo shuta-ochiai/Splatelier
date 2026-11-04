@@ -64,7 +64,8 @@ func usage() {
     print("         FINAL_RES=<num>/<den>|full|off FINAL_FRAC=<fraction> the last fraction of the iterations at that")
     print("           resolution (the app's: the last 0.25 at full resolution)")
     print("         LAMBDA_SSIM=<λ> the D-SSIM weight, keeping the app's densification")
-    print("         BENCH_STAGES=1 after training, the GPU energy of each part of a step at 1/3, 2/3 and full resolution")
+    print("         BENCH_STAGES=1 after training, the time and GPU energy of the parts of a step at 2/3 and full")
+    print("           resolution, the rasterizer and the whole step with 16-px and 8-px tiles")
     print("         STAGE_TIMING=1 waits for the GPU after each stage and logs the stage times")
     print("         gpu energy= in the training log is the IOReport GPU energy (system-wide value)")
     print("")
@@ -526,12 +527,10 @@ case "train-capture":
                                   to: meshOBJ, excluding: heldOutViews, log: logErr)) {
             logErr("mesh: no surface reconstructed")
         }
-        #if os(macOS)
         // BENCH_STAGES=1: GPU energy of the parts of a step on the trained model (StepBenchmark.swift).
         if env["BENCH_STAGES"] == "1", let session = result.session {
-            benchmarkStepStages(session: session, log: logErr)
+            TrainingDriver.benchmarkStepStages(session: session, log: logErr)
         }
-        #endif
         // MESH_HYBRID / MESH_GOF / MESH_GS_TSDF: meshes using the trained Gaussians (MeshCapture.swift).
         if let session = result.session {
             _ = try writeGaussianMeshes(

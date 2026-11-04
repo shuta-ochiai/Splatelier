@@ -266,8 +266,18 @@ final class TrainingViewModel: ObservableObject {
         CaptureMetadataName.save(captureName, for: url)
     }
 
+    /// Launched for an unattended run (`SPLATELIER_AUTOTRAIN`): no naming popup; the capture is
+    /// named after its resolution plan instead.
+    private let unattended = ProcessInfo.processInfo.environment["SPLATELIER_AUTOTRAIN"] != nil
+
     func start() {
         guard case .idle = phase, !isGeneratingMesh else { return }
+        if unattended && captureName.isEmpty {
+            let env = ProcessInfo.processInfo.environment
+            let tile = env["SPLATELIER_TILE"] ?? "\(CaptureTraining.AppPreset.tileSize)"
+            let final = env["SPLATELIER_FINAL_FRAC"] ?? "\(CaptureTraining.AppPreset.finalResample?.fraction ?? 0)"
+            captureName = "auto \(tile)px final \(final)"
+        }
         phase = .running(iter: 0, latestLoss: nil)
         elapsedSec = 0
         peakMemoryBytes = 0
@@ -428,6 +438,11 @@ final class TrainingViewModel: ObservableObject {
                     onPreview: previewHandler,
                     log: logHandler
                 )
+                // SPLATELIER_BENCH=1 (unattended runs): time the parts of a step on the trained
+                // model into the log.
+                if env["SPLATELIER_BENCH"] == "1", let session = result.session {
+                    TrainingDriver.benchmarkStepStages(session: session, log: logHandler)
+                }
                 try? logHandle?.close()
                 // Completed successfully, so delete the preserved data (validation datasets are
                 // kept). The frames may still read their images from it (meshing, training
@@ -479,7 +494,7 @@ final class TrainingViewModel: ObservableObject {
                         finalLoss: result.lossHistory.last
                     )
                     self.completedPlyURL = plyURL
-                    self.needsNamePrompt = true
+                    self.needsNamePrompt = !self.unattended
                     self.generateMesh()
                 }
             } catch {
