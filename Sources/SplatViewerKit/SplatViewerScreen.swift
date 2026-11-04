@@ -4,9 +4,9 @@
 // Public entry point. SwiftUI screen that shows a trained PLY (any format SplatIO can read) with an
 // orbit camera. The seed point cloud, capture cameras and mesh (OBJ) can be overlaid in the same
 // scene and toggled from the "Display" row, where the trained background can be hidden and the mesh
-// switched to shaded. The "Measure" button at the bottom enters measure mode to measure the distance
-// between 2 tapped points. Double tap (double click on macOS) zooms in, making that point the center
-// of rotation.
+// switched to shaded. The "Measure" button at the bottom enters measure mode to measure the
+// distance between 2 tapped points. Double tap (double click on macOS) zooms in, making that point
+// the center of rotation.
 
 import SwiftUI
 
@@ -153,14 +153,10 @@ public struct SplatViewerScreen: View {
                         Label("Train more", systemImage: "plus.circle")
                     }
                 }
-                if onRename != nil {
-                    Button {
-                        renameText = displayName
-                        showRename = true
-                    } label: {
-                        Label("Rename", systemImage: "pencil")
-                    }
-                }
+            }
+            if onRename != nil {
+                // The name itself is the rename control, so it needs no button of its own.
+                ToolbarItem(placement: .principal) { renameTitle }
             }
         }
         .alert("Train more?", isPresented: $showTrainMoreConfirm) {
@@ -178,6 +174,22 @@ public struct SplatViewerScreen: View {
             }
             Button("Cancel", role: .cancel) {}
         }
+    }
+
+    /// The title shown as a button: tapping it opens the rename prompt.
+    private var renameTitle: some View {
+        Button {
+            renameText = displayName
+            showRename = true
+        } label: {
+            Text(displayName)
+                .font(.headline)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .foregroundStyle(Color.primary)
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Rename")
     }
 
     private var toolbarPlacement: ToolbarItemPlacement {
@@ -315,7 +327,7 @@ public struct SplatViewerScreen: View {
         case .failed(let msg):
             status(symbol: "exclamationmark.triangle", title: "Couldn't load", detail: msg)
         case .loaded:
-            // Top to bottom: measurement hint (while measuring) → Display / Measure / Reset.
+            // Top to bottom: measurement hint (while measuring) → Display / Edit / Measure / Reset.
             VStack {
                 Spacer()
                 if model.isMeasuring {
@@ -416,17 +428,17 @@ public struct SplatViewerScreen: View {
         model.hasGS || model.hasSeed || model.hasCameraMarkers || model.hasMesh
     }
 
-    /// Display and Edit buttons, measure-mode toggle and Reset.
+    /// Display and Edit buttons, measure-mode toggle and Reset (rightmost).
     private var trailingControls: some View {
         HStack(spacing: 6) {
             if hasDisplayOptions {
                 displayButton
             }
-            toggleCapsule("Measure", systemImage: "ruler", isOn: model.isMeasuring) {
-                model.isMeasuring.toggle()
-            }
             if model.hasGS {
                 editButton
+            }
+            toggleCapsule("Measure", systemImage: "ruler", isOn: model.isMeasuring) {
+                model.isMeasuring.toggle()
             }
             Button {
                 model.resetCamera()
