@@ -48,7 +48,9 @@ func usage() {
     print("           0 = all frames)")
     print("         THERMAL_SIM=nominal|fair|serious fixes the thermal guard's thermalState (reproduces the serious slow-down)")
     print("         GEO_REG=0 turns off the geometric regularization (on as in the app)")
-    print("         POSE_SOURCE=arkit trains on the ARKit poses instead of the BA poses (BA still runs)")
+    print("         POSE_SOURCE=arkit trains on the ARKit poses instead of the BA poses (BA still runs);")
+    print("           POSE_SOURCE=capture starts BA from ARKit's streamed capture-time poses instead of the anchors'")
+    print("           final ones (datasets saved since they were recorded)")
     print("         SEED_ALLOC=confidence keeps MVS or LiDAR per cell by confidence and caps per cell")
     print("           (cells SEED_CELL_PX=<pixels across at the seen depth>, default 16; SEED_LIDAR_WEIGHT=<w>, default 1)")
     print("         LIDAR_COLOR=0 leaves the LiDAR seed points mid-grey instead of colored from the images")
@@ -306,9 +308,17 @@ case "train-capture":
     #endif
     do {
         FileHandle.standardError.write(Data("loading \(valsetURL.lastPathComponent)…\n".utf8))
-        let scene = try CaptureDatasetStore.load(from: valsetURL)
+        var scene = try CaptureDatasetStore.load(from: valsetURL)
         FileHandle.standardError.write(Data(
             "loaded \(scene.frames.count) frames, \(scene.sparsePoints.count) sparse points\n".utf8))
+        // POSE_SOURCE=capture: start from ARKit's streamed poses at capture time instead of the
+        // anchors' final poses (frames saved without them keep the anchor pose).
+        if env["POSE_SOURCE"] == "capture" {
+            let withCapture = scene.frames.filter { $0.captureViewmat != nil }.count
+            scene = scene.withFrames(scene.frames.map { f in f.captureViewmat.map(f.withViewmat) ?? f })
+            FileHandle.standardError.write(Data(
+                "POSE_SOURCE=capture: \(withCapture)/\(scene.frames.count) frames use the streamed capture-time pose\n".utf8))
+        }
         // Default: the app's recommendation for the capture's frame count.
         let iterations = (args.count > 4 ? Int(args[4]) : nil)
             ?? CaptureTraining.recommendedIterations(frameCount: scene.frames.count, mvs: true)
