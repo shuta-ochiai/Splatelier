@@ -8,6 +8,7 @@
 import SwiftUI
 import MLX
 import Capture
+import SplatViewerKit
 
 struct FrameReviewView: View {
     let scene: CapturedScene
@@ -218,7 +219,7 @@ private struct EnlargedFramePage: View {
         // Separately from the thumbnail (~200px), generate a high-resolution image only for the
         // page being shown.
         .task(id: review.index) {
-            if image == nil { image = FrameThumbnail.makeThumbnail(frame.image, maxDim: 1200) }
+            if image == nil { image = FrameThumbnail.makeThumbnail(frame, maxDim: 1200) }
         }
     }
 }
@@ -297,15 +298,26 @@ struct FrameThumbnail: View {
             .padding(3)
         }
         .task(id: index) {
-            if image == nil { image = Self.makeThumbnail(frame.image) }
+            if image == nil { image = Self.makeThumbnail(frame) }
         }
         .contentShape(Rectangle())
         .onTapGesture { onTap() }
     }
 
+    /// A frame's image (lens-corrected, or as captured with `original`) as a thumbnail, turned
+    /// upright by the frame's pose: the image is in sensor orientation, so a portrait capture lies
+    /// on its side and a landscape one does not. Without a clear up (looking straight down), the
+    /// portrait default.
+    static func makeThumbnail(_ frame: CapturedFrame, maxDim: Int = 200, original: Bool = false) -> UIImage? {
+        makeThumbnail(
+            original ? frame.originalImage : frame.image, maxDim: maxDim,
+            clockwiseQuarterTurns: SplatViewerThumbnailOrientation.clockwiseQuarterTurns(viewmat: frame.viewmat) ?? 1)
+    }
+
     /// Stride-decimate a uint8 [H,W,3] image to ~maxDim and convert to UIImage
-    /// (holding 100+ frames at full res uses too much memory).
-    static func makeThumbnail(_ image: MLXArray, maxDim: Int = 200) -> UIImage? {
+    /// (holding 100+ frames at full res uses too much memory), displayed turned clockwise by
+    /// `clockwiseQuarterTurns` quarter turns.
+    static func makeThumbnail(_ image: MLXArray, maxDim: Int = 200, clockwiseQuarterTurns: Int) -> UIImage? {
         guard image.shape.count == 3, image.shape[2] == 3 else { return nil }
         let h = image.shape[0], w = image.shape[1]
         guard h > 0, w > 0 else { return nil }
@@ -315,28 +327,28 @@ struct FrameThumbnail: View {
         // host). sampled is [th, tw, 3].
         let src = image[.stride(from: 0, to: th * s, by: s), .stride(from: 0, to: tw * s, by: s), 0...]
             .reshaped([th * tw * 3]).asArray(UInt8.self)
-        // The capture buffer appears rotated 90° counterclockwise on screen, so rotate clockwise
-        // while decimating. out[i][j] = sampled[th-1-j][i]; output is width=th, height=tw.
-        let outW = th, outH = tw
-        var dst = [UInt8](repeating: 0, count: outW * outH * 3)
-        for i in 0..<outH {              // Output row (0..<tw)
-            for j in 0..<outW {          // Output column (0..<th)
-                let si = ((th - 1 - j) * tw + i) * 3
-                let di = (i * outW + j) * 3
-                dst[di] = src[si]; dst[di + 1] = src[si + 1]; dst[di + 2] = src[si + 2]
-            }
-        }
-        let data = Data(dst)
-        guard let provider = CGDataProvider(data: data as CFData) else { return nil }
+        guard let provider = CGDataProvider(data: Data(src) as CFData) else { return nil }
         let colorSpace = CGColorSpaceCreateDeviceRGB()
         guard let cg = CGImage(
-            width: outW, height: outH,
-            bitsPerComponent: 8, bitsPerPixel: 24, bytesPerRow: outW * 3,
+            width: tw, height: th,
+            bitsPerComponent: 8, bitsPerPixel: 24, bytesPerRow: tw * 3,
             space: colorSpace,
             bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.none.rawValue),
             provider: provider, decode: nil, shouldInterpolate: true,
             intent: .defaultIntent
         ) else { return nil }
-        return UIImage(cgImage: cg)
+        return UIImage(cgImage: cg, scale: 1, orientation: .clockwise(quarterTurns: clockwiseQuarterTurns))
+    }
+}
+
+extension UIImage.Orientation {
+    /// The orientation that shows the image turned clockwise by `quarterTurns` quarter turns.
+    static func clockwise(quarterTurns: Int) -> UIImage.Orientation {
+        switch ((quarterTurns % 4) + 4) % 4 {
+        case 1: .right
+        case 2: .down
+        case 3: .left
+        default: .up
+        }
     }
 }

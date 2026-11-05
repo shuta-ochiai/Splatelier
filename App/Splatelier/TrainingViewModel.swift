@@ -9,6 +9,7 @@
 import Foundation
 import UIKit
 import MLX
+import SplatViewerKit
 @preconcurrency import Trainer
 @preconcurrency import Capture
 
@@ -825,12 +826,13 @@ final class TrainingViewModel: ObservableObject {
         let n = Swift.min(count, frames.count)
         guard n > 0 else { frameSlides = []; return }
         frameSlides = (0..<n).compactMap { i in
-            FrameThumbnail.makeThumbnail(frames[i * frames.count / n].originalImage, maxDim: 480)
+            FrameThumbnail.makeThumbnail(frames[i * frames.count / n], maxDim: 480, original: true)
         }
     }
 
-    /// Handler for the pictures the training loop produces (on the training thread). The frames are
-    /// in sensor orientation, so the image is marked rotated for a portrait screen.
+    /// Handler for the pictures the training loop produces (on the training thread). The pictures
+    /// are in sensor orientation, so the image is marked turned upright by its view's pose (a
+    /// portrait capture lies on its side, a landscape one does not).
     private func makePreviewHandler() -> (TrainingPreviewFrame) -> Void {
         { [weak self] frame in
             guard let provider = CGDataProvider(data: Data(frame.rgba) as CFData),
@@ -841,7 +843,8 @@ final class TrainingViewModel: ObservableObject {
                     provider: provider, decode: nil, shouldInterpolate: true,
                     intent: .defaultIntent)
             else { return }
-            let image = UIImage(cgImage: cg, scale: 1, orientation: .right)
+            let turns = SplatViewerThumbnailOrientation.clockwiseQuarterTurns(viewmat: frame.viewmat) ?? 1
+            let image = UIImage(cgImage: cg, scale: 1, orientation: .clockwise(quarterTurns: turns))
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.previewImage = image
