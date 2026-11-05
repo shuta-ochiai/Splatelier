@@ -318,7 +318,7 @@ struct SplatLibraryView: View {
         }
     }
 
-    /// Show the sibling `.png` as a thumbnail (saved in sensor orientation, so rotate clockwise).
+    /// Show the sibling `.png` as a thumbnail (saved in sensor orientation, so turned upright).
     /// If none (imported PLY etc.), a cube placeholder.
     @ViewBuilder
     private func previewImage(for url: URL) -> some View {
@@ -663,16 +663,18 @@ private struct TrainingSettingsSheet: View {
 }
 
 private extension UIImage {
-    func rotatedClockwise() -> UIImage {
+    func rotatedClockwise(quarterTurns: Int) -> UIImage {
+        let turns = ((quarterTurns % 4) + 4) % 4
+        guard turns != 0 else { return self }
         let format = UIGraphicsImageRendererFormat()
         format.scale = scale
         format.opaque = false
-        let rotatedSize = CGSize(width: size.height, height: size.width)
+        let rotatedSize = turns == 2 ? size : CGSize(width: size.height, height: size.width)
         return UIGraphicsImageRenderer(size: rotatedSize, format: format).image { context in
             let cgContext = context.cgContext
-            cgContext.translateBy(x: rotatedSize.width, y: 0)
-            cgContext.rotate(by: .pi / 2)
-            draw(in: CGRect(origin: .zero, size: size))
+            cgContext.translateBy(x: rotatedSize.width / 2, y: rotatedSize.height / 2)
+            cgContext.rotate(by: CGFloat(turns) * .pi / 2)
+            draw(in: CGRect(x: -size.width / 2, y: -size.height / 2, width: size.width, height: size.height))
         }
     }
 }
@@ -687,7 +689,12 @@ private enum LibraryThumbnailCache {
             .contentModificationDate else { return nil }
         let key = "\(pngURL.path)#\(modified.timeIntervalSince1970)" as NSString
         if let hit = cache.object(forKey: key) { return hit }
-        guard let image = UIImage(contentsOfFile: pngURL.path)?.rotatedClockwise() else { return nil }
+        // Turned by the source view's pose so world up is at the top (a portrait capture lies on
+        // its side in sensor orientation, a landscape one does not). Without the pose, the
+        // portrait default.
+        let turns = SplatViewerThumbnailOrientation.clockwiseQuarterTurns(siblingOf: pngURL) ?? 1
+        guard let image = UIImage(contentsOfFile: pngURL.path)?.rotatedClockwise(quarterTurns: turns)
+        else { return nil }
         cache.setObject(image, forKey: key)
         return image
     }
