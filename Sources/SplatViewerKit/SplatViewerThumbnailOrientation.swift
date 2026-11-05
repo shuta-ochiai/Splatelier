@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Splatelier contributors
 //
-// Which way to turn a capture's thumbnail so it stands upright. The thumbnail is a render from a
-// training view in sensor orientation, so a portrait capture lies on its side and a landscape one
-// is already upright (or upside down). The view's pose says where world up (+Y) falls in the image.
+// Which way to turn a capture's picture (a frame, or a render from a training view) so it stands
+// upright. Pictures are in sensor orientation, so a portrait capture lies on its side and a
+// landscape one is already upright (or upside down). The view's pose says where world up (+Y)
+// falls in the image.
 
 import Foundation
 
@@ -17,12 +18,13 @@ public enum SplatViewerThumbnailOrientation {
         guard let data = try? Data(contentsOf: metadataURL),
               let metadata = try? JSONDecoder().decode(Metadata.self, from: data)
         else { return nil }
-        return clockwiseQuarterTurns(trainingViewmat: metadata.viewmat)
+        return clockwiseQuarterTurns(viewmat: metadata.viewmat)
     }
 
-    /// The same from a row-major world→camera matrix (OpenCV: +X right, +Y down in the image).
-    /// nil if world up is (nearly) along the optical axis, where the image has no clear up.
-    static func clockwiseQuarterTurns(trainingViewmat m: [Float]) -> Int? {
+    /// The same for an image in sensor orientation taken from a row-major world→camera matrix
+    /// (OpenCV: +X right, +Y down in the image; world +Y up, as ARKit's). nil if world up is
+    /// (nearly) along the optical axis, where the image has no clear up.
+    public static func clockwiseQuarterTurns(viewmat m: [Float]) -> Int? {
         guard m.count == 16 else { return nil }
         // World +Y in camera coordinates is the rotation's column 1; its image-plane part.
         let x = m[1], y = m[5]

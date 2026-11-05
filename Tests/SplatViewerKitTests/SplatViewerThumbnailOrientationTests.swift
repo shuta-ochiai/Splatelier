@@ -26,14 +26,14 @@ private func viewmat(right r: SIMD3<Float>, down d: SIMD3<Float>) -> [Float] {
 ])
 func thumbnailTurnsWorldUpToTheTop(right: SIMD3<Float>, down: SIMD3<Float>, turns: Int) {
     #expect(SplatViewerThumbnailOrientation.clockwiseQuarterTurns(
-        trainingViewmat: viewmat(right: right, down: down)) == turns)
+        viewmat: viewmat(right: right, down: down)) == turns)
 }
 
 /// A camera looking straight down has no clear up in the image, so the caller keeps its default.
 @Test
 func thumbnailLookingStraightDownHasNoTurn() {
     let m = viewmat(right: SIMD3<Float>(1, 0, 0), down: SIMD3<Float>(0, 0, 1))
-    #expect(SplatViewerThumbnailOrientation.clockwiseQuarterTurns(trainingViewmat: m) == nil)
+    #expect(SplatViewerThumbnailOrientation.clockwiseQuarterTurns(viewmat: m) == nil)
 }
 
 /// Read from the `.preview.json` written next to the thumbnail.

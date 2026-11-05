@@ -10,6 +10,9 @@ public struct TrainingPreviewFrame: Sendable {
     public let height: Int
     /// Row-major RGBA8, alpha 255.
     public let rgba: [UInt8]
+    /// Row-major world→camera of the view it is drawn from (OpenCV), so the app can turn the
+    /// picture (in sensor orientation) upright.
+    public let viewmat: [Float]
 
     /// Seconds between two previews (the first one comes with the first step).
     public static let interval: TimeInterval = 3
@@ -42,6 +45,8 @@ public struct TrainingPreviewFrame: Sendable {
             rgba[p * 4 + 1] = bytes[p * 3 + 1]
             rgba[p * 4 + 2] = bytes[p * 3 + 2]
         }
-        return TrainingPreviewFrame(width: small.width, height: small.height, rgba: rgba)
+        return TrainingPreviewFrame(
+            width: small.width, height: small.height, rgba: rgba,
+            viewmat: camera.viewmat.asArray(Float.self))
     }
 }
