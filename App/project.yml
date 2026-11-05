@@ -69,6 +69,20 @@ targets:
         UIRequiredDeviceCapabilities:
           - arm64
           - arkit
+        # STEP CAD models, added to a capture from the Library ("Add CAD model"). iOS declares no
+        # type for them, so the Files picker could not offer them without this.
+        UTImportedTypeDeclarations:
+          - UTTypeIdentifier: org.iso.step
+            UTTypeDescription: STEP CAD model
+            UTTypeConformsTo:
+              - public.data
+              - public.3d-content
+            UTTypeTagSpecification:
+              public.filename-extension:
+                - step
+                - stp
+              public.mime-type:
+                - model/step
     # Increased-memory entitlement. On-device training at 1440 × many gaussians (dense seed of
     # hundreds of thousands of points + environment sphere) exceeds the default jetsam limit (~2-3GB)
     # and gets OOM-killed, so com.apple.developer.kernel.increased-memory-limit raises the limit

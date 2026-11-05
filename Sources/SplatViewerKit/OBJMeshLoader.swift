@@ -20,6 +20,19 @@ struct LoadedMesh: Sendable {
 
     var vertexCount: Int { positions.count / 3 }
     var triangleCount: Int { indices.count / 3 }
+
+    /// Center and half-diagonal of the bounding box of `positions` ([V*3]).
+    static func bounds(_ positions: [Float]) -> (center: SIMD3<Float>, radius: Float) {
+        var lo = SIMD3<Float>(repeating: .greatestFiniteMagnitude)
+        var hi = SIMD3<Float>(repeating: -.greatestFiniteMagnitude)
+        for v in 0..<(positions.count / 3) {
+            let q = SIMD3(positions[v * 3], positions[v * 3 + 1], positions[v * 3 + 2])
+            lo = pointwiseMin(lo, q)
+            hi = pointwiseMax(hi, q)
+        }
+        let diagonal = hi - lo
+        return ((lo + hi) / 2, Swift.max(1e-3, 0.5 * (diagonal * diagonal).sum().squareRoot()))
+    }
 }
 
 enum OBJMeshLoader {
@@ -113,21 +126,14 @@ enum OBJMeshLoader {
             colors = []
         }
 
-        var lo = SIMD3<Float>(repeating: .greatestFiniteMagnitude)
-        var hi = SIMD3<Float>(repeating: -.greatestFiniteMagnitude)
-        for v in 0..<vertexCount {
-            let q = SIMD3(positions[v * 3], positions[v * 3 + 1], positions[v * 3 + 2])
-            lo = pointwiseMin(lo, q)
-            hi = pointwiseMax(hi, q)
-        }
-        let diagonal = hi - lo
+        let (center, radius) = LoadedMesh.bounds(positions)
         return LoadedMesh(
             positions: positions,
             normals: vertexNormals(positions: positions, indices: indices),
             colors: colors,
             indices: indices,
-            center: (lo + hi) / 2,
-            radius: Swift.max(1e-3, 0.5 * (diagonal * diagonal).sum().squareRoot()))
+            center: center,
+            radius: radius)
     }
 
     /// Area-weighted vertex normals.

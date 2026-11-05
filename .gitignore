@@ -42,3 +42,7 @@ output/
 
 # Fonts for scripts/media (run scripts/media/fetch_fonts.sh to fetch)
 /scripts/media/fonts/
+
+# STEP import library (Rust): cargo output and the built xcframework (scripts/build-stepmesh.sh)
+/native/stepmesh/target/
+/native/stepmesh/StepMesh.xcframework/

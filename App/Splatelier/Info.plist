@@ -45,5 +45,31 @@
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
 	</array>
+	<key>UTImportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+				<string>public.3d-content</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>STEP CAD model</string>
+			<key>UTTypeIdentifier</key>
+			<string>org.iso.step</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>step</string>
+					<string>stp</string>
+				</array>
+				<key>public.mime-type</key>
+				<array>
+					<string>model/step</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
 </dict>
 </plist>

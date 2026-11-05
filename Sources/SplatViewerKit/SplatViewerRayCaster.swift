@@ -23,6 +23,8 @@ struct MeshRayGeometry: @unchecked Sendable {
     /// uint32 × 3 × triangle count.
     let indices: MTLBuffer
     let triangleCount: Int
+    /// Mesh to world (a CAD model placed by hand). Rigid, so distances along the ray are kept.
+    var transform = matrix_identity_float4x4
 }
 
 /// Casts a ray against the visible layers. Chunk contents don't change after `addChunk` (the
@@ -31,6 +33,8 @@ struct MeshRayGeometry: @unchecked Sendable {
 struct SplatViewerRayCaster: Sendable {
     var splatChunks: [SplatChunk]
     var mesh: MeshRayGeometry?
+    /// The CAD model, placed by its `transform`.
+    var cad: MeshRayGeometry? = nil
 
     /// One Gaussian's contribution along the ray.
     struct SplatHit {
@@ -55,7 +59,11 @@ struct SplatViewerRayCaster: Sendable {
             Self.collectSplatHits(chunk, origin: origin, direction: direction, pixelAngle: pixelAngle, into: &hits)
         }
         let splatT = frontOpacity.map { Self.frontDepth(hits, opacity: $0) } ?? Self.surfaceDepth(hits)
-        let meshT = mesh.flatMap { Self.firstTriangleHit($0, origin: origin, direction: direction) }
+        let meshT = [mesh, cad].compactMap { $0 }.compactMap { mesh -> Float? in
+            let toMesh = mesh.transform.inverse
+            let o = toMesh * SIMD4(origin, 1), d = toMesh * SIMD4(direction, 0)
+            return Self.firstTriangleHit(mesh, origin: SIMD3(o.x, o.y, o.z), direction: SIMD3(d.x, d.y, d.z))
+        }.min()
         switch (splatT, meshT) {
         case let (s?, m?): return min(s, m)
         case let (s?, nil): return s

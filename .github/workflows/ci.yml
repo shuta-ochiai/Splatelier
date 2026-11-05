@@ -52,6 +52,24 @@ jobs:
           path: .build
           key: spm-${{ runner.os }}-${{ steps.image.outputs.version }}-${{ hashFiles('Package.swift') }}
           restore-keys: spm-${{ runner.os }}-
+      # STEP import links native/stepmesh (Rust, cadmpeg), built into StepMesh.xcframework here rather
+      # than checked in (each slice is about 240 MB before linking). The built xcframework is cached by
+      # the crate's sources, so Rust only builds when they change. When it does, only the slices this
+      # job links are built, with the crate's `ci` profile (no LTO): with LTO and all three slices the
+      # step took over 20 minutes on the runner.
+      - id: stepmesh
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: native/stepmesh/StepMesh.xcframework
+          key: stepmesh-${{ runner.os }}-${{ hashFiles('native/stepmesh/Cargo.lock', 'native/stepmesh/Cargo.toml', 'native/stepmesh/src/**', 'native/stepmesh/include/**', 'scripts/build-stepmesh.sh') }}
+      - name: Build the STEP import library
+        if: steps.stepmesh.outputs.cache-hit != 'true'
+        env:
+          STEPMESH_TARGETS: aarch64-apple-darwin aarch64-apple-ios-sim
+          STEPMESH_PROFILE: ci
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal --target aarch64-apple-ios-sim
+          ./scripts/build-stepmesh.sh
       - name: Build the Swift package
         run: swift build
       # The iOS app builds into its own DerivedData, so the .build cache above does not help it. Most

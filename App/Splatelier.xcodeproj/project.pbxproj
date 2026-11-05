@@ -30,6 +30,7 @@
 		816E887CAA9077FF394DEA38 /* mlx.txt in Resources */ = {isa = PBXBuildFile; fileRef = A3623F5700962DAAE44C4F86 /* mlx.txt */; };
 		981EE82D39D2E8F67F71113A /* spz-swift.txt in Resources */ = {isa = PBXBuildFile; fileRef = F2A122E8E98CCFC565269E5A /* spz-swift.txt */; };
 		9E182E3B3AE4A089C9DF4F69 /* MetalSplatter.txt in Resources */ = {isa = PBXBuildFile; fileRef = 0B4A6F147A19BC01C1467EFE /* MetalSplatter.txt */; };
+		CA3DF9EA157FB97FAAA25696 /* cadmpeg.txt in Resources */ = {isa = PBXBuildFile; fileRef = 1C69033F657662496456997A /* cadmpeg.txt */; };
 		A590BC20BA16735A21DC6C11 /* SplatLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CDD1105446E7504D3E5DC30 /* SplatLibraryView.swift */; };
 		A6ED43F1088832DEFEFA29A9 /* ShareOptionsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 304812711AF3443F715DF7F9 /* ShareOptionsSheet.swift */; };
 		AF2431FEEC9631555EDB4331 /* nlohmann-json.txt in Resources */ = {isa = PBXBuildFile; fileRef = 6B79730CE5E423E2E5D35D49 /* nlohmann-json.txt */; };
@@ -53,6 +54,7 @@
 		F47585790BBEA0F1D316AE87 /* guide_cool.mp4 */ = {isa = PBXFileReference; path = guide_cool.mp4; sourceTree = "<group>"; };
 		0AA06C0E20ABD473CA332C58 /* metal-cpp.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "metal-cpp.txt"; sourceTree = "<group>"; };
 		0B4A6F147A19BC01C1467EFE /* MetalSplatter.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = MetalSplatter.txt; sourceTree = "<group>"; };
+		1C69033F657662496456997A /* cadmpeg.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = cadmpeg.txt; sourceTree = "<group>"; };
 		0F3068CFC477ECA713F841EA /* FrameReviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrameReviewView.swift; sourceTree = "<group>"; };
 		117ADD30B81D1B38F22AAA67 /* launch.mp4 */ = {isa = PBXFileReference; path = launch.mp4; sourceTree = "<group>"; };
 		1CBE22F39754A8722352E099 /* App.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App.swift; sourceTree = "<group>"; };
@@ -106,6 +108,7 @@
 		136BADA5979A62B20AC87CC7 /* Licenses */ = {
 			isa = PBXGroup;
 			children = (
+				1C69033F657662496456997A /* cadmpeg.txt */,
 				360CBE487E38E97640AD5677 /* fmt.txt */,
 				0AA06C0E20ABD473CA332C58 /* metal-cpp.txt */,
 				0B4A6F147A19BC01C1467EFE /* MetalSplatter.txt */,
@@ -257,6 +260,7 @@
 			files = (
 				08D5D1562685698D761475E7 /* Assets.xcassets in Resources */,
 				9E182E3B3AE4A089C9DF4F69 /* MetalSplatter.txt in Resources */,
+				CA3DF9EA157FB97FAAA25696 /* cadmpeg.txt in Resources */,
 				20CC4713AD79BB9EFCB08138 /* Splatelier.txt in Resources */,
 				108FD00B671709BEF68DDC25 /* fmt.txt in Resources */,
 				B9249B43E69C7EFBB1C0D8C3 /* guide_angles.mp4 in Resources */,
