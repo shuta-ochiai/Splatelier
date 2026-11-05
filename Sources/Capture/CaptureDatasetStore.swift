@@ -94,6 +94,9 @@ public enum CaptureDatasetStore {
         var camera: CameraSettings?
         // Camera motion when the frame was taken (nil in old datasets).
         var motion: CameraMotion?
+        // ARKit's streamed pose when the frame was taken, before loop closure moved the anchor
+        // (row-major world→camera; nil in old datasets).
+        var captureViewmat: [Float]?
     }
 
     /// Floats per sample in a `.lidar` file: camera x, y, z, depth spread, confidence level.
@@ -131,7 +134,8 @@ public enum CaptureDatasetStore {
                 lidarFile: f.lidarSamples.isEmpty
                     ? nil : try writeLiDARSamples(f.lidarSamples, to: tmp, index: i),
                 camera: f.cameraSettings,
-                motion: f.cameraMotion
+                motion: f.cameraMotion,
+                captureViewmat: f.captureViewmat
             ))
         }
 
@@ -215,7 +219,8 @@ public enum CaptureDatasetStore {
                 featureObservations: featureObs,
                 lidarSamples: try readLiDARSamples(r, from: directory),
                 cameraSettings: r.camera,
-                cameraMotion: r.motion
+                cameraMotion: r.motion,
+                captureViewmat: r.captureViewmat
             )
             frame.imageStorage.attach(files, path: r.imageFile)
             frames.append(frame)

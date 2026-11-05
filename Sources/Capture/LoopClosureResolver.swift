@@ -25,6 +25,8 @@ public enum LoopClosureResolver {
         public let lidarSamples: [LiDARSample]
         public let cameraSettings: CameraSettings?
         public let cameraMotion: CameraMotion?
+        /// ARKit's streamed camera pose (c2w) when the frame was taken.
+        public let captureCameraToWorld: simd_float4x4?
 
         public init(
             anchorID: UUID, image: MLXArray,
@@ -33,7 +35,8 @@ public enum LoopClosureResolver {
             featureObservations: [ARKitFeatureObservation] = [],
             lidarSamples: [LiDARSample] = [],
             cameraSettings: CameraSettings? = nil,
-            cameraMotion: CameraMotion? = nil
+            cameraMotion: CameraMotion? = nil,
+            captureCameraToWorld: simd_float4x4? = nil
         ) {
             self.anchorID = anchorID
             self.image = image
@@ -45,6 +48,7 @@ public enum LoopClosureResolver {
             self.lidarSamples = lidarSamples
             self.cameraSettings = cameraSettings
             self.cameraMotion = cameraMotion
+            self.captureCameraToWorld = captureCameraToWorld
         }
     }
 
@@ -95,7 +99,8 @@ public enum LoopClosureResolver {
                 featureObservations: r.featureObservations,
                 lidarSamples: r.lidarSamples,
                 cameraSettings: r.cameraSettings,
-                cameraMotion: r.cameraMotion
+                cameraMotion: r.cameraMotion,
+                captureViewmat: r.captureCameraToWorld.map { PoseConversion.viewmat(fromCameraToWorld: $0) }
             ))
         }
         return out

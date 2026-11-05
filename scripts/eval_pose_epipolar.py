@@ -105,6 +105,8 @@ def main():
     ap.add_argument("--revisit-pairs", type=int, default=150,
                     help="number of camera pairs that are far apart in time (>= --revisit-min-gap) but look at the same place (counted as gap=0)")
     ap.add_argument("--revisit-min-gap", type=int, default=20)
+    ap.add_argument("--revisit-poses", default="ARKit", choices=["ARKit", "BA"],
+                    help="pose set that picks the revisit pairs; BA also finds pairs whose ARKit poses drifted too far apart")
     ap.add_argument("--csv", default="")
     a = ap.parse_args()
 
@@ -134,8 +136,9 @@ def main():
 
     # Revisit pairs: frames far apart in time whose ARKit poses have nearby camera centers and similar view directions.
     # Measures consistency between segments where capture returned to the same place (global distortion invisible to local pairs).
-    C = np.array([-(f["V"]["ARKit"][:3, :3].T @ f["V"]["ARKit"][:3, 3]) for f in frames])
-    Z = np.array([f["V"]["ARKit"][2, :3] for f in frames])     # optical axis (world)
+    rp = a.revisit_poses
+    C = np.array([-(f["V"][rp][:3, :3].T @ f["V"][rp][:3, 3]) for f in frames])
+    Z = np.array([f["V"][rp][2, :3] for f in frames])     # optical axis (world)
     ext = np.linalg.norm(C.max(0) - C.min(0))
     cand = []
     for i in range(n):
@@ -146,7 +149,7 @@ def main():
                 cand.append((d / ext + ang / 25, i, j))
     cand.sort()
     revisit = [(i, j) for _, i, j in cand[:a.revisit_pairs]]
-    print(f"revisit pairs: {len(revisit)} (gap >= {a.revisit_min_gap}, close & co-oriented by ARKit)")
+    print(f"revisit pairs: {len(revisit)} (gap >= {a.revisit_min_gap}, close & co-oriented by {a.revisit_poses})")
 
     rows = []  # per match: gap, pair, set errors..., radius, row, speed
     pair_stats = []
@@ -224,6 +227,9 @@ def main():
         rb = sum(1 for p in rv if p["BA"] < p["ARKit"])
         print(f"revisit pairs where BA < ARKit: {rb}/{len(rv)} ({100.0 * rb / len(rv):.1f}%), "
               f"median ARKit {np.median([p['ARKit'] for p in rv]):.3f} / BA {np.median([p['BA'] for p in rv]):.3f} px")
+        ba = np.array([p["BA"] for p in rv])
+        print(f"revisit BA per-pair median error: p50 {np.median(ba):.3f}  p90 {np.percentile(ba, 90):.3f}  "
+              f"max {ba.max():.3f} px; pairs > 1.5 px: {int((ba > 1.5).sum())}/{len(rv)}, > 5 px: {int((ba > 5).sum())}")
 
     print("\n== by radius from principal point (normalized; 1 = image corner) ==")
     for lo, hi in [(0, .3), (.3, .6), (.6, .8), (.8, 1.1)]:

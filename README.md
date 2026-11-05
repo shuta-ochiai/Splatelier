@@ -148,7 +148,8 @@ sources. It does not run the tests, because most of them need a Metal GPU: run `
   frames are left out too.
 - **Poses and seed points**: bundle adjustment over ORB and ARKit feature tracks, with loop closures
   between frames that see the same ARKit feature points (the points are eliminated by per-point QR
-  and the reduced system is solved with Accelerate), and dense seed
+  and the reduced system is solved with Accelerate); the cameras are held to ARKit's frame-to-frame
+  motion more than to its absolute poses, which its own loop closure can bend; and dense seed
   points from multi-view stereo (plane sweep + SGM). With the experimental LiDAR switch, LiDAR depth,
   reprojected with the refined poses, joins the seed points.
 - **Training**: PocketGS disc-like initialization; a hybrid of MCMC and ImprovedGS+

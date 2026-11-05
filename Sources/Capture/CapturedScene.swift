@@ -290,6 +290,10 @@ public struct CapturedFrame {
     /// How fast the camera moved when the frame was taken (nil for frames not from an ARKit
     /// capture, and in datasets saved before it was recorded).
     public let cameraMotion: CameraMotion?
+    /// ARKit's streamed pose (row-major world→camera) when the frame was taken. `viewmat` is the
+    /// frame anchor's final pose instead, which ARKit's loop closure may have moved since; nil for
+    /// frames not from an ARKit capture, and in datasets saved before it was recorded.
+    public let captureViewmat: [Float]?
 
     public init(
         image: MLXArray, viewmat: [Float],
@@ -299,7 +303,8 @@ public struct CapturedFrame {
         featureObservations: [ARKitFeatureObservation] = [],
         lidarSamples: [LiDARSample] = [],
         cameraSettings: CameraSettings? = nil,
-        cameraMotion: CameraMotion? = nil
+        cameraMotion: CameraMotion? = nil,
+        captureViewmat: [Float]? = nil
     ) {
         precondition(viewmat.count == 16, "viewmat must be a row-major 4×4")
         precondition(image.shape.count == 3 && image.shape[2] == 3,
@@ -316,6 +321,7 @@ public struct CapturedFrame {
         self.lidarSamples = lidarSamples
         self.cameraSettings = cameraSettings
         self.cameraMotion = cameraMotion
+        self.captureViewmat = captureViewmat
     }
 
     private init(copying f: CapturedFrame, viewmat: [Float], intrinsics: Intrinsics,
@@ -332,6 +338,7 @@ public struct CapturedFrame {
         self.lidarSamples = f.lidarSamples
         self.cameraSettings = f.cameraSettings
         self.cameraMotion = f.cameraMotion
+        self.captureViewmat = f.captureViewmat
     }
 
     /// Frame with only the pose replaced (image and undistortion spec unchanged).

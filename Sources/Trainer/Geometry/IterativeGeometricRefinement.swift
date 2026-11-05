@@ -38,10 +38,20 @@ public enum IterativeGeometricRefinement {
                 scaleAwareGauge: true, huberThreshold: 2.0,
                 lmInitialDamping: 1e-3, lmDecay: 0.5,
                 adaptiveLM: true, dampingMode: .marquardt,
-                // Weak constraint toward ARKit prior poses (σ 0.25° / 1 cm, pixel σ 1 px
-                // equivalent). Keeps cameras with few observations from moving the wrong way and
-                // the gauge (global rotation / scale) from drifting.
-                priorRotationSigmaDeg: 0.25, priorPositionSigma: 0.01
+                // Constraints toward the ARKit poses (pixel σ 1 px equivalent), which keep cameras
+                // with few observations from moving the wrong way and the gauge (global rotation /
+                // scale) from drifting. ARKit's own loop closure re-anchors stretches of the
+                // trajectory after the fact, leaving them ~1° / 10 cm off where two passes meet; a
+                // tight prior on the absolute poses (it was σ 0.25° / 1 cm) held those frames
+                // there against the loop correspondences, and the passes stayed 15–30 px apart.
+                // So the absolute prior is loose (σ 1° / 4 cm), and the tight one is on the motion
+                // between consecutive frames (σ 0.1° / 2.5 mm), which ARKit tracks well; its Huber
+                // cap lets go of the one edge across a re-anchoring step. On 19 captures this left
+                // fewer cross-pass pairs off by more than 1.5 px (165 vs 215) and raised held-out
+                // PSNR by 0.12 dB on average over 6 of them.
+                priorRotationSigmaDeg: 1.0, priorPositionSigma: 0.04,
+                relativePriorRotationSigmaDeg: 0.1, relativePriorPositionSigma: 0.0025,
+                relativePriorHuber: 2
             )
         ) {
             precondition(maxRounds >= 1)

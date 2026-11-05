@@ -48,7 +48,9 @@ func usage() {
     print("           0 = all frames)")
     print("         THERMAL_SIM=nominal|fair|serious fixes the thermal guard's thermalState (reproduces the serious slow-down)")
     print("         GEO_REG=0 turns off the geometric regularization (on as in the app)")
-    print("         POSE_SOURCE=arkit trains on the ARKit poses instead of the BA poses (BA still runs)")
+    print("         POSE_SOURCE=arkit trains on the ARKit poses instead of the BA poses (BA still runs);")
+    print("           POSE_SOURCE=capture starts BA from ARKit's streamed capture-time poses instead of the anchors'")
+    print("           final ones (datasets saved since they were recorded)")
     print("         SEED_ALLOC=confidence keeps MVS or LiDAR per cell by confidence and caps per cell")
     print("           (cells SEED_CELL_PX=<pixels across at the seen depth>, default 16; SEED_LIDAR_WEIGHT=<w>, default 1)")
     print("         LIDAR_COLOR=0 leaves the LiDAR seed points mid-grey instead of colored from the images")
@@ -80,6 +82,10 @@ func usage() {
     print("")
     print("  splatelier dump-sparse <dataset.valset> <output.ply>")
     print("    Writes the .valset sparse points (ORB+BA refined) as a gaussian PLY for inspection in a viewer.")
+    print("")
+    print("  splatelier render-poses <trained.ply> <pose_dump.json> <outDir> <frame>...")
+    print("    Renders a trained PLY from the poses of a train-capture POSE_DUMP at the given frames (0-based,")
+    print("    time order) to <outDir>/<frame>_render.png, to compare with the frames' photos.")
     print("")
     print("  splatelier view <ply>")
     print("    Open a window and render a .ply (or .splat/.spz) with MetalSplatter.")
@@ -302,9 +308,17 @@ case "train-capture":
     #endif
     do {
         FileHandle.standardError.write(Data("loading \(valsetURL.lastPathComponent)…\n".utf8))
-        let scene = try CaptureDatasetStore.load(from: valsetURL)
+        var scene = try CaptureDatasetStore.load(from: valsetURL)
         FileHandle.standardError.write(Data(
             "loaded \(scene.frames.count) frames, \(scene.sparsePoints.count) sparse points\n".utf8))
+        // POSE_SOURCE=capture: start from ARKit's streamed poses at capture time instead of the
+        // anchors' final poses (frames saved without them keep the anchor pose).
+        if env["POSE_SOURCE"] == "capture" {
+            let withCapture = scene.frames.filter { $0.captureViewmat != nil }.count
+            scene = scene.withFrames(scene.frames.map { f in f.captureViewmat.map(f.withViewmat) ?? f })
+            FileHandle.standardError.write(Data(
+                "POSE_SOURCE=capture: \(withCapture)/\(scene.frames.count) frames use the streamed capture-time pose\n".utf8))
+        }
         // Default: the app's recommendation for the capture's frame count.
         let iterations = (args.count > 4 ? Int(args[4]) : nil)
             ?? CaptureTraining.recommendedIterations(frameCount: scene.frames.count, mvs: true)
@@ -802,6 +816,36 @@ case "render":
         #endif
     } catch {
         print("render failed: \(error)"); exit(1)
+    }
+
+case "render-poses":
+    // Renders a trained PLY from the poses of a POSE_DUMP json (the BA poses training used) at the
+    // given frames of the dump (0-based, time order), to compare with the frames' photos.
+    guard args.count >= 6 else { print("usage: splatelier render-poses <ply> <pose_dump.json> <outDir> <frame>..."); exit(1) }
+    do {
+        let model = try PLYReader.readGaussianPLY(url: URL(fileURLWithPath: args[2]))
+        struct Dump: Decodable {
+            struct F: Decodable { let timestamp: Double; let viewmat: [Float]; let intrinsics: [Float]; let width: Int; let height: Int }
+            let frames: [F]
+        }
+        let dump = try JSONDecoder().decode(Dump.self, from: Data(contentsOf: URL(fileURLWithPath: args[3])))
+        let frames = dump.frames.sorted { $0.timestamp < $1.timestamp }
+        let outDir = URL(fileURLWithPath: args[4])
+        try FileManager.default.createDirectory(at: outDir, withIntermediateDirectories: true)
+        let renderer = try GaussianRenderer()
+        for a in args[5...] {
+            guard let i = Int(a), i >= 0, i < frames.count else { continue }
+            let f = frames[i]
+            let cam = Camera(viewmat: MLXArray(f.viewmat, [16]), intrinsics: MLXArray(f.intrinsics, [4]),
+                             width: f.width, height: f.height, background: MLXArray([Float(0), 0, 0], [3]))
+            let (render, _, _) = renderer.forward(model: model, camera: cam)
+            eval(render)
+            #if os(macOS)
+            saveImagePNG(render, to: outDir.appendingPathComponent(String(format: "%04d_render.png", i)))
+            #endif
+        }
+    } catch {
+        print("render-poses failed: \(error)"); exit(1)
     }
 
 case "stats":
