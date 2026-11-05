@@ -78,6 +78,14 @@ public enum BundleAdjustment {
         public var priorRotationSigmaDeg: Float? = nil
         public var priorPositionSigma: Float? = nil
         public var priorPixelSigma: Float = 1.0
+        /// Constraint on the relative pose of consecutive cameras (index i → i+1) toward that of
+        /// the prior poses: 0.5·(σpx/σθ)²·|Log((R_p,j R_p,iᵀ)ᵀ R_j R_iᵀ)|² + 0.5·(σpx/σp)²·|R_i(O_j −
+        /// O_i) − R_p,i(O_p,j − O_p,i)|², each Huber-robust at `relativePriorHuber` σ (nil =
+        /// quadratic). A step in the prior trajectory (its source re-anchored part of it) costs
+        /// one edge, not every camera after it. nil σs disable it.
+        public var relativePriorRotationSigmaDeg: Float? = nil
+        public var relativePriorPositionSigma: Float? = nil
+        public var relativePriorHuber: Float? = nil
         /// Estimate `State.distortion` (k1, k2) together with the poses and points. Otherwise it
         /// stays fixed (still used in the projection).
         public var estimateDistortion: Bool = false
@@ -95,6 +103,9 @@ public enum BundleAdjustment {
             dampingMode: DampingMode = .absolute,
             priorRotationSigmaDeg: Float? = nil,
             priorPositionSigma: Float? = nil,
+            relativePriorRotationSigmaDeg: Float? = nil,
+            relativePriorPositionSigma: Float? = nil,
+            relativePriorHuber: Float? = nil,
             estimateDistortion: Bool = false
         ) {
             precondition(iterations > 0)
@@ -110,6 +121,9 @@ public enum BundleAdjustment {
             self.dampingMode = dampingMode
             self.priorRotationSigmaDeg = priorRotationSigmaDeg
             self.priorPositionSigma = priorPositionSigma
+            self.relativePriorRotationSigmaDeg = relativePriorRotationSigmaDeg
+            self.relativePriorPositionSigma = relativePriorPositionSigma
+            self.relativePriorHuber = relativePriorHuber
             self.estimateDistortion = estimateDistortion
         }
     }
@@ -409,14 +423,69 @@ public enum BundleAdjustment {
         let wPos: Double
         let priorR: [simd_double3x3]
         let priorO: [SIMD3<Double>]
+        let wRelRot: Double
+        let wRelPos: Double
+        let relHuber: Double
+        /// Prior relative rotation R_p,j R_p,iᵀ and offset R_p,i(O_p,j − O_p,i) of edge i → i+1.
+        let relR: [simd_double3x3]
+        let relD: [SIMD3<Double>]
 
         init?(parameters p: Parameters, viewmats: [[Float]]?) {
-            guard let vms = viewmats, p.priorRotationSigmaDeg != nil || p.priorPositionSigma != nil else { return nil }
+            guard let vms = viewmats,
+                  p.priorRotationSigmaDeg != nil || p.priorPositionSigma != nil
+                    || p.relativePriorRotationSigmaDeg != nil || p.relativePriorPositionSigma != nil
+            else { return nil }
             let spx = Double(p.priorPixelSigma)
-            wRot = p.priorRotationSigmaDeg.map { let s = Double($0) * .pi / 180; return (spx / s) * (spx / s) } ?? 0
-            wPos = p.priorPositionSigma.map { let s = Double($0); return (spx / s) * (spx / s) } ?? 0
-            priorR = vms.map { PosePrior.rot($0) }
-            priorO = vms.map { PosePrior.center($0) }
+            func weightRot(_ deg: Float?) -> Double {
+                deg.map { let s = Double($0) * .pi / 180; return (spx / s) * (spx / s) } ?? 0
+            }
+            func weightPos(_ m: Float?) -> Double { m.map { let s = Double($0); return (spx / s) * (spx / s) } ?? 0 }
+            wRot = weightRot(p.priorRotationSigmaDeg)
+            wPos = weightPos(p.priorPositionSigma)
+            wRelRot = weightRot(p.relativePriorRotationSigmaDeg)
+            wRelPos = weightPos(p.relativePriorPositionSigma)
+            relHuber = Double(p.relativePriorHuber ?? 0)
+            let pR = vms.map { PosePrior.rot($0) }
+            let pO = vms.map { PosePrior.center($0) }
+            priorR = pR
+            priorO = pO
+            let n = vms.count
+            relR = n < 2 ? [] : (0..<(n - 1)).map { pR[$0 + 1] * pR[$0].transpose }
+            relD = n < 2 ? [] : (0..<(n - 1)).map { pR[$0] * (pO[$0 + 1] - pO[$0]) }
+        }
+
+        var hasRelative: Bool { (wRelRot > 0 || wRelPos > 0) && !relR.isEmpty }
+
+        /// Huber cost and IRLS weight factor of a residual with squared norm `e2` and weight `w`
+        /// (threshold `relHuber` σ; 0 = quadratic).
+        func huberTerm(_ e2: Double, _ w: Double) -> (cost: Double, factor: Double) {
+            guard relHuber > 0, w > 0 else { return (0.5 * w * e2, 1) }
+            let z = (w * e2).squareRoot()
+            if z <= relHuber { return (0.5 * w * e2, 1) }
+            return (relHuber * z - 0.5 * relHuber * relHuber, relHuber / z)
+        }
+
+        /// Left perturbation of `applyLeftSE3Perturbation` in double precision: R' = exp(ω)R,
+        /// t' = exp(ω)t + v. Returns (R', O').
+        static func perturbed(_ R: simd_double3x3, _ O: SIMD3<Double>, _ d: [Double]) -> (simd_double3x3, SIMD3<Double>) {
+            let w = SIMD3(d[0], d[1], d[2]), v = SIMD3(d[3], d[4], d[5])
+            let th = simd_length(w)
+            var E = matrix_identity_double3x3
+            if th > 1e-12 {
+                let k = w / th
+                let K = simd_double3x3(rows: [SIMD3(0, -k.z, k.y), SIMD3(k.z, 0, -k.x), SIMD3(-k.y, k.x, 0)])
+                E = E + sin(th) * K + (1 - cos(th)) * (K * K)
+            }
+            let R2 = E * R
+            let t = -(R * O)
+            let t2 = E * t + v
+            return (R2, -(R2.transpose * t2))
+        }
+
+        /// Residuals (rotation, offset) of edge i → i+1.
+        func relResidual(_ i: Int, _ Ri: simd_double3x3, _ Oi: SIMD3<Double>,
+                         _ Rj: simd_double3x3, _ Oj: SIMD3<Double>) -> (SIMD3<Double>, SIMD3<Double>) {
+            (PosePrior.logSO3(relR[i].transpose * (Rj * Ri.transpose)), Ri * (Oj - Oi) - relD[i])
         }
 
         static func rot(_ v: [Float]) -> simd_double3x3 {
@@ -443,6 +512,15 @@ public enum BundleAdjustment {
                 c += 0.5 * wRot * simd_length_squared(PosePrior.logSO3(priorR[i].transpose * R))
                 c += 0.5 * wPos * simd_length_squared(PosePrior.center(v) - priorO[i])
             }
+            if hasRelative {
+                for i in 0..<(state.viewmats.count - 1) {
+                    let a = state.viewmats[i], b = state.viewmats[i + 1]
+                    let (eR, eD) = relResidual(i, PosePrior.rot(a), PosePrior.center(a),
+                                               PosePrior.rot(b), PosePrior.center(b))
+                    c += huberTerm(simd_length_squared(eR), wRelRot).cost
+                    c += huberTerm(simd_length_squared(eD), wRelPos).cost
+                }
+            }
             return Float(c)
         }
 
@@ -464,6 +542,59 @@ public enum BundleAdjustment {
                     diagonal[i * 6 + 3 + k] += Float(wPos)
                     rhs[f + k] += Float(bw[k])
                     rhs[f + 3 + k] += Float(bv[k])
+                }
+            }
+            guard hasRelative else { return }
+            // Relative edges: Jacobians by central differences of the left perturbation (12
+            // columns per edge), weighted by the Huber IRLS factor of each residual group.
+            let h = 1e-6
+            for i in 0..<(state.viewmats.count - 1) {
+                let j = i + 1
+                guard j >= firstFree else { continue }
+                let Ri = PosePrior.rot(state.viewmats[i]), Oi = PosePrior.center(state.viewmats[i])
+                let Rj = PosePrior.rot(state.viewmats[j]), Oj = PosePrior.center(state.viewmats[j])
+                let (eR, eD) = relResidual(i, Ri, Oi, Rj, Oj)
+                let wR = wRelRot * huberTerm(simd_length_squared(eR), wRelRot).factor
+                let wD = wRelPos * huberTerm(simd_length_squared(eD), wRelPos).factor
+                let e = [eR.x, eR.y, eR.z, eD.x, eD.y, eD.z]
+                let wv = [wR, wR, wR, wD, wD, wD]
+                // J[c][r]: column c (0..5 camera i, 6..11 camera j), row r of the 6 residuals.
+                var J = [[Double]](repeating: [Double](repeating: 0, count: 6), count: 12)
+                for c in 0..<12 {
+                    var d = [Double](repeating: 0, count: 6)
+                    d[c % 6] = h
+                    var dm = d; for k in 0..<6 { dm[k] = -d[k] }
+                    let plus: (SIMD3<Double>, SIMD3<Double>)
+                    let minus: (SIMD3<Double>, SIMD3<Double>)
+                    if c < 6 {
+                        let (Rp, Op) = PosePrior.perturbed(Ri, Oi, d), (Rm, Om) = PosePrior.perturbed(Ri, Oi, dm)
+                        plus = relResidual(i, Rp, Op, Rj, Oj); minus = relResidual(i, Rm, Om, Rj, Oj)
+                    } else {
+                        let (Rp, Op) = PosePrior.perturbed(Rj, Oj, d), (Rm, Om) = PosePrior.perturbed(Rj, Oj, dm)
+                        plus = relResidual(i, Ri, Oi, Rp, Op); minus = relResidual(i, Ri, Oi, Rm, Om)
+                    }
+                    for r in 0..<3 {
+                        J[c][r] = (plus.0[r] - minus.0[r]) / (2 * h)
+                        J[c][3 + r] = (plus.1[r] - minus.1[r]) / (2 * h)
+                    }
+                }
+                // Global row of column c, nil for a frozen camera.
+                func row(_ c: Int) -> Int? {
+                    let cam = c < 6 ? i : j
+                    return cam < firstFree ? nil : (cam - firstFree) * 6 + c % 6
+                }
+                for c1 in 0..<12 {
+                    guard let r1 = row(c1) else { continue }
+                    var g = 0.0
+                    for r in 0..<6 { g += J[c1][r] * wv[r] * e[r] }
+                    rhs[r1] -= Float(g)
+                    for c2 in 0..<12 {
+                        guard let r2 = row(c2) else { continue }
+                        var hsum = 0.0
+                        for r in 0..<6 { hsum += J[c1][r] * wv[r] * J[c2][r] }
+                        lhs[r1 * D + r2] += Float(hsum)
+                        if r1 == r2 { diagonal[(c1 < 6 ? i : j) * 6 + c1 % 6] += Float(hsum) }
+                    }
                 }
             }
         }

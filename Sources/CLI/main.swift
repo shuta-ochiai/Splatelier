@@ -81,6 +81,10 @@ func usage() {
     print("  splatelier dump-sparse <dataset.valset> <output.ply>")
     print("    Writes the .valset sparse points (ORB+BA refined) as a gaussian PLY for inspection in a viewer.")
     print("")
+    print("  splatelier render-poses <trained.ply> <pose_dump.json> <outDir> <frame>...")
+    print("    Renders a trained PLY from the poses of a train-capture POSE_DUMP at the given frames (0-based,")
+    print("    time order) to <outDir>/<frame>_render.png, to compare with the frames' photos.")
+    print("")
     print("  splatelier view <ply>")
     print("    Open a window and render a .ply (or .splat/.spz) with MetalSplatter.")
     print("    Drag to orbit, scroll to zoom; close the window to quit.")
@@ -802,6 +806,36 @@ case "render":
         #endif
     } catch {
         print("render failed: \(error)"); exit(1)
+    }
+
+case "render-poses":
+    // Renders a trained PLY from the poses of a POSE_DUMP json (the BA poses training used) at the
+    // given frames of the dump (0-based, time order), to compare with the frames' photos.
+    guard args.count >= 6 else { print("usage: splatelier render-poses <ply> <pose_dump.json> <outDir> <frame>..."); exit(1) }
+    do {
+        let model = try PLYReader.readGaussianPLY(url: URL(fileURLWithPath: args[2]))
+        struct Dump: Decodable {
+            struct F: Decodable { let timestamp: Double; let viewmat: [Float]; let intrinsics: [Float]; let width: Int; let height: Int }
+            let frames: [F]
+        }
+        let dump = try JSONDecoder().decode(Dump.self, from: Data(contentsOf: URL(fileURLWithPath: args[3])))
+        let frames = dump.frames.sorted { $0.timestamp < $1.timestamp }
+        let outDir = URL(fileURLWithPath: args[4])
+        try FileManager.default.createDirectory(at: outDir, withIntermediateDirectories: true)
+        let renderer = try GaussianRenderer()
+        for a in args[5...] {
+            guard let i = Int(a), i >= 0, i < frames.count else { continue }
+            let f = frames[i]
+            let cam = Camera(viewmat: MLXArray(f.viewmat, [16]), intrinsics: MLXArray(f.intrinsics, [4]),
+                             width: f.width, height: f.height, background: MLXArray([Float(0), 0, 0], [3]))
+            let (render, _, _) = renderer.forward(model: model, camera: cam)
+            eval(render)
+            #if os(macOS)
+            saveImagePNG(render, to: outDir.appendingPathComponent(String(format: "%04d_render.png", i)))
+            #endif
+        }
+    } catch {
+        print("render-poses failed: \(error)"); exit(1)
     }
 
 case "stats":
