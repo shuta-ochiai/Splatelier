@@ -33,6 +33,8 @@ and compiled to Metal.
 - **Built-in viewer**: orbit the result, choose the layers to show, measure distances, grade the
   colours, crop the splats with a box, sphere or lasso, and select and delete floaters. The Library
   lists your captures and opens `.ply`, `.splat` and `.spz` files you import.
+- **CAD models**: import a STEP model into a capture and place it by hand: drag it (it settles on
+  floors and tables), turn it with its rings, a two-finger twist or quarter-turn buttons.
 - **Export**: share the splats as a standard 3DGS PLY, compressed PLY, SPZ, `.splat`, glTF (GLB), SOG
   or OpenUSD (`.usda`), and the mesh (OBJ) generated from the trained scene.
 - **Mac tools**: retrain a capture from the app on a Mac, train and evaluate on COLMAP scenes, and
@@ -105,8 +107,12 @@ convert <in.ply> <out.ext> [shDegree]                     convert a PLY to compr
   metallib and runs the tool.
 - GPU tests and training need Xcode's toolchain (`xcodebuild`), not plain `swift test`, because of
   MLX's Metal shaders.
-- The viewer commands (`view`, `capture`) need `scripts/build-metalsplatter-metallib.sh [debug|release]`
-  first.
+- The viewer commands (`view`, `capture`, `view-cad`) need
+  `scripts/build-metalsplatter-metallib.sh [debug|release]` first.
+- STEP import links a Rust static library, `native/stepmesh` (built on
+  [cadmpeg](https://github.com/cadmpeg/cadmpeg), Apache-2.0). Build its `StepMesh.xcframework` once
+  with `scripts/build-stepmesh.sh` before building the package or the app; it needs Rust 1.97.1 with
+  the `aarch64-apple-ios` and `aarch64-apple-ios-sim` targets.
 - The COLMAP integration tests take a local scene:
   `TEST_RUNNER_MST_COLMAP_DIR=$PWD/data/bear make test`.
 
@@ -171,6 +177,7 @@ Sources/Trainer/           renderer, trainer, densification, BA and MVS, PLY I/O
 Sources/Capture/           ARKit capture, training from captures, .valset storage
 Sources/SplatViewerKit/    SwiftUI + MetalKit viewer
 Sources/CLI/               command-line tool
+native/stepmesh/           Rust library that converts STEP to USDZ (cadmpeg) for STEP import
 scripts/                   build, release and animation scripts (scripts/media/ renders the animations)
 slang/                     Slang kernel sources
 Vendor/MetalSplatter/      vendored MetalSplatter with local patches

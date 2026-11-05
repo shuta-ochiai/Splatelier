@@ -124,55 +124,31 @@ func boxCenterFollowsTheFinger() {
     #expect(moved.rotation == region.rotation)
 }
 
-/// The grabbed point of a ring follows the finger along the ring: the box turns about that axis
-/// by the arc the finger covers over the radius of the ring, and nothing else changes.
+/// A box turns by the CAD model's rings: small full rings beside it at the top right. Dragging one
+/// turns the box about that axis of its own, keeping its center and size, and any point round the
+/// ring can be grabbed.
 @Test
-func ringTurnsTheBoxAboutItsAxis() {
+func boxTurnsByTheModelRingsBesideIt() {
     let cam = camera()
     let region = SplatViewerCropRegion(
         shape: .box, center: SIMD3(1, 0, 0), halfExtent: SIMD3(1, 1, 1), radius: 1)
+    let rings = SplatViewerCADGizmo(box: region, camera: cam)
+    #expect(!region.contains(rings.anchor))
     for axis in 0..<3 {
-        let angle: Float = 0.7
-        let p = region.ringPoint(axis: axis, angle: angle)
-        let around = region.rotation.act(SIMD3<Float>(Float(axis == 0 ? 1 : 0), Float(axis == 1 ? 1 : 0), Float(axis == 2 ? 1 : 0)))
-        let tangent = simd_normalize(simd_cross(around, p - region.center))
-        let d = pixels(moving: p, by: tangent * 0.2, cam)
-        let turned = region.dragged(.ring(axis: axis, angle: angle), byPixels: d, camera: cam, viewSize: viewSize)
+        let touch = screen(rings.ringPoint(axis: axis, angle: 3.5), cam) / viewSize
+        guard let ring = rings.ring(at: touch, camera: cam, viewSize: viewSize, ringReach: 15),
+              case .ring(axis: axis, _) = ring else {
+            Issue.record("expected the ring round axis \(axis)"); continue
+        }
+        let turned = rings.dragged(ring, byPixels: SIMD2(40, 25), camera: cam, viewSize: viewSize)
         #expect(turned.center == region.center)
         #expect(turned.halfExtent == region.halfExtent)
-        let expected = simd_quatf(angle: 0.2 / region.ringRadius, axis: around)
-        let moved = turned.ringPoint(axis: axis, angle: angle)
-        let wanted = region.center + expected.act(p - region.center)
-        // The grabbed point of the ring ends up where the finger took it (the arc is a little
-        // shorter than the straight step along the tangent).
-        #expect(simd_distance(moved, wanted) < 0.01)
-        // The axis itself stays where it was.
-        #expect(simd_distance(turned.rotation.act(SIMD3(Float(axis == 0 ? 1 : 0), Float(axis == 1 ? 1 : 0), Float(axis == 2 ? 1 : 0))), around) < 1e-4)
+        var e = SIMD3<Float>.zero
+        e[axis] = 1
+        // Turned about that axis, which stays where it was.
+        #expect(abs(turned.rotation.angle) > 1e-3)
+        #expect(simd_distance(turned.rotation.act(e), e) < 1e-4)
     }
-}
-
-/// Touching a ring finds it, and the angle where it was touched.
-@Test
-func touchingARingFindsTheRingAndWhereOnIt() {
-    let cam = camera()
-    let region = SplatViewerCropRegion(
-        shape: .box, center: .zero, halfExtent: SIMD3(1, 2, 3), radius: 1)
-    // A little off the middle of the arc.
-    let angle = SplatViewerCropRegion.ringArcMiddle + 0.3
-    let touch = screen(region.ringPoint(axis: 2, angle: angle), cam) / viewSize
-    let found = region.nearestRing(to: touch, camera: cam, viewSize: viewSize)!
-    #expect(found.distance < 1)
-    guard case let .ring(axis, found) = found.handle else {
-        Issue.record("not a ring")
-        return
-    }
-    #expect(axis == 2)
-    #expect(abs(found - angle) < 0.05)
-    // The rest of the ring is not there to grab.
-    let away = screen(region.ringPoint(axis: 2, angle: angle + .pi), cam) / viewSize
-    #expect(region.nearestRing(to: away, camera: cam, viewSize: viewSize)!.distance > 20)
-    #expect(SplatViewerCropRegion(shape: .sphere, center: .zero, halfExtent: .one, radius: 1)
-        .nearestRing(to: touch, camera: cam, viewSize: viewSize) == nil)
 }
 
 /// A turned box contains what lies inside it, not inside the axis-aligned box around the same
@@ -242,19 +218,4 @@ func regionSelectsTheKeptSplatsInside() {
     let kept: [UInt32] = [0, 2, 3]
     #expect(box.insideIndices(kept: kept) { positions[Int($0)] } == [0, 1])
     #expect(box.converted(to: .sphere).insideIndices(kept: kept) { positions[Int($0)] } == [0, 1])
-}
-
-/// The arcs belong to the box: the camera moving doesn't move them, and the box turning does.
-@Test
-func ringArcsStayOnTheBox() {
-    let region = SplatViewerCropRegion(
-        shape: .box, center: SIMD3(1, 0, 0), halfExtent: SIMD3(1, 2, 3), radius: 1)
-    let a = region.ringArc(axis: 1).map(\.point)
-    #expect(a.count == SplatViewerCropRegion.ringArcSteps + 1)
-    // Nothing in the arcs depends on the camera; turning the box carries them along.
-    var turned = region
-    turned.rotation = simd_quatf(angle: 0.5, axis: SIMD3(0, 1, 0))
-    let b = turned.ringArc(axis: 1).map(\.point)
-    let local = region.rotation.inverse.act(a[3] - region.center)
-    #expect(simd_distance(turned.center + turned.rotation.act(local), b[3]) < 1e-4)
 }

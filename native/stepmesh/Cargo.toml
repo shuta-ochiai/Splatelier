@@ -1,0 +1,22 @@
+[package]
+name = "stepmesh"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+description = "Converts STEP files to USDZ for the Splatelier viewer, through cadmpeg."
+
+[lib]
+crate-type = ["staticlib", "rlib"]
+
+# cadmpeg-codec-usd is not on crates.io, so every cadmpeg crate comes from one pinned commit
+# (mixing registry and git copies would give two incompatible `cadmpeg-ir` types).
+[dependencies]
+cadmpeg-codec-step = { git = "https://github.com/cadmpeg/cadmpeg", rev = "e3a2b83d956079ea5d3f20f643e15b3ef4ff2584" }
+cadmpeg-codec-usd = { git = "https://github.com/cadmpeg/cadmpeg", rev = "e3a2b83d956079ea5d3f20f643e15b3ef4ff2584" }
+cadmpeg-core = { git = "https://github.com/cadmpeg/cadmpeg", rev = "e3a2b83d956079ea5d3f20f643e15b3ef4ff2584" }
+cadmpeg-ir = { git = "https://github.com/cadmpeg/cadmpeg", rev = "e3a2b83d956079ea5d3f20f643e15b3ef4ff2584" }
+
+[profile.release]
+lto = true
+codegen-units = 1

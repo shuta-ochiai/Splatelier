@@ -18,6 +18,7 @@ struct SplatLibraryView: View {
         let mainURL: URL        // GS / imported PLY (the subject of thumbnail and sharing)
         let seedURL: URL?       // seed point cloud + camera marker PLY
         let meshURL: URL?       // Mesh OBJ (`_mesh.obj`, if a mesh was generated)
+        let cadURL: URL?        // CAD model added by hand (`<base>.cad.step`), shown in the scene
         let name: String?       // Display name (<base>.name.json)
         let settings: TrainingSettingsRecord?  // <base>.settings.json
         let metrics: CaptureMetricsRecord?     // <base>.metrics.json
@@ -40,6 +41,9 @@ struct SplatLibraryView: View {
 
     @State private var items: [CaptureItem] = []
     @State private var importing = false
+    /// The capture a CAD model is being picked for ("Add CAD model").
+    @State private var cadTarget: CaptureItem?
+    @State private var importingCAD = false
     @State private var errorMessage: String?
     @State private var selectMode = false
     @State private var selection = Set<String>()
@@ -104,6 +108,27 @@ struct SplatLibraryView: View {
         .refreshable { reload() }
         .sheet(item: $shareRequest) { request in
             ShareOptionsSheet(entries: request.entries)
+        }
+        // A second importer can't sit on the same view, so the CAD picker hangs off a background.
+        .background {
+            Color.clear.fileImporter(
+                isPresented: $importingCAD,
+                allowedContentTypes: [CADModelFiles.stepType],
+                allowsMultipleSelection: false
+            ) { result in
+                defer { cadTarget = nil }
+                switch result {
+                case .success(let urls):
+                    guard let src = urls.first, let item = cadTarget else { return }
+                    do {
+                        try CADModelFiles.attach(src, to: item.mainURL)
+                        reload()
+                    } catch {
+                        errorMessage = error.localizedDescription
+                    }
+                case .failure(let err): errorMessage = err.localizedDescription
+                }
+            }
         }
         .fileImporter(
             isPresented: $importing,
@@ -207,6 +232,11 @@ struct SplatLibraryView: View {
                         url: item.mainURL,
                         seedURL: item.seedURL,
                         meshURL: item.meshURL,
+                        cadURL: item.cadURL,
+                        cadPlacement: CADModelFiles.loadPlacement(for: item.mainURL),
+                        onCADPlacementChange: { CADModelFiles.savePlacement($0, for: item.mainURL) },
+                        onImportCAD: { try CADModelFiles.attach($0, to: item.mainURL) },
+                        onRemoveCAD: { CADModelFiles.remove(for: item.mainURL) },
                         name: item.name,
                         shareItems: shareItems(for: item),
                         cropExport: SplatExportShare.cropExport,
@@ -252,6 +282,21 @@ struct SplatLibraryView: View {
             shareRequest = ShareRequest(entries: [shareEntry(for: item)])
         } label: {
             Label("Share", systemImage: "square.and.arrow.up")
+        }
+        // A CAD model (STEP) shown in the scene, to be moved into place in the viewer.
+        Button {
+            cadTarget = item
+            importingCAD = true
+        } label: {
+            Label(item.cadURL == nil ? "Add CAD model" : "Replace CAD model", systemImage: "cube.transparent")
+        }
+        if item.cadURL != nil {
+            Button(role: .destructive) {
+                CADModelFiles.remove(for: item.mainURL)
+                reload()
+            } label: {
+                Label("Remove CAD model", systemImage: "cube.transparent")
+            }
         }
         if let record = item.settings {
             Button {
@@ -518,6 +563,7 @@ struct SplatLibraryView: View {
             mainURL: primary,
             seedURL: mainURL != nil ? seedURL : nil,
             meshURL: meshURL,
+            cadURL: CADModelFiles.model(for: primary),
             name: CaptureMetadataName.load(for: primary),
             settings: TrainingSettingsStore.load(for: primary),
             metrics: CaptureMetricsStore.load(for: primary),
@@ -530,6 +576,7 @@ struct SplatLibraryView: View {
             mainURL: url,
             seedURL: nil,
             meshURL: nil,
+            cadURL: CADModelFiles.model(for: url),
             name: CaptureMetadataName.load(for: url),
             settings: TrainingSettingsStore.load(for: url),
             metrics: CaptureMetricsStore.load(for: url),
@@ -697,5 +744,51 @@ private enum LibraryThumbnailCache {
         else { return nil }
         cache.setObject(image, forKey: key)
         return image
+    }
+}
+
+/// A CAD model added to a capture, kept beside its splats as `<base>.cad.step` (or `.stp`), and
+/// where it was placed in the viewer as `<base>.cadplacement.json`. Both start with `<base>.`, so
+/// deleting the capture removes them too.
+private enum CADModelFiles {
+    static let stepType = UTType(importedAs: "org.iso.step", conformingTo: .data)
+
+    private static func base(_ main: URL) -> URL { main.deletingPathExtension() }
+
+    static func model(for main: URL) -> URL? {
+        ["step", "stp"].lazy
+            .map { base(main).appendingPathExtension("cad.\($0)") }
+            .first { FileManager.default.fileExists(atPath: $0.path) }
+    }
+
+    /// Copies the picked file in, replacing any earlier model and its placement, and returns the copy.
+    @discardableResult
+    static func attach(_ src: URL, to main: URL) throws -> URL {
+        let scoped = src.startAccessingSecurityScopedResource()
+        defer { if scoped { src.stopAccessingSecurityScopedResource() } }
+        remove(for: main)
+        let ext = src.pathExtension.lowercased() == "stp" ? "stp" : "step"
+        let dest = base(main).appendingPathExtension("cad.\(ext)")
+        try FileManager.default.copyItem(at: src, to: dest)
+        return dest
+    }
+
+    static func remove(for main: URL) {
+        if let model = model(for: main) { try? FileManager.default.removeItem(at: model) }
+        try? FileManager.default.removeItem(at: placementURL(for: main))
+    }
+
+    private static func placementURL(for main: URL) -> URL {
+        base(main).appendingPathExtension("cadplacement.json")
+    }
+
+    static func loadPlacement(for main: URL) -> SplatViewerCADPlacement? {
+        guard let data = try? Data(contentsOf: placementURL(for: main)) else { return nil }
+        return try? JSONDecoder().decode(SplatViewerCADPlacement.self, from: data)
+    }
+
+    static func savePlacement(_ placement: SplatViewerCADPlacement, for main: URL) {
+        guard let data = try? JSONEncoder().encode(placement) else { return }
+        try? data.write(to: placementURL(for: main), options: .atomic)
     }
 }

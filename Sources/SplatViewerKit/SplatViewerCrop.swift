@@ -45,9 +45,6 @@ enum SplatViewerCropHandle: Equatable {
     case face(axis: Int, side: Float)
     /// Center of the box or the sphere, which moves the whole region.
     case center
-    /// A point on the ring around one of the box's axes, which turns the box about that axis.
-    /// `angle` is where on the ring it was grabbed, in the box's own frame.
-    case ring(axis: Int, angle: Float)
     /// Sphere surface on the camera's right, which drags the radius.
     case radius
 }
@@ -185,19 +182,6 @@ struct SplatViewerCropRegion: Equatable {
             let m0 = (c * r0 - b * r1) / det
             let m1 = (a * r1 - b * r0) / det
             region.center = center + right * m0 + up * m1
-        case let (.box, .ring(axis, angle)):
-            // The grabbed point of the ring follows the finger along the ring: the box turns about
-            // the axis by the arc the finger covers, divided by the radius of the ring.
-            let around = axisDirection(axis)
-            let p = ringPoint(axis: axis, angle: angle)
-            let tangent = simd_cross(around, p - center)
-            guard simd_length(tangent) > 1e-6,
-                  let column = screenColumn(
-                    at: p, along: simd_normalize(tangent), camera: camera, viewSize: viewSize)
-            else { return self }
-            let m = simd_dot(d, column) / simd_dot(column, column)
-            let turn = simd_quatf(angle: m / ringRadius, axis: around)
-            region.rotation = simd_normalize(turn * rotation)
         case (.sphere, .radius):
             let right = camera.axis(0)
             let at = center + right * radius
@@ -209,60 +193,6 @@ struct SplatViewerCropRegion: Equatable {
             return self
         }
         return region
-    }
-
-    /// Radius of the rings: the half diagonal, so they clear the whole box.
-    var ringRadius: Float { max(simd_length(halfExtent), Self.minimumSize) }
-
-    /// World position of the point on the ring around `axis` at `angle`. The ring lies in the plane
-    /// of the other two axes, and an increasing angle turns the right-handed way about `axis`.
-    func ringPoint(axis: Int, angle: Float) -> SIMD3<Float> {
-        let u = axisDirection((axis + 1) % 3), v = axisDirection((axis + 2) % 3)
-        let radial: SIMD3<Float> = u * cosf(angle) + v * sinf(angle)
-        return center + radial * ringRadius
-    }
-
-    /// The part of a ring that is drawn and grabbed: angles and world points. It is fixed on the
-    /// box, around the direction of its +X +Y +Z corner, so the three arcs gather at that corner,
-    /// stay put when the camera moves and turn with the box.
-    func ringArc(axis: Int) -> [(angle: Float, point: SIMD3<Float>)] {
-        (0...Self.ringArcSteps).map { (k: Int) -> (angle: Float, point: SIMD3<Float>) in
-            let along: Float = 2 * Float(k) / Float(Self.ringArcSteps) - 1
-            let angle: Float = Self.ringArcMiddle + along * Self.ringArcHalfSpan
-            return (angle, ringPoint(axis: axis, angle: angle))
-        }
-    }
-
-    /// Where on each ring the arc is centered: halfway between the two other axes.
-    static let ringArcMiddle: Float = .pi / 4
-
-    /// Half the angle one ring's arc covers.
-    static let ringArcHalfSpan: Float = 0.6
-    static let ringArcSteps = 16
-
-    /// The ring arc nearest to a touch (normalized coordinates) and how far it is, in pixels. nil
-    /// for anything but a box, or when no arc is on screen.
-    func nearestRing(
-        to touch: SIMD2<Float>, camera: SplatViewerCamera, viewSize: SIMD2<Float>
-    ) -> (handle: SplatViewerCropHandle, distance: Float)? {
-        guard shape == .box else { return nil }
-        let target = touch * viewSize
-        var best: (handle: SplatViewerCropHandle, distance: Float)?
-        for axis in 0..<3 {
-            let arc = ringArc(axis: axis)
-            let points = arc.map { camera.project(cameraSpace: camera.cameraSpace($0.point)).map { $0 * viewSize } }
-            for k in 0..<Self.ringArcSteps {
-                guard let a = points[k], let b = points[k + 1] else { continue }
-                let ab = b - a
-                let t = min(max(simd_dot(target - a, ab) / max(simd_dot(ab, ab), 1e-6), 0), 1)
-                let distance = simd_distance(target, a + ab * t)
-                if distance < (best?.distance ?? .infinity) {
-                    let angle = arc[k].angle + (arc[k + 1].angle - arc[k].angle) * t
-                    best = (.ring(axis: axis, angle: angle), distance)
-                }
-            }
-        }
-        return best
     }
 
     /// World direction of one of the box's axes.
@@ -343,8 +273,21 @@ struct SplatCropFrame: Equatable {
     var handles: [SIMD2<Float>] = []
     /// The handle that moves the region, drawn apart from the others (box and sphere alike).
     var moveHandles: [SIMD2<Float>] = []
-    /// The arcs of the three rings that turn the box, one per box axis, as outline segments.
+    /// The three rings that turn the box, one per box axis, as outline segments
+    /// (`SplatViewerCADGizmo`, as for a CAD model).
     var rings: [[Segment]] = []
+    /// Arrowheads on the rings, showing that they turn (the CAD model's rings).
+    var ringArrows: [Arrow] = []
+    /// The outline is drawn in the selection colour (a selected CAD model's box), not white.
+    var isSelection = false
+
+    struct Arrow: Equatable {
+        /// Which ring, for its colour.
+        var axis: Int
+        /// Normalized screen position and direction along the ring.
+        var at: SIMD2<Float>
+        var direction: SIMD2<Float>
+    }
 
     nonisolated static func make(region: SplatViewerCropRegion, camera: SplatViewerCamera) -> SplatCropFrame {
         var frame = SplatCropFrame()
@@ -355,19 +298,6 @@ struct SplatCropFrame: Equatable {
                   let pb = camera.project(cameraSpace: clipped.1)
             else { continue }
             frame.segments.append(Segment(a: pa, b: pb))
-        }
-        if region.shape == .box {
-            frame.rings = (0..<3).map { axis in
-                let points = region.ringArc(axis: axis).map(\.point)
-                return zip(points, points.dropFirst()).compactMap { a, b in
-                    guard let clipped = SplatMeasureProjection.clipToNear(
-                        camera.cameraSpace(a), camera.cameraSpace(b)),
-                          let pa = camera.project(cameraSpace: clipped.0),
-                          let pb = camera.project(cameraSpace: clipped.1)
-                    else { return nil }
-                    return Segment(a: pa, b: pb)
-                }
-            }
         }
         for item in region.handles(camera: camera) {
             guard let p = camera.project(cameraSpace: camera.cameraSpace(item.position)) else { continue }
@@ -443,6 +373,8 @@ struct SplatCropOverlay: View {
 
     /// Colours of the rings around the box's X, Y and Z axes.
     private static let ringColors: [Color] = [.red, .green, .blue]
+    /// The orange a selected CAD model is tinted with (`SplatViewerMeshLayer`'s shader).
+    static let selectionColor = Color(red: 1.0, green: 0.55, blue: 0.1)
 
     var body: some View {
         Canvas { context, size in
@@ -467,8 +399,10 @@ struct SplatCropOverlay: View {
             }
             context.stroke(outline, with: .color(.black.opacity(0.5)), lineWidth: 3)
             context.stroke(
-                outline, with: .color(joined ? SplatViewerFloaterHighlight.swiftUIColor : .white),
-                lineWidth: joined ? 2.5 : 1.5)
+                outline,
+                with: .color(projection.frame.isSelection ? Self.selectionColor
+                    : joined ? SplatViewerFloaterHighlight.swiftUIColor : .white),
+                lineWidth: joined || projection.frame.isSelection ? 2.5 : 1.5)
             for (axis, segments) in projection.frame.rings.enumerated() {
                 var ring = Path()
                 for segment in segments {
@@ -477,6 +411,22 @@ struct SplatCropOverlay: View {
                 }
                 context.stroke(ring, with: .color(.black.opacity(0.5)), lineWidth: 4)
                 context.stroke(ring, with: .color(Self.ringColors[axis]), lineWidth: 2.5)
+            }
+            for arrow in projection.frame.ringArrows {
+                let c = point(arrow.at)
+                // The direction is in normalized units; scale it to points before measuring angles.
+                var dx = CGFloat(arrow.direction.x) * size.width, dy = CGFloat(arrow.direction.y) * size.height
+                let length = (dx * dx + dy * dy).squareRoot()
+                guard length > 0 else { continue }
+                dx /= length
+                dy /= length
+                var head = Path()
+                head.move(to: CGPoint(x: c.x + dx * 9, y: c.y + dy * 9))
+                head.addLine(to: CGPoint(x: c.x - dx * 6 - dy * 7, y: c.y - dy * 6 + dx * 7))
+                head.addLine(to: CGPoint(x: c.x - dx * 6 + dy * 7, y: c.y - dy * 6 - dx * 7))
+                head.closeSubpath()
+                context.fill(head, with: .color(Self.ringColors[arrow.axis]))
+                context.stroke(head, with: .color(.black.opacity(0.6)), lineWidth: 1)
             }
             for h in projection.frame.handles {
                 let c = point(h)

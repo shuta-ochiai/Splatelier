@@ -52,6 +52,20 @@ jobs:
           path: .build
           key: spm-${{ runner.os }}-${{ steps.image.outputs.version }}-${{ hashFiles('Package.swift') }}
           restore-keys: spm-${{ runner.os }}-
+      # STEP import links native/stepmesh (Rust, cadmpeg), built into StepMesh.xcframework here rather
+      # than checked in (each slice is about 240 MB before linking). Cargo's downloads and output are
+      # cached by the crate's lockfile and sources.
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            native/stepmesh/target
+          key: stepmesh-${{ runner.os }}-${{ hashFiles('native/stepmesh/Cargo.lock', 'native/stepmesh/Cargo.toml', 'native/stepmesh/src/**') }}
+      - name: Build the STEP import library
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal --target aarch64-apple-ios aarch64-apple-ios-sim
+          ./scripts/build-stepmesh.sh
       - name: Build the Swift package
         run: swift build
       # The iOS app builds into its own DerivedData, so the .build cache above does not help it. Most

@@ -27,13 +27,24 @@ final class SplatViewerMeshLayer {
     private let pipeline: MTLRenderPipelineState
     private let depthState: MTLDepthStencilState
 
-    /// Same layout as the shader's `MeshUniforms` (stride 96 bytes).
+    /// Same layout as the shader's `MeshUniforms` (stride 160 bytes).
     private struct Uniforms {
         var viewProjection: simd_float4x4
+        /// Mesh to world (identity except for a CAD model placed by hand). Rigid.
+        var model: simd_float4x4
         /// xyz: camera forward in world (light direction for shaded display).
         var viewDirection: SIMD4<Float>
+        /// 0: vertex colors, 1: gray lit from the camera (shape), 2: vertex colors lit from the camera.
         var shaded: UInt32
         var hasColor: UInt32
+        /// How strongly to tint the mesh with the selection colour (a selected CAD model), 0...1.
+        var highlight: Float
+    }
+
+    enum Appearance: UInt32 {
+        case colors = 0
+        case shaded = 1
+        case litColors = 2
     }
 
     enum SetupError: Error {
@@ -76,19 +87,20 @@ final class SplatViewerMeshLayer {
         depthState = state
     }
 
-    /// Clears color / depth and draws the mesh (the first pass of the frame). Depth is standard Z
-    /// (near 0 / far 1).
+    /// Draws the mesh, clearing color / depth first when `clear` (the first pass of the frame) or
+    /// else depth-tested against what is there. Depth is standard Z (near 0 / far 1).
     func encode(
-        into commandBuffer: MTLCommandBuffer, color: MTLTexture, depth: MTLTexture,
-        clearColor: MTLClearColor, viewProjection: simd_float4x4, viewDirection: SIMD3<Float>, shaded: Bool
+        into commandBuffer: MTLCommandBuffer, color: MTLTexture, depth: MTLTexture, clear: Bool = true,
+        clearColor: MTLClearColor, viewProjection: simd_float4x4, model: simd_float4x4 = matrix_identity_float4x4,
+        viewDirection: SIMD3<Float>, appearance: Appearance, highlight: Float = 0
     ) {
         let pass = MTLRenderPassDescriptor()
         pass.colorAttachments[0].texture = color
-        pass.colorAttachments[0].loadAction = .clear
+        pass.colorAttachments[0].loadAction = clear ? .clear : .load
         pass.colorAttachments[0].storeAction = .store
         pass.colorAttachments[0].clearColor = clearColor
         pass.depthAttachment.texture = depth
-        pass.depthAttachment.loadAction = .clear
+        pass.depthAttachment.loadAction = clear ? .clear : .load
         pass.depthAttachment.storeAction = .store
         pass.depthAttachment.clearDepth = 1
         guard let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: pass) else { return }
@@ -99,9 +111,11 @@ final class SplatViewerMeshLayer {
         encoder.setCullMode(.none)
         var uniforms = Uniforms(
             viewProjection: viewProjection,
+            model: model,
             viewDirection: SIMD4(viewDirection, 0),
-            shaded: shaded ? 1 : 0,
-            hasColor: colors != nil ? 1 : 0)
+            shaded: appearance.rawValue,
+            hasColor: colors != nil ? 1 : 0,
+            highlight: highlight)
         let length = MemoryLayout<Uniforms>.stride
         encoder.setVertexBuffer(positions, offset: 0, index: 0)
         encoder.setVertexBuffer(normals, offset: 0, index: 1)
@@ -120,9 +134,11 @@ final class SplatViewerMeshLayer {
 
     struct MeshUniforms {
         float4x4 viewProjection;
+        float4x4 model;
         float4 viewDirection;
         uint shaded;
         uint hasColor;
+        float highlight;
     };
 
     struct MeshVertexOut {
@@ -137,20 +153,27 @@ final class SplatViewerMeshLayer {
                                     const device packed_float3* colors [[buffer(2)]],
                                     constant MeshUniforms& u [[buffer(3)]]) {
         MeshVertexOut out;
-        out.position = u.viewProjection * float4(float3(positions[vid]), 1.0);
+        out.position = u.viewProjection * (u.model * float4(float3(positions[vid]), 1.0));
         out.color = u.hasColor != 0 ? float3(colors[vid]) : float3(0.75);
-        out.normal = float3(normals[vid]);
+        out.normal = (u.model * float4(float3(normals[vid]), 0.0)).xyz;
         return out;
     }
 
     fragment float4 meshFragment(MeshVertexOut in [[stage_in]],
                                  constant MeshUniforms& u [[buffer(0)]]) {
         float3 c = in.color;
-        if (u.shaded != 0) {
+        float l = abs(dot(normalize(in.normal), u.viewDirection.xyz));
+        if (u.shaded == 1) {
             // For inspecting shape: gray lit from the camera direction (two-sided).
-            float l = abs(dot(normalize(in.normal), u.viewDirection.xyz));
             c = float3(0.85) * (0.25 + 0.75 * l);
+        } else if (u.shaded == 2) {
+            // A CAD model's flat part colors, lit the same way so its faces stay apart.
+            c *= 0.45 + 0.55 * l;
         }
+        // Selection: a light orange wash over the whole model and a strong one toward its outline (faces
+        // seen edge-on), so it reads as selected whatever its own colours, while its middle keeps them.
+        float rim = (1.0 - l) * (1.0 - l);
+        c = mix(c, float3(1.0, 0.55, 0.1) * (0.55 + 0.45 * l), u.highlight * (0.3 + 0.7 * rim));
         return float4(c, 1.0);
     }
     """

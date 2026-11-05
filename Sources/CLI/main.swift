@@ -92,6 +92,10 @@ func usage() {
     print("    Drag to orbit, scroll to zoom; close the window to quit.")
     print("    env: VIEWER_TRANSPARENCY=sorted|stochastic|movement (default movement = stochastic alpha only while interacting)")
     print("")
+    print("  splatelier view-cad <model.{step,stp}> [splats.ply]")
+    print("    Open the app's viewer in a window with a CAD model (STEP), optionally over splats; click it to place it.")
+    print("    STEP import needs StepMesh.xcframework (scripts/build-stepmesh.sh).")
+    print("")
     print("  splatelier convert <in.ply> <out.{ply,compressed.ply,spz,splat,glb,sog,usda}> [shDegree]")
     print("    Convert a trained PLY to another splat format, picked by the output extension.")
     print("    Keeps every SH band the PLY has unless [shDegree] (0-3) lowers it. SOG and GLB need")
@@ -717,6 +721,19 @@ case "view":
     }
     #else
     print("view is only supported on macOS")
+    exit(1)
+    #endif
+
+case "view-cad":
+    guard args.count >= 3 else { usage(); exit(1) }
+    let cadURL = URL(fileURLWithPath: args[2])
+    let splatURL = args.count > 3 ? URL(fileURLWithPath: args[3]) : nil
+    #if os(macOS)
+    MainActor.assumeIsolated {
+        CADViewerApp.run(cadURL: cadURL, splatURL: splatURL)
+    }
+    #else
+    print("view-cad is only supported on macOS")
     exit(1)
     #endif
 

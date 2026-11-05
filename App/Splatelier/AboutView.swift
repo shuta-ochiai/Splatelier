@@ -37,6 +37,7 @@ private let licenseEntries: [LicenseEntry] = [
     LicenseEntry(name: "Swift Numerics", license: "Apache-2.0", file: "swift-numerics"),
     LicenseEntry(name: "spz-swift", license: "MIT", file: "spz-swift"),
     LicenseEntry(name: "MetalSplatter", license: "MIT", file: "MetalSplatter"),
+    LicenseEntry(name: "cadmpeg", license: "Apache-2.0", file: "cadmpeg"),
 ]
 
 struct AboutView: View {

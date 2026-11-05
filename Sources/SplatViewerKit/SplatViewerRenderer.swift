@@ -67,6 +67,8 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
     private var appliedSeed = false
     private var appliedCamera = false
     private var meshLayer: SplatViewerMeshLayer?
+    /// A CAD model (STEP), drawn like the mesh but placed by `model.cadTransform`.
+    private var cadLayer: SplatViewerMeshLayer?
     // Keep the chunks for measurement tap hit tests (only reads GPU buffers, no copy). The
     // background is not a surface, so it is not kept.
     private var gsChunk: SplatChunk?
@@ -82,6 +84,35 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
     private var cropRebuild: Task<Void, Never>?
     private var sourceName = "splats"
     private var activeCropHandle: SplatViewerCropHandle?
+    /// The ring of the Crop box being dragged, and where its rings sit meanwhile (held, so they stay
+    /// under the finger as the box turns).
+    private var activeCropRing: SplatViewerCADHandle?
+    private var cropRingAnchor: SIMD3<Float>?
+
+    /// The Crop box's rings: the CAD model's small full rings, beside the box at the top right.
+    private func cropRingGizmo(_ region: SplatViewerCropRegion, _ camera: SplatViewerCamera) -> SplatViewerCADGizmo {
+        SplatViewerCADGizmo(box: region, camera: camera, anchor: cropRingAnchor)
+    }
+    /// The handle of the selected CAD model being dragged (the model itself or one of its rings).
+    private var activeCADHandle: SplatViewerCADHandle?
+    /// A two-finger twist of the selected CAD model is under way.
+    private(set) var isTwistingCAD = false
+    /// Where the CAD model's rings sit while one of them is dragged, so they stay under the finger
+    /// as the model turns instead of following its outline.
+    private var cadRingAnchor: SIMD3<Float>?
+    /// Where the CAD model would be if nothing pulled it, while it is dragged: it follows the finger
+    /// freely, and what is shown is this settled on a floor within reach.
+    private var cadFreeRegion: SplatViewerCropRegion?
+    /// The floor found within reach of its foot (nil: none), and how far that reach is.
+    private var cadFloor: SplatViewerCADSurface.Floor?
+    private var cadSnapReach: Float = 0.05
+    /// A floor search is running, and another move came in meanwhile.
+    private var isFindingFloor = false
+    private var floorSearchPending = false
+
+    private func cadGizmo(_ camera: SplatViewerCamera) -> SplatViewerCADGizmo {
+        SplatViewerCADGizmo(box: model.cadRegion, camera: camera, anchor: cadRingAnchor)
+    }
     /// Where the finger drawing the Lasso loop is now (normalized coordinates). nil when none is.
     private var lassoTouch: SIMD2<Float>?
     // Floaters: the selected splats, as indices into the kept ones; the detector for the kept splats
@@ -147,6 +178,11 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
         model.onNeedsRedraw = { [weak self] in self?.requestRedraw() }
         model.onTap = { [weak self] in self?.tap(normalized: $0) }
         model.onFocusTap = { [weak self] in self?.focusTap(normalized: $0) }
+        model.onLoadCAD = { [weak self] in self?.loadCAD($0) }
+        model.onTwistCAD = { [weak self] in self?.twistCAD(by: $0) }
+        model.onTurnCAD = { [weak self] in self?.turnCAD($0) }
+        model.onRemoveCAD = { [weak self] in self?.removeCAD() }
+        model.onTwistCADEnd = { [weak self] in self?.endCADTwist() }
         model.onCropHandleBegin = { [weak self] in self?.beginCropDrag(normalized: $0) ?? false }
         model.onCropHandleDrag = { [weak self] in self?.cropDrag(normalizedDelta: $0) }
         model.onCropHandleEnd = { [weak self] in self?.endCropDrag() }
@@ -188,10 +224,14 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
         if view.isPaused { view.isPaused = false }
     }
 
-    /// Loads a GS PLY, seed PLY and mesh OBJ (all optional) into one scene. GS / seed point cloud /
-    /// camera markers go into separate chunks and the mesh into its own layer, so they can be
-    /// toggled.
-    func load(_ url: URL?, seedURL: URL?, meshURL: URL? = nil) {
+    /// Loads a GS PLY, seed PLY, mesh OBJ and CAD model (STEP) (all optional) into one scene. GS /
+    /// seed point cloud / camera markers go into separate chunks and the mesh and the CAD model
+    /// into their own layers, so they can be toggled. `cadPlacement` is where the CAD model was
+    /// left last time.
+    func load(
+        _ url: URL?, seedURL: URL?, meshURL: URL? = nil, cadURL: URL? = nil,
+        cadPlacement: SplatViewerCADPlacement? = nil
+    ) {
         guard !didLoad, let renderer else { return }
         didLoad = true
         let device = self.device
@@ -202,7 +242,8 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
                 // scene it takes seconds on a phone, and the push into the viewer froze meanwhile.
                 let scene = try await Task.detached(priority: .userInitiated) {
                     try await Self.prepare(
-                        url: url, seedURL: seedURL, meshURL: meshURL, device: device, cropShape: cropShape)
+                        url: url, seedURL: seedURL, meshURL: meshURL, cadURL: cadURL, device: device,
+                        cropShape: cropShape)
                 }.value
                 guard let self else { return }
 
@@ -227,10 +268,25 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
                         meshError = error
                     }
                 }
+                var cadError = scene.cadError
+                if let cad = scene.cad {
+                    do {
+                        self.cadLayer = try SplatViewerMeshLayer(
+                            device: self.device, mesh: cad,
+                            colorFormat: viewerColorFormat, depthFormat: .depth32Float)
+                    } catch {
+                        cadError = error
+                    }
+                }
+                if let cadError {
+                    self.model.setCADLoadError("Couldn't load the CAD model: \(cadError)")
+                }
 
                 guard !gsPoints.isEmpty || !seedPoints.isEmpty || !cameraPoints.isEmpty
-                        || self.meshLayer != nil else {
-                    if let meshError {
+                        || self.meshLayer != nil || self.cadLayer != nil else {
+                    if let cadError {
+                        self.model.setLoadState(.failed("Couldn't load the CAD model: \(cadError)"))
+                    } else if let meshError {
                         self.model.setLoadState(.failed("Couldn't load the mesh: \(meshError)"))
                     } else {
                         self.model.setLoadState(.empty)
@@ -241,11 +297,18 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
                 // Framing uses whichever exists, in the order GS → seed + cameras → mesh.
                 let (center, distance) = scene.splatFrame
                     ?? self.meshLayer.map { ($0.center, framingDistance(radius: $0.radius)) }
+                    ?? self.cadLayer.map { ($0.center, framingDistance(radius: $0.radius)) }
                     ?? (SIMD3<Float>(0, 0, 0), 4)
                 let previewCamera = url.flatMap {
                     SplatViewerPreviewCamera.load(siblingOf: $0, center: center, defaultDistance: distance)
                 }
                 self.model.frame(center: center, distance: distance, previewCamera: previewCamera)
+                // A CAD model starts at the middle of the scene, to be moved into place by hand.
+                if let cadLayer = self.cadLayer {
+                    self.model.setCAD(
+                        pivot: cadLayer.center, halfExtent: scene.cadHalfExtent, offset: center - cadLayer.center,
+                        saved: cadPlacement)
+                }
 
                 if let chunk = scene.gs.chunk {
                     self.gsChunkID = await renderer.addChunk(chunk)
@@ -325,10 +388,15 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
         let splatFrame: (center: SIMD3<Float>, distance: Float)?
         let mesh: LoadedMesh?
         let meshError: Error?
+        let cad: LoadedMesh?
+        /// Half sizes of the CAD model's bounding box.
+        let cadHalfExtent: SIMD3<Float>
+        let cadError: Error?
     }
 
     nonisolated private static func prepare(
-        url: URL?, seedURL: URL?, meshURL: URL?, device: MTLDevice, cropShape: SplatViewerCropShape
+        url: URL?, seedURL: URL?, meshURL: URL?, cadURL: URL?, device: MTLDevice,
+        cropShape: SplatViewerCropShape
     ) async throws -> PreparedScene {
         // Sidecars name how many splats at the end of the PLY are camera markers (seedmeta; seed
         // PLY order is scene point cloud → camera markers) and background (background; GS PLY order
@@ -360,6 +428,15 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
                 meshError = error
             }
         }
+        var cad: LoadedMesh?
+        var cadError: Error?
+        if let cadURL {
+            do {
+                cad = try STEPMeshLoader.load(cadURL)
+            } catch {
+                cadError = error
+            }
+        }
 
         let gsPoints = main.scene
         // Without a foreground there is nothing for it to sit behind.
@@ -376,7 +453,10 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
                 ? nil : SplatViewerCropRegion.initial(shape: cropShape, positions: gsPoints.map(\.position)),
             splatFrame: framePoints.isEmpty ? nil : boundingFrame(framePoints),
             mesh: mesh,
-            meshError: meshError)
+            meshError: meshError,
+            cad: cad,
+            cadHalfExtent: cad.map { boxHalfExtent($0.positions) } ?? .zero,
+            cadError: cadError)
     }
 
     private enum TrailingSplatKey: String {
@@ -454,8 +534,10 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
         if model.showGS, let gsChunk { chunks.append(gsChunk) }
         if model.showSeed, let seedChunk { chunks.append(seedChunk) }
         let mesh = model.showMesh ? meshLayer?.rayGeometry : nil
-        guard !chunks.isEmpty || mesh != nil else { return nil }
-        return SplatViewerRayCaster(splatChunks: chunks, mesh: mesh)
+        var cad = model.showCAD ? cadLayer?.rayGeometry : nil
+        cad?.transform = model.cadTransform
+        guard !chunks.isEmpty || mesh != nil || cad != nil else { return nil }
+        return SplatViewerRayCaster(splatChunks: chunks, mesh: mesh, cad: cad)
     }
 
     /// Finds, on another thread, the surface under a screen point (top-left 0 / bottom-right 1) and
@@ -485,9 +567,173 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
     func tap(normalized point: SIMD2<Float>) {
         if model.isRemovingFloaters {
             floaterTap(normalized: point)
-        } else {
+        } else if model.isMeasuring {
             measureTap(normalized: point)
+        } else if !model.isCropping && !model.isColoring {
+            cadTap(normalized: point)
         }
+    }
+
+    // MARK: - CAD model
+
+    /// Loads (or replaces) the CAD model while the scene is open. It goes to the middle of the view
+    /// and is selected, so it can be moved into place straight away.
+    func loadCAD(_ url: URL) {
+        guard isLoaded else { return }
+        model.setLoadingCAD(true)
+        Task { [weak self] in
+            do {
+                let mesh = try await Task.detached(priority: .userInitiated) { try STEPMeshLoader.load(url) }.value
+                guard let self else { return }
+                let layer = try SplatViewerMeshLayer(
+                    device: self.device, mesh: mesh, colorFormat: viewerColorFormat, depthFormat: .depth32Float)
+                self.cadLayer = layer
+                self.model.setCAD(
+                    pivot: layer.center, halfExtent: boxHalfExtent(mesh.positions),
+                    offset: self.model.center - layer.center)
+                self.model.showCAD = true
+                self.model.isCADSelected = true
+                self.model.setLoadingCAD(false)
+                self.model.onCADPlacementChange?(self.model.cadPlacement)
+                self.requestRedraw()
+            } catch {
+                self?.model.setLoadingCAD(false)
+                self?.model.setCADLoadError("Couldn't load the CAD model: \(error)")
+            }
+        }
+    }
+
+    /// A tap on the CAD model selects it (it is tinted and its rings show); anywhere else lets go.
+    private func cadTap(normalized point: SIMD2<Float>) {
+        guard isLoaded, model.showCAD else { return }
+        model.isCADSelected = cadIsGrabbed(at: point)
+    }
+
+    /// Takes the CAD model out of the scene; Import can bring one in again.
+    func removeCAD() {
+        activeCADHandle = nil
+        cadFreeRegion = nil
+        cadRingAnchor = nil
+        cadLayer = nil
+        model.clearCAD()
+        model.cadProjection.update(SplatCropFrame())
+        requestRedraw()
+    }
+
+    /// One of the quarter-turn buttons shown while the CAD model is selected.
+    func turnCAD(_ turn: SplatViewerCADTurn) {
+        guard isLoaded, model.isCADSelected else { return }
+        model.setCADRegion(turn.applied(to: model.cadRegion, camera: camera()))
+        model.onCADPlacementChange?(model.cadPlacement)
+    }
+
+    /// A touch takes hold of the CAD model: on it, or near its box when it is small on screen or
+    /// selected (`SplatViewerCADReach`).
+    private func cadIsGrabbed(at point: SIMD2<Float>) -> Bool {
+        SplatViewerCADReach.takes(
+            point, box: model.cadRegion, selected: model.isCADSelected, onModel: cadIsUnder(point),
+            camera: camera(), viewSize: pixelSize)
+    }
+
+    private func cadIsUnder(_ point: SIMD2<Float>) -> Bool {
+        guard var cad = cadLayer?.rayGeometry else { return false }
+        cad.transform = model.cadTransform
+        let ray = camera().ray(normalized: point)
+        return SplatViewerRayCaster(splatChunks: [], mesh: nil, cad: cad)
+            .cast(origin: ray.origin, direction: ray.direction, pixelAngle: 0) != nil
+    }
+
+    /// Start of a drag: a ring of the selected CAD model turns it; the model itself, selected or
+    /// not, is selected and moved. Only outside the other modes, which have drags of their own.
+    private func beginCADDrag(normalized point: SIMD2<Float>) -> Bool {
+        guard isLoaded, model.hasCAD, model.showCAD,
+              !model.isCropping, !model.isMeasuring, !model.isColoring, !model.isRemovingFloaters
+        else { return false }
+        let size = pixelSize
+        if model.isCADSelected,
+           let ring = cadGizmo(camera()).ring(
+            at: point, camera: camera(), viewSize: size,
+            ringReach: Self.cadRingGrabFraction * min(size.x, size.y)) {
+            activeCADHandle = ring
+            cadRingAnchor = cadGizmo(camera()).anchor
+        } else if cadIsGrabbed(at: point) {
+            model.isCADSelected = true
+            activeCADHandle = .move
+            cadFreeRegion = model.cadRegion
+            cadFloor = nil
+            // The pull reaches a fixed distance on screen, so it feels the same at any zoom.
+            let camera = self.camera()
+            let depth = max(simd_dot(model.cadRegion.center - camera.eye, camera.forward), 1e-3)
+            let worldPerPixel = 2 * depth * tanf(camera.fovyRadians / 2) / max(pixelSize.y, 1)
+            cadSnapReach = SplatViewerCADSurface.snapPixels * worldPerPixel
+        } else {
+            return false
+        }
+        requestRedraw()
+        return true
+    }
+
+    /// The surfaces a dragged CAD model settles on: the mesh made from the capture when there is one
+    /// (it is quicker and its faces are sharp), else the splats. The model itself is left out.
+    private func surfaceCaster() -> SplatViewerRayCaster? {
+        if let mesh = meshLayer?.rayGeometry { return SplatViewerRayCaster(splatChunks: [], mesh: mesh) }
+        if let gsChunk { return SplatViewerRayCaster(splatChunks: [gsChunk], mesh: nil) }
+        return nil
+    }
+
+    /// Looks for a floor-like surface within reach under or over the dragged CAD model's foot, and
+    /// settles the model on it. The search runs off the main actor, one at a time; moves that arrive
+    /// meanwhile are searched again once it lands. Until then the last floor found holds, so the
+    /// model doesn't flicker.
+    private func findFloor() {
+        guard let free = cadFreeRegion, let caster = surfaceCaster() else { return }
+        if isFindingFloor {
+            floorSearchPending = true
+            return
+        }
+        isFindingFloor = true
+        let reach = cadSnapReach
+        let foot = SplatViewerCADSurface.foot(of: free)
+        // The slope is read across at least 15 cm, so splat bumps don't make the model wobble.
+        let probes = SplatViewerCADSurface.probes(under: foot, reach: reach, spread: max(4 * reach, 0.15))
+        let down = SIMD3<Float>(0, -1, 0)
+        Task { [weak self] in
+            let hits = await Task.detached(priority: .userInitiated) {
+                probes.map { origin in
+                    caster.cast(origin: origin, direction: down, pixelAngle: 0.002)
+                        .flatMap { $0 <= 2 * reach ? origin + down * $0 : nil }
+                }
+            }.value
+            guard let self else { return }
+            self.isFindingFloor = false
+            self.cadFloor = SplatViewerCADSurface.floor(hits: hits, foot: foot, reach: reach)
+            if let free = self.cadFreeRegion {
+                self.model.setCADRegion(SplatViewerCADSurface.settled(free, on: self.cadFloor, reach: reach))
+            }
+            if self.floorSearchPending, self.cadFreeRegion != nil {
+                self.floorSearchPending = false
+                self.findFloor()
+            } else {
+                self.floorSearchPending = false
+                // The drag ended before this search landed: keep where it settled.
+                if self.activeCADHandle == nil { self.model.onCADPlacementChange?(self.model.cadPlacement) }
+            }
+        }
+    }
+
+    /// Two-finger twist (or trackpad rotation) of the selected CAD model about the vertical.
+    func twistCAD(by radians: Float) {
+        guard isLoaded, model.isCADSelected, model.showCAD else { return }
+        isTwistingCAD = true
+        model.setCADRegion(
+            SplatViewerCADGizmo(box: model.cadRegion, camera: camera()).twisted(by: radians, camera: camera()))
+    }
+
+    func endCADTwist() {
+        guard isTwistingCAD else { return }
+        isTwistingCAD = false
+        model.onCADPlacementChange?(model.cadPlacement)
+        requestRedraw()
     }
 
     // MARK: - Measurement
@@ -517,8 +763,9 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
     /// How far a touch may be from a handle and still grab it, as a fraction of the shorter side of
     /// the drawable. A fixed pixel count shrinks to about 15 points on a Retina iPhone.
     private static let cropGrabFraction: Float = 0.09
-    /// The same for the rings of a box.
-    private static let cropRingGrabFraction: Float = 0.05
+    /// The same for the rings of a CAD model, a little tighter: they lie over the model, which is
+    /// itself dragged to move it.
+    private static let cadRingGrabFraction: Float = 0.035
 
     private var pixelSize: SIMD2<Float> {
         SIMD2(Float(drawableSize.width), Float(drawableSize.height))
@@ -528,6 +775,7 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
     /// the drag to the camera. In Lasso every drag draws a new loop, so the camera is moved with two
     /// fingers there.
     func beginCropDrag(normalized point: SIMD2<Float>) -> Bool {
+        if beginCADDrag(normalized: point) { return true }
         guard model.isCropping, isLoaded else { return false }
         if model.cropShape == .lasso {
             lassoTouch = point
@@ -537,6 +785,14 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
         guard let region = model.cropRegion else { return false }
         let camera = self.camera()
         let size = pixelSize
+        // A box turns by the same small rings as a CAD model, beside it at the top right.
+        if region.shape == .box,
+           let ring = cropRingGizmo(region, camera).ring(
+            at: point, camera: camera, viewSize: size, ringReach: Self.cadRingGrabFraction * min(size.x, size.y)) {
+            activeCropRing = ring
+            cropRingAnchor = cropRingGizmo(region, camera).anchor
+            return true
+        }
         let nearest = region.handles(camera: camera).compactMap { item -> (SplatViewerCropHandle, Float)? in
             guard let s = camera.project(cameraSpace: camera.cameraSpace(item.position)) else { return nil }
             return (item.handle, simd_distance(s * size, point * size))
@@ -546,17 +802,24 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
             activeCropHandle = nearest.0
             return true
         }
-        // A ring has to be touched closer, so most of the ground stays with the camera.
-        if let ring = region.nearestRing(to: point, camera: camera, viewSize: size),
-           ring.distance <= Self.cropRingGrabFraction * min(size.x, size.y) {
-            activeCropHandle = ring.handle
-            return true
-        }
         return false
     }
 
     /// Drag of the grabbed handle. `delta` is the touch movement normalized by the view size.
     func cropDrag(normalizedDelta delta: SIMD2<Float>) {
+        if let handle = activeCADHandle {
+            if handle == .move, let free = cadFreeRegion {
+                // The model moves freely in the screen plane, and settles on a floor within reach.
+                let moved = free.dragged(.center, byPixels: delta * pixelSize, camera: camera(), viewSize: pixelSize)
+                cadFreeRegion = moved
+                model.setCADRegion(SplatViewerCADSurface.settled(moved, on: cadFloor, reach: cadSnapReach))
+                findFloor()
+            } else {
+                model.setCADRegion(cadGizmo(camera()).dragged(
+                    handle, byPixels: delta * pixelSize, camera: camera(), viewSize: pixelSize))
+            }
+            return
+        }
         if let touch = lassoTouch {
             let moved = simd_clamp(touch + delta, .zero, SIMD2(repeating: 1))
             lassoTouch = moved
@@ -566,14 +829,29 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
                     moved, to: model.cropProjection.lasso, aspect: size.x / max(size.y, 1)))
             return
         }
+        if let ring = activeCropRing, let region = model.cropRegion {
+            model.cropRegion = cropRingGizmo(region, camera()).dragged(
+                ring, byPixels: delta * pixelSize, camera: camera(), viewSize: pixelSize)
+            return
+        }
         guard let handle = activeCropHandle, let region = model.cropRegion else { return }
         model.cropRegion = region.dragged(
             handle, byPixels: delta * pixelSize, camera: camera(), viewSize: pixelSize)
     }
 
     func endCropDrag() {
-        if activeCropHandle != nil {
+        if activeCADHandle != nil {
+            activeCADHandle = nil
+            cadRingAnchor = nil
+            cadFreeRegion = nil
+            // A floor search still running saves again when it lands.
+            model.onCADPlacementChange?(model.cadPlacement)
+            requestRedraw()
+        }
+        if activeCropHandle != nil || activeCropRing != nil {
             activeCropHandle = nil
+            activeCropRing = nil
+            cropRingAnchor = nil
             refreshCropSelection()
         }
         if lassoTouch != nil {
@@ -1042,6 +1320,7 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
         }
         guard isLoaded, let renderer else { return }
         let meshLayer = model.showMesh ? self.meshLayer : nil
+        let cadLayer = model.showCAD ? self.cadLayer : nil
         let showBackground = model.showGS && model.showBackground
         let splatsWanted = (gsChunkID != nil && model.showGS)
             || (backgroundChunkID != nil && showBackground)
@@ -1055,7 +1334,7 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
         applyChunkToggle(renderer, id: seedChunkID, want: model.showSeed, applied: &appliedSeed)
         applyChunkToggle(renderer, id: cameraChunkID, want: model.showCameraMarkers, applied: &appliedCamera)
         // Once the mesh is drawn first, splats are overlaid depth-tested without clearing it.
-        renderer.composeOverExistingContents = meshLayer != nil
+        renderer.composeOverExistingContents = meshLayer != nil || cadLayer != nil
         guard let drawable = view.currentDrawable else { return }
 
         _ = inFlight.wait(timeout: .distantFuture)
@@ -1077,19 +1356,36 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
                 ? SplatMeasureProjection.frame(points: model.measurePoints, camera: camera)
                 : SplatMeasureProjection.Frame())
         if model.isCropping, model.cropShape != .lasso, let region = model.cropRegion {
-            model.cropProjection.update(SplatCropFrame.make(region: region, camera: camera))
+            var frame = SplatCropFrame.make(region: region, camera: camera)
+            if region.shape == .box {
+                let rings = cropRingGizmo(region, camera).frame(camera: camera)
+                frame.rings = rings.rings
+                frame.ringArrows = rings.ringArrows
+            }
+            model.cropProjection.update(frame)
         } else {
             model.cropProjection.update(SplatCropFrame())
+        }
+        if model.isCADSelected && model.showCAD {
+            model.cadProjection.update(cadGizmo(camera).frame(camera: camera))
+        } else {
+            model.cadProjection.update(SplatCropFrame())
         }
         model.brushProjection.update(brushFrame(camera: camera))
         let colorTexture = view.multisampleColorTexture ?? drawable.texture
         let colorStoreAction: MTLStoreAction = view.multisampleColorTexture == nil ? .store : .multisampleResolve
-        if let meshLayer, let depthTexture = view.depthStencilTexture {
-            meshLayer.encode(
-                into: commandBuffer, color: colorTexture, depth: depthTexture,
-                clearColor: view.clearColor,
-                viewProjection: viewport.projectionMatrix * viewport.viewMatrix,
-                viewDirection: camera.forward, shaded: model.meshShaded)
+        if let depthTexture = view.depthStencilTexture {
+            // The opaque layers go first, each depth-tested against the last; the first clears.
+            let viewProjection = viewport.projectionMatrix * viewport.viewMatrix
+            meshLayer?.encode(
+                into: commandBuffer, color: colorTexture, depth: depthTexture, clear: true,
+                clearColor: view.clearColor, viewProjection: viewProjection, viewDirection: camera.forward,
+                appearance: model.meshShaded ? .shaded : .colors)
+            cadLayer?.encode(
+                into: commandBuffer, color: colorTexture, depth: depthTexture, clear: meshLayer == nil,
+                clearColor: view.clearColor, viewProjection: viewProjection, model: model.cadTransform,
+                viewDirection: camera.forward, appearance: .litColors,
+                highlight: !model.isCADSelected ? 0 : activeCADHandle != nil || isTwistingCAD ? 1 : 0.7)
         }
         var didRender = true
         var isFinal = true
@@ -1108,7 +1404,7 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
                 didRender = false
             }
             isFinal = renderer.lastRenderWasFinal
-        } else if meshLayer == nil {
+        } else if meshLayer == nil && cadLayer == nil {
             // With all layers hidden, draw just the background.
             let pass = MTLRenderPassDescriptor()
             pass.colorAttachments[0].texture = colorTexture
@@ -1125,6 +1421,18 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
 }
 
 // MARK: - Framing
+
+/// Half sizes of the bounding box of `positions` ([V*3]).
+private func boxHalfExtent(_ positions: [Float]) -> SIMD3<Float> {
+    var lo = SIMD3<Float>(repeating: .greatestFiniteMagnitude)
+    var hi = SIMD3<Float>(repeating: -.greatestFiniteMagnitude)
+    for v in 0..<(positions.count / 3) {
+        let p = SIMD3(positions[v * 3], positions[v * 3 + 1], positions[v * 3 + 2])
+        lo = pointwiseMin(lo, p)
+        hi = pointwiseMax(hi, p)
+    }
+    return positions.isEmpty ? .zero : (hi - lo) / 2
+}
 
 /// Center and camera distance that fit within a 60° vertical FOV. Uses the 2–98th percentile per
 /// axis so a few outliers don't inflate the bbox.

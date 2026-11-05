@@ -9,6 +9,7 @@
 // the center of rotation.
 
 import SwiftUI
+import UniformTypeIdentifiers
 
 #if os(iOS) || os(macOS)
 
@@ -28,6 +29,11 @@ public struct SplatViewerScreen: View {
     private let url: URL?
     private let seedURL: URL?
     private let meshURL: URL?
+    private let cadURL: URL?
+    private let cadPlacement: SplatViewerCADPlacement?
+    private let onCADPlacementChange: ((SplatViewerCADPlacement) -> Void)?
+    private let onImportCAD: ((URL) throws -> URL)?
+    private let onRemoveCAD: (() -> Void)?
     private let shareItems: [SplatViewerShareItem]
     /// Handler for the "Train more" button. nil hides the button (the screen has no training
     /// session to continue).
@@ -41,6 +47,8 @@ public struct SplatViewerScreen: View {
     @State private var displayName: String
     @State private var showRename = false
     @State private var showHint = false
+    @State private var importingCAD = false
+    @State private var confirmingCADRemoval = false
     @State private var showTrainMoreConfirm = false
     @State private var showEditOptions = false
     @State private var showDisplayOptions = false
@@ -58,6 +66,8 @@ public struct SplatViewerScreen: View {
     // (macOS only).
     @State private var dragBase: SIMD2<Float>?
     @State private var zoomBase: Float?
+    /// Rotation of the trackpad twist so far, to pass on only what changed.
+    @State private var twistBase: Float?
     /// The drag in progress moves a crop handle, and the translation applied so far.
     @State private var cropDragging = false
     @State private var lastDragTranslation = CGSize.zero
@@ -72,6 +82,15 @@ public struct SplatViewerScreen: View {
     ///     the same scene and toggleable.
     ///   - meshURL: OBJ of a vertex-colored mesh. If given, overlaid in the same scene and
     ///     toggleable.
+    ///   - cadURL: A CAD model (STEP). If given, shown in the same scene and toggleable; dragging it
+    ///     moves it (settling on floors within reach), and its rings (shown once it is selected), a
+    ///     two-finger twist or the quarter-turn buttons turn it.
+    ///   - cadPlacement: Where the CAD model was left last time (nil: the middle of the scene).
+    ///   - onCADPlacementChange: Told the placement after each move or turn, to save it.
+    ///   - onImportCAD: Keeps a CAD model picked with Import (the app copies it beside the scene) and
+    ///     returns where it now is; the viewer then loads it, replacing any. nil hides Import.
+    ///   - onRemoveCAD: Forgets the CAD model when Remove is confirmed (the app deletes its copy and
+    ///     placement); the viewer takes it out of the scene either way.
     ///   - name: Display name (file name if nil).
     ///   - shareItems: Files offered by the Share button, one entry each. Empty hides the button.
     ///   - onTrainMore: Called when the user confirms "Train more". nil hides the button.
@@ -80,6 +99,11 @@ public struct SplatViewerScreen: View {
         url: URL?,
         seedURL: URL? = nil,
         meshURL: URL? = nil,
+        cadURL: URL? = nil,
+        cadPlacement: SplatViewerCADPlacement? = nil,
+        onCADPlacementChange: ((SplatViewerCADPlacement) -> Void)? = nil,
+        onImportCAD: ((URL) throws -> URL)? = nil,
+        onRemoveCAD: (() -> Void)? = nil,
         name: String? = nil,
         shareItems: [SplatViewerShareItem] = [],
         cropExport: SplatViewerCropExport? = nil,
@@ -91,11 +115,16 @@ public struct SplatViewerScreen: View {
         self.url = url
         self.seedURL = seedURL
         self.meshURL = meshURL
+        self.cadURL = cadURL
+        self.cadPlacement = cadPlacement
+        self.onCADPlacementChange = onCADPlacementChange
+        self.onImportCAD = onImportCAD
+        self.onRemoveCAD = onRemoveCAD
         self.shareItems = shareItems
         self.onTrainMore = onTrainMore
         self.trainMoreMessage = trainMoreMessage
         self.onRename = onRename
-        _displayName = State(initialValue: name ?? Self.fileName(url ?? meshURL))
+        _displayName = State(initialValue: name ?? Self.fileName(url ?? meshURL ?? cadURL))
     }
 
     private static func fileName(_ url: URL?) -> String {
@@ -106,11 +135,15 @@ public struct SplatViewerScreen: View {
         ZStack {
             Color.black.ignoresSafeArea()
 
-            SplatMetalView(url: url, seedURL: seedURL, meshURL: meshURL, model: model)
+            SplatMetalView(
+                url: url, seedURL: seedURL, meshURL: meshURL, cadURL: cadURL, cadPlacement: cadPlacement,
+                model: model)
                 .ignoresSafeArea()
+                .onAppear { model.onCADPlacementChange = onCADPlacementChange }
             #if os(macOS)
                 .gesture(orbitGesture)
                 .simultaneousGesture(zoomGesture)
+                .simultaneousGesture(twistGesture)
                 .simultaneousGesture(tapGesture)
                 .simultaneousGesture(focusTapGesture)
                 .onGeometryChange(for: CGSize.self) { $0.size } action: { metalViewSize = $0 }
@@ -119,6 +152,8 @@ public struct SplatViewerScreen: View {
             SplatMeasureOverlay(projection: model.measureProjection)
                 .ignoresSafeArea()
             SplatCropOverlay(projection: model.cropProjection)
+                .ignoresSafeArea()
+            SplatCropOverlay(projection: model.cadProjection)
                 .ignoresSafeArea()
             SplatBrushOverlay(projection: model.brushProjection)
                 .ignoresSafeArea()
@@ -146,6 +181,7 @@ public struct SplatViewerScreen: View {
         .toolbar {
             ToolbarItemGroup(placement: toolbarPlacement) {
                 hintButton
+                if onImportCAD != nil { importButton }
                 if !allShareItems.isEmpty { shareMenu }
                 if onTrainMore != nil {
                     // Training is long and replaces this result, so ask before starting it.
@@ -159,6 +195,23 @@ public struct SplatViewerScreen: View {
                 ToolbarItem(placement: .principal) { renameTitle }
             }
         }
+        .fileImporter(isPresented: $importingCAD, allowedContentTypes: Self.cadTypes) { result in
+            do {
+                guard let stored = try onImportCAD?(result.get()) else { return }
+                model.onLoadCAD?(stored)
+            } catch {
+                model.setCADLoadError("Couldn't import the CAD model: \(error.localizedDescription)")
+            }
+        }
+        .confirmationDialog("Remove the CAD model?", isPresented: $confirmingCADRemoval, titleVisibility: .visible) {
+            Button("Remove", role: .destructive) {
+                onRemoveCAD?()
+                model.onRemoveCAD?()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("It leaves this scene. Import can bring a CAD model in again.")
+        }
         .alert("Train more?", isPresented: $showTrainMoreConfirm) {
             Button("Train more") { onTrainMore?() }
             Button("Cancel", role: .cancel) {}
@@ -169,7 +222,7 @@ public struct SplatViewerScreen: View {
             TextField("Name", text: $renameText)
             Button("Save") {
                 let trimmed = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
-                displayName = trimmed.isEmpty ? Self.fileName(url ?? meshURL) : trimmed
+                displayName = trimmed.isEmpty ? Self.fileName(url ?? meshURL ?? cadURL) : trimmed
                 onRename?(trimmed)
             }
             Button("Cancel", role: .cancel) {}
@@ -244,6 +297,25 @@ public struct SplatViewerScreen: View {
         }
     }
 
+    /// Brings a CAD model (STEP) into the scene, or replaces the one there.
+    private var importButton: some View {
+        Button {
+            importingCAD = true
+        } label: {
+            Label("Import", systemImage: "square.and.arrow.down")
+        }
+        .disabled(!isSceneLoaded || model.isLoadingCAD)
+    }
+
+    /// STEP files. iOS knows the type only from the app's declaration (org.iso.step); elsewhere the
+    /// extension gives a dynamic one.
+    private static let cadTypes: [UTType] = ["step", "stp"].compactMap { UTType(filenameExtension: $0) }
+
+    private var isSceneLoaded: Bool {
+        if case .loaded = model.loadState { return true }
+        return false
+    }
+
     /// Opens a popover that lists the camera controls.
     private var hintButton: some View {
         Button {
@@ -267,6 +339,9 @@ public struct SplatViewerScreen: View {
             hintRow("ruler", "Measure", "Turn on Measure, then tap 2 points")
             hintRow("crop", "Crop", "Edit, then Crop, then drag a handle of the box or sphere")
             hintRow("aqi.medium", "Floaters", "Edit, then Floaters, then tap a floater or Auto Detect")
+            if model.hasCAD {
+                hintRow("cube.transparent", "CAD model", "Drag it to move it; it settles on floors and tables. Twist with 2 fingers or drag a ring to turn it; the buttons below turn it by quarter turns")
+            }
             #else
             hintRow("cursorarrow.motionlines", "Rotate", "Drag")
             hintRow("arrow.up.left.and.arrow.down.right", "Zoom", "Pinch or scroll")
@@ -274,6 +349,9 @@ public struct SplatViewerScreen: View {
             hintRow("ruler", "Measure", "Turn on Measure, then click 2 points")
             hintRow("crop", "Crop", "Edit, then Crop, then drag a handle of the box or sphere")
             hintRow("aqi.medium", "Floaters", "Edit, then Floaters, then click a floater or Auto Detect")
+            if model.hasCAD {
+                hintRow("cube.transparent", "CAD model", "Drag it to move it; it settles on floors and tables. Drag a ring or rotate on the trackpad to turn it; the buttons below turn it by quarter turns")
+            }
             #endif
         }
         .padding(16)
@@ -333,6 +411,9 @@ public struct SplatViewerScreen: View {
                 if model.isMeasuring {
                     measureControls
                 }
+                if model.isCADSelected {
+                    cadTurnControls
+                }
                 if model.hasGS && showEditOptions {
                     editOptions
                 }
@@ -348,6 +429,21 @@ public struct SplatViewerScreen: View {
                 }
                 if hasDisplayOptions && showDisplayOptions {
                     displayOptions
+                }
+                if model.isLoadingCAD {
+                    ProgressView("Loading the CAD model…")
+                        .font(.caption)
+                        .padding(.horizontal, 10).padding(.vertical, 6)
+                        .background(.ultraThinMaterial, in: Capsule())
+                }
+                if let cadError = model.cadLoadError {
+                    Text(cadError)
+                        .font(.caption)
+                        .foregroundStyle(Color.yellow)
+                        .lineLimit(3)
+                        .padding(.horizontal, 10).padding(.vertical, 6)
+                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
+                        .padding(.horizontal, 12)
                 }
                 bottomBar
                     .padding(.horizontal, 12).padding(.vertical)
@@ -391,8 +487,14 @@ public struct SplatViewerScreen: View {
                 .disabled(!model.showMesh)
                 .opacity(model.showMesh ? 1 : 0.4)
             }
-            if model.hasSeed || model.hasCameraMarkers {
+            if model.hasCAD {
                 if model.hasGS || model.hasMesh { displayDivider }
+                toggleCapsule("CAD model", systemImage: "cube.transparent", isOn: model.showCAD) {
+                    model.showCAD.toggle()
+                }
+            }
+            if model.hasSeed || model.hasCameraMarkers {
+                if model.hasGS || model.hasMesh || model.hasCAD { displayDivider }
                 if model.hasSeed {
                     toggleCapsule("Seed points", systemImage: "circle.grid.3x3.fill", isOn: model.showSeed) {
                         model.showSeed.toggle()
@@ -425,7 +527,7 @@ public struct SplatViewerScreen: View {
     }
 
     private var hasDisplayOptions: Bool {
-        model.hasGS || model.hasSeed || model.hasCameraMarkers || model.hasMesh
+        model.hasGS || model.hasSeed || model.hasCameraMarkers || model.hasMesh || model.hasCAD
     }
 
     /// Display and Edit buttons, measure-mode toggle and Reset (rightmost).
@@ -526,6 +628,66 @@ public struct SplatViewerScreen: View {
         model.applyColorGrade(.identity)
         if model.cropEdited {
             model.onCropRestore?()
+        }
+    }
+
+    /// Turns for the selected CAD model, and Remove, shown only while it is selected: one small band
+    /// of icons. Their names show on hover (Mac) or in the menu a long press opens (iPhone).
+    private var cadTurnControls: some View {
+        HStack(spacing: 0) {
+            ForEach(SplatViewerCADTurn.allCases, id: \.self) { turn in
+                let disabled = turn == .resetRotation && !model.isCADTurned
+                cadIconButton(Self.title(of: turn), systemImage: Self.symbol(of: turn)) {
+                    model.onTurnCAD?(turn)
+                }
+                .disabled(disabled)
+                .opacity(disabled ? 0.35 : 1)
+                Divider().frame(height: 18)
+            }
+            cadIconButton("Remove", systemImage: "trash", tint: .red) {
+                confirmingCADRemoval = true
+            }
+        }
+        .padding(.horizontal, 4)
+        .background(.ultraThinMaterial, in: Capsule())
+        .padding(.bottom, 4)
+    }
+
+    private func cadIconButton(
+        _ title: String, systemImage: String, tint: Color = .primary, action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.body)
+                .foregroundStyle(tint)
+                .frame(width: 40, height: 32)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
+        .help(title)
+        #if os(iOS)
+        .contextMenu {
+            Button(action: action) { Label(title, systemImage: systemImage) }
+        }
+        #endif
+    }
+
+    private static func title(of turn: SplatViewerCADTurn) -> String {
+        switch turn {
+        case .left: "Turn left 90°"
+        case .right: "Turn right 90°"
+        case .layDown: "Lay on side"
+        case .resetRotation: "Reset rotation"
+        }
+    }
+
+    private static func symbol(of turn: SplatViewerCADTurn) -> String {
+        switch turn {
+        case .left: "rotate.left"
+        case .right: "rotate.right"
+        case .layDown: "rectangle.portrait.rotate"
+        case .resetRotation: "arrow.uturn.backward"
         }
     }
 
@@ -795,7 +957,9 @@ public struct SplatViewerScreen: View {
                     // A drag that starts on a crop handle resizes the region instead of orbiting.
                     dragBase = SIMD2(model.azimuth, model.elevation)
                     lastDragTranslation = .zero
-                    cropDragging = model.isCropping
+                    // So does one on the CAD model, which moves it, or on a ring of the selected model,
+                    // which turns it.
+                    cropDragging = (model.isCropping || model.hasCAD)
                         && (normalized(value.startLocation).map { model.onCropHandleBegin?($0) ?? false } ?? false)
                 }
                 if cropDragging {
@@ -821,6 +985,20 @@ public struct SplatViewerScreen: View {
             }
     }
 
+    /// Trackpad rotation turns the selected CAD model about the vertical (nothing otherwise).
+    private var twistGesture: some Gesture {
+        RotateGesture()
+            .onChanged { value in
+                let total = Float(value.rotation.radians)
+                model.onTwistCAD?(total - (twistBase ?? 0))
+                twistBase = total
+            }
+            .onEnded { _ in
+                twistBase = nil
+                model.onTwistCADEnd?()
+            }
+    }
+
     private var zoomGesture: some Gesture {
         MagnifyGesture()
             .onChanged { value in
@@ -831,7 +1009,7 @@ public struct SplatViewerScreen: View {
             .onEnded { _ in zoomBase = nil }
     }
 
-    /// Click in measure or floater mode (the renderer ignores it otherwise).
+    /// Click in measure or floater mode, or on the CAD model to select it (anywhere else lets go).
     private var tapGesture: some Gesture {
         SpatialTapGesture()
             .onEnded { value in
@@ -861,12 +1039,17 @@ private struct SplatMetalView: SplatViewRepresentable {
     let url: URL?
     let seedURL: URL?
     let meshURL: URL?
+    let cadURL: URL?
+    let cadPlacement: SplatViewerCADPlacement?
     let model: SplatViewerModel
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     private func makeView(_ coordinator: Coordinator) -> MTKView {
         let view = MTKView()
+        #if os(macOS)
+        coordinator.installScrollZoom(on: view, model: model)
+        #endif
         view.device = MTLCreateSystemDefaultDevice()
         let renderer = SplatViewerRenderer(view: view, model: model)
         coordinator.renderer = renderer
@@ -874,13 +1057,16 @@ private struct SplatMetalView: SplatViewRepresentable {
         #if os(iOS)
         coordinator.installGestures(on: view)
         #endif
-        renderer?.load(url, seedURL: seedURL, meshURL: meshURL)
+        renderer?.load(url, seedURL: seedURL, meshURL: meshURL, cadURL: cadURL, cadPlacement: cadPlacement)
         return view
     }
 
 #if os(macOS)
     func makeNSView(context: Context) -> MTKView { makeView(context.coordinator) }
     func updateNSView(_ nsView: MTKView, context: Context) {}
+    static func dismantleNSView(_ nsView: MTKView, coordinator: Coordinator) {
+        coordinator.removeScrollZoom()
+    }
 #else
     func makeUIView(context: Context) -> MTKView { makeView(context.coordinator) }
     func updateUIView(_ uiView: MTKView, context: Context) {}
@@ -889,6 +1075,28 @@ private struct SplatMetalView: SplatViewRepresentable {
     @MainActor
     final class Coordinator: NSObject {
         var renderer: SplatViewerRenderer?
+
+        #if os(macOS)
+        private var scrollMonitor: Any?
+
+        /// Mouse wheel / two-finger scroll zooms (SwiftUI has no scroll-wheel gesture, so a local
+        /// event monitor watches scrolls over the view).
+        func installScrollZoom(on view: NSView, model: SplatViewerModel) {
+            scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak view, weak model] event in
+                guard let view, let model, event.window === view.window,
+                      view.bounds.contains(view.convert(event.locationInWindow, from: nil))
+                else { return event }
+                let step = Float(event.hasPreciseScrollingDeltas ? event.scrollingDeltaY * 0.01 : event.scrollingDeltaY * 0.1)
+                model.distance = max(0.05, model.distance * exp(-step))
+                return nil
+            }
+        }
+
+        func removeScrollZoom() {
+            if let scrollMonitor { NSEvent.removeMonitor(scrollMonitor) }
+            scrollMonitor = nil
+        }
+        #endif
 
         #if os(iOS)
         /// 1 finger = rotate / 2 fingers = pan / pinch = zoom / tap = measurement point / double
@@ -902,10 +1110,11 @@ private struct SplatMetalView: SplatViewRepresentable {
             pan.minimumNumberOfTouches = 2
             pan.maximumNumberOfTouches = 2
             let pinch = UIPinchGestureRecognizer(target: self, action: #selector(handlePinch(_:)))
+            let twist = UIRotationGestureRecognizer(target: self, action: #selector(handleTwist(_:)))
             let tap = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
             let doubleTap = UITapGestureRecognizer(target: self, action: #selector(handleDoubleTap(_:)))
             doubleTap.numberOfTapsRequired = 2
-            for recognizer in [orbit, pan, pinch, tap, doubleTap] as [UIGestureRecognizer] {
+            for recognizer in [orbit, pan, pinch, twist, tap, doubleTap] as [UIGestureRecognizer] {
                 recognizer.delegate = self
                 view.addGestureRecognizer(recognizer)
             }
@@ -941,7 +1150,43 @@ private struct SplatMetalView: SplatViewRepresentable {
         @objc private func handlePan(_ g: UIPanGestureRecognizer) {
             let t = g.translation(in: g.view)
             g.setTranslation(.zero, in: g.view)
+            // Two fingers twisting the selected CAD model shouldn't slide the view as well.
+            if renderer?.isTwistingCAD == true { return }
             renderer?.pan(dxPixels: Float(t.x), dyPixels: Float(t.y))
+        }
+
+        /// Rotation of the current twist held back until it passes `twistThreshold`, so two fingers
+        /// meant to pan or pinch don't turn the model by the little twist they always carry.
+        private var twistHeld: Float = 0
+        private var twistTurning = false
+        private static let twistThreshold: Float = 10 * .pi / 180
+
+        /// Two-finger twist: turns the selected CAD model about the vertical (nothing otherwise).
+        @objc private func handleTwist(_ g: UIRotationGestureRecognizer) {
+            switch g.state {
+            case .began, .changed:
+                if g.state == .began {
+                    twistHeld = 0
+                    twistTurning = false
+                }
+                let r = Float(g.rotation)
+                g.rotation = 0
+                if twistTurning {
+                    renderer?.twistCAD(by: r)
+                } else {
+                    twistHeld += r
+                    if abs(twistHeld) > Self.twistThreshold {
+                        twistTurning = true
+                        renderer?.twistCAD(by: twistHeld)
+                    }
+                }
+            case .ended, .cancelled, .failed:
+                if twistTurning { renderer?.endCADTwist() }
+                twistTurning = false
+                twistHeld = 0
+            default:
+                break
+            }
         }
 
         @objc private func handlePinch(_ g: UIPinchGestureRecognizer) {
@@ -1020,6 +1265,11 @@ public struct SplatViewerScreen: View {
         url: URL?,
         seedURL: URL? = nil,
         meshURL: URL? = nil,
+        cadURL: URL? = nil,
+        cadPlacement: SplatViewerCADPlacement? = nil,
+        onCADPlacementChange: ((SplatViewerCADPlacement) -> Void)? = nil,
+        onImportCAD: ((URL) throws -> URL)? = nil,
+        onRemoveCAD: (() -> Void)? = nil,
         name: String? = nil,
         shareItems: [SplatViewerShareItem] = [],
         onTrainMore: (() -> Void)? = nil,
