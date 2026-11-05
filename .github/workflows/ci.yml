@@ -64,7 +64,7 @@ jobs:
           key: stepmesh-${{ runner.os }}-${{ hashFiles('native/stepmesh/Cargo.lock', 'native/stepmesh/Cargo.toml', 'native/stepmesh/src/**') }}
       - name: Build the STEP import library
         run: |
-          rustup toolchain install 1.97.1 --profile minimal --target aarch64-apple-ios aarch64-apple-ios-sim
+          rustup toolchain install 1.97.1 --profile minimal --target aarch64-apple-ios,aarch64-apple-ios-sim
           ./scripts/build-stepmesh.sh
       - name: Build the Swift package
         run: swift build
