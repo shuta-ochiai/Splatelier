@@ -40,6 +40,8 @@ struct SplatLibraryView: View {
     }
 
     @State private var items: [CaptureItem] = []
+    /// Width of the list, to center its column in a wide window.
+    @State private var listWidth: CGFloat = 0
     @State private var importing = false
     /// The capture a CAD model is being picked for ("Add CAD model").
     @State private var cadTarget: CaptureItem?
@@ -97,6 +99,11 @@ struct SplatLibraryView: View {
                     }
                 }
                 .listStyle(.plain)
+                // In a wide iPad window the cards keep a readable width, centered.
+                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { listWidth = $0 }
+                .contentMargins(
+                    .horizontal, max(0, (listWidth - DesignSystem.readableWidth) / 2),
+                    for: .scrollContent)
             }
         }
         .navigationTitle("Library")

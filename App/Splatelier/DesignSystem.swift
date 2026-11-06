@@ -8,6 +8,9 @@ import SwiftUI
 enum DesignSystem {
     /// Unified corner radius for content cards.
     static let cardRadius: CGFloat = 16
+    /// Widest a column of cards and buttons grows. On an iPhone the screen is narrower, so they
+    /// span it; in a wide iPad window they stay this wide, centered, instead of stretching across.
+    static let readableWidth: CGFloat = 640
 
     /// Brand cyan / magenta (measured from the logo). The tint lives in the AccentColor asset;
     /// these are for decoration.

@@ -151,6 +151,8 @@ struct TrainingView: View {
                         if lowPowerMode { AnyView(lowPowerNotice) }
                         AnyView(startButton)
                     }
+                    .frame(maxWidth: DesignSystem.readableWidth)
+                    .frame(maxWidth: .infinity)
                     .padding(.horizontal)
                     .padding(.top, 12)
                     .padding(.bottom, 12)
@@ -165,6 +167,8 @@ struct TrainingView: View {
                     AnyView(phaseCard)
                     AnyView(metricsCard)
                 }
+                .frame(maxWidth: DesignSystem.readableWidth)
+                .frame(maxWidth: .infinity)
                 .padding(.horizontal)
                 .padding(.top, 12)
                 .padding(.bottom, 12)
@@ -178,6 +182,7 @@ struct TrainingView: View {
         .animation(.easeInOut(duration: 0.25), value: vm.thermalThrottled)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             actionRow
+                .frame(maxWidth: DesignSystem.readableWidth)
                 .padding(.horizontal)
                 .padding(.top, 10)
                 .padding(.bottom, 10)
