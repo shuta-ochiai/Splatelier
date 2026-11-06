@@ -45,21 +45,20 @@ extension CaptureTraining {
         /// Fine-phase resolution: 2/3 of the capture = 720×540. It matches full resolution in PSNR
         /// at well under half the energy.
         public static let fineResample: (num: Int, den: Int) = (2, 3)
-        /// The last quarter of the iterations at the captured resolution (1080×810), after the
-        /// fine phase at 2/3, so the Gaussians fit the full-resolution detail: +0.002 held-out SSIM
-        /// on average over four captures (none lower) and -0.05 dB PSNR (one capture -0.17 dB).
-        /// A full-resolution step costs about 1.6× a fine one; with 8-px tiles the run costs about
-        /// the GPU energy of a 16-px-tile run without this phase (+3%), where a whole fine phase at
-        /// full resolution costs 30% more. Starting it earlier, so that the last splits see full
-        /// resolution, did not help. Steps taken while the device is serious stay at the fine
-        /// resolution.
-        public static let finalResample: (fraction: Float, num: Int, den: Int)? = (0.25, 1, 1)
+        /// A last phase at another resolution (fraction of the iterations, num/den); nil: none.
+        /// The last quarter at the captured resolution (1080×810), with 8-px tiles, gave +0.002
+        /// held-out SSIM on average over four captures (none lower) and -0.05 dB PSNR for about the
+        /// Mac GPU energy of the old 16-px-tile runs, but on an iPhone 16 Pro its steps take 46 ms
+        /// against 32 ms at 2/3: a run took 85-95 s instead of 73-75 s and came to the edge of the
+        /// serious thermal state, so it is off. CLI `FINAL_RES=full` and the app's
+        /// `SPLATELIER_FINAL_FRAC` turn it on for A/B runs.
+        public static let finalResample: (fraction: Float, num: Int, den: Int)? = nil
         /// Rasterizer tile size in pixels. A pair's cost is per pixel of its tile and most Gaussians
         /// are small, so 8×8 tiles rasterize at about 60% of the cost of 16×16. Their lists are split
         /// from sorted 16×16 ones (`TileBinning.binSplit`), which keeps the extra pairs out of the
         /// sort. 15% less GPU energy per run on a Mac than 16×16 tiles at the same held-out PSNR /
-        /// SSIM (within run-to-run noise); on an iPhone 16 Pro the rasterizer is 9-17% faster but a
-        /// whole step only 3-4%, since binning and the sort take about a third of it there.
+        /// SSIM (within run-to-run noise); on an iPhone 16 Pro, with the split done per 16-px tile, a
+        /// whole step came out about a fifth shorter than with 16×16 tiles in the step benchmark.
         public static let tileSize = 8
         /// Geometric regularization (G³S surface depth with normal consistency and the MVS depth,
         /// every 8 iterations from 30% of training), so the Gaussians' surface depth gives a flat

@@ -64,7 +64,7 @@ func usage() {
     print("           MESH_GS_TSDF=<path.obj> TSDF of the same Gaussian depth maps (GOF_* knobs in MeshCapture.swift)")
     print("         TILE_SIZE=<px> rasterizer tiles (the app's 8 by default; 8-px lists are split from sorted 16-px ones)")
     print("         FINAL_RES=<num>/<den>|full|off FINAL_FRAC=<fraction> the last fraction of the iterations at that")
-    print("           resolution (the app's: the last 0.25 at full resolution)")
+    print("           resolution (off in the app; FINAL_FRAC defaults to 0.25)")
     print("         LAMBDA_SSIM=<λ> the D-SSIM weight, keeping the app's densification")
     print("         BENCH_STAGES=1 after training, the time and GPU energy of the parts of a step at 2/3 and full")
     print("           resolution, the rasterizer and the whole step with 16-px and 8-px tiles")
