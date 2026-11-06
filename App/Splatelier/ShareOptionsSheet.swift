@@ -63,15 +63,17 @@ struct ShareOptionsSheet: View {
                         Text("Imported files that are not a PLY are shared as they are.")
                     }
                 }
-                Section {
-                    Toggle("Mesh (OBJ)", isOn: $includeMesh)
-                        .tint(Color.kikyoFill)
-                        .disabled(meshCount == 0)
-                } footer: {
-                    if meshCount == 0 {
-                        Text(entries.count == 1 ? "This capture has no mesh." : "None of these captures has a mesh.")
-                    } else if meshCount < entries.count {
-                        Text("\(meshCount) of \(entries.count) captures have a mesh.")
+                if AppFeatures.meshGeneration {
+                    Section {
+                        Toggle("Mesh (OBJ)", isOn: $includeMesh)
+                            .tint(Color.kikyoFill)
+                            .disabled(meshCount == 0)
+                    } footer: {
+                        if meshCount == 0 {
+                            Text(entries.count == 1 ? "This capture has no mesh." : "None of these captures has a mesh.")
+                        } else if meshCount < entries.count {
+                            Text("\(meshCount) of \(entries.count) captures have a mesh.")
+                        }
                     }
                 }
                 Section {

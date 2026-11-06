@@ -6,6 +6,14 @@ options:
   deploymentTarget:
     iOS: "18.0"
 
+# Debug / Release build the app with every feature. AppStore is Release with the APP_STORE flag,
+# which leaves out what the App Store version does not offer yet (`AppFeatures`): the mesh made
+# after training, and CAD models in the viewer. Only the "Splatelier App Store" scheme uses it.
+configs:
+  Debug: debug
+  Release: release
+  AppStore: release
+
 # xcodegen spec. `xcodegen generate` regenerates Splatelier.xcodeproj.
 # References the Swift Package itself (../Package.swift) as a local package and
 # links the Trainer library product.
@@ -33,6 +41,18 @@ schemes:
       config: Release
     archive:
       config: Release
+  # The build that goes to the App Store: archive with this scheme (see `configs`). Run and Profile
+  # use it too, to try the limited app on a device.
+  Splatelier App Store:
+    build:
+      targets:
+        Splatelier: all
+    run:
+      config: AppStore
+    profile:
+      config: AppStore
+    archive:
+      config: AppStore
 
 targets:
   Splatelier:
@@ -69,6 +89,9 @@ targets:
         UIRequiredDeviceCapabilities:
           - arm64
           - arkit
+        # The app uses no encryption beyond what iOS provides, so App Store Connect does not ask
+        # about export compliance on each upload.
+        ITSAppUsesNonExemptEncryption: false
         # STEP CAD models, added to a capture from the Library ("Add CAD model"). iOS declares no
         # type for them, so the Files picker could not offer them without this.
         UTImportedTypeDeclarations:
@@ -108,6 +131,13 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: io.github.shuta-ochiai.splatelier
         CODE_SIGN_STYLE: Automatic
         SWIFT_STRICT_CONCURRENCY: minimal
+      configs:
+        # Read by `AppFeatures` (App/Splatelier/AppFeatures.swift).
+        AppStore:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: APP_STORE
+          # iPhone only on the App Store: an iPad app has to support every orientation (multitasking),
+          # and the app is portrait only. iPad can be added later; once shipped it can't be removed.
+          TARGETED_DEVICE_FAMILY: "1"
     dependencies:
       - package: splatelier
         product: Trainer

@@ -225,7 +225,8 @@ final class TrainingViewModel: ObservableObject {
     private nonisolated static func loadGaussianCap() -> Int {
         let defaults = UserDefaults.standard
         let preset = CaptureTraining.AppPreset.defaultGaussianCap
-        guard defaults.object(forKey: gaussianCapKey) != nil else { return preset }
+        // Without the setting on screen, a value saved by an earlier build must not linger.
+        guard AppFeatures.trainingSettings, defaults.object(forKey: gaussianCapKey) != nil else { return preset }
         let saved = defaults.integer(forKey: gaussianCapKey)
         // 200k was removed from the choices; reset it to the default (prevents the picker from
         // showing no selection).
@@ -269,12 +270,12 @@ final class TrainingViewModel: ObservableObject {
 
     /// Launched for an unattended run (`SPLATELIER_AUTOTRAIN`): no naming popup; the capture is
     /// named after its resolution plan instead.
-    private let unattended = ProcessInfo.processInfo.environment["SPLATELIER_AUTOTRAIN"] != nil
+    private let unattended = AppFeatures.developerEnvironment["SPLATELIER_AUTOTRAIN"] != nil
 
     func start() {
         guard case .idle = phase, !isGeneratingMesh else { return }
         if unattended && captureName.isEmpty {
-            let env = ProcessInfo.processInfo.environment
+            let env = AppFeatures.developerEnvironment
             let tile = env["SPLATELIER_TILE"] ?? "\(CaptureTraining.AppPreset.tileSize)"
             let final = env["SPLATELIER_FINAL_FRAC"] ?? "\(CaptureTraining.AppPreset.finalResample?.fraction ?? 0)"
             captureName = "auto \(tile)px final \(final)"
@@ -416,7 +417,7 @@ final class TrainingViewModel: ObservableObject {
                 // Unattended A/B runs launched with devicectl can override the resolution plan:
                 // SPLATELIER_FINAL_FRAC=<fraction> of the iterations at the captured resolution
                 // (0: none) and SPLATELIER_TILE=<px> for the rasterizer tiles.
-                let env = ProcessInfo.processInfo.environment
+                let env = AppFeatures.developerEnvironment
                 let finalResample = env["SPLATELIER_FINAL_FRAC"].flatMap { Float($0) }
                     .map { $0 > 0 ? ($0, 1, 1) : nil } ?? CaptureTraining.AppPreset.finalResample
                 let tileSize = env["SPLATELIER_TILE"].flatMap { Int($0) } ?? CaptureTraining.AppPreset.tileSize
@@ -496,7 +497,7 @@ final class TrainingViewModel: ObservableObject {
                     )
                     self.completedPlyURL = plyURL
                     self.needsNamePrompt = !self.unattended
-                    self.generateMesh()
+                    self.finishTraining()
                 }
             } catch {
                 try? logHandle?.close()
@@ -632,7 +633,7 @@ final class TrainingViewModel: ObservableObject {
                         finalLoss: result.lossHistory.last
                     )
                     // The Gaussians changed, so rebuild the mesh (overwrites the same OBJ).
-                    self.generateMesh()
+                    self.finishTraining()
                 }
             } catch {
                 try? logHandle?.close()
@@ -759,19 +760,33 @@ final class TrainingViewModel: ObservableObject {
                 self.activeMemoryBytes = snap.activeMemory
                 self.elapsedSec = elapsedBase + Date().timeIntervalSince(startTime)
                 self.meshPhase = outcome
-                self.endProgress(finished: true)
-                // Training is only done once its mesh is: ask for a name (first run only), then open
-                // the viewer with all layers (a failed mesh still opens it, without the mesh).
-                if let plyURL = self.lastOutputPLY {
-                    self.pendingViewer = ViewerTarget(plyURL: plyURL, logURL: self.lastLogURL)
-                    if self.needsNamePrompt {
-                        self.needsNamePrompt = false
-                        self.showNamePrompt = true
-                    } else {
-                        self.openViewerIfReady()
-                    }
-                }
+                // A failed mesh still opens the viewer, without the mesh.
+                self.finishRun()
             }
+        }
+    }
+
+    /// After training or "Train more": the mesh where this build makes one (it finishes the run
+    /// when done), else the run is finished now.
+    private func finishTraining() {
+        if AppFeatures.meshGeneration {
+            generateMesh()
+        } else {
+            finishRun()
+        }
+    }
+
+    /// Training is only done once its mesh is (if any): ask for a name (first run only), then open
+    /// the viewer with all layers.
+    private func finishRun() {
+        endProgress(finished: true)
+        guard let plyURL = lastOutputPLY else { return }
+        pendingViewer = ViewerTarget(plyURL: plyURL, logURL: lastLogURL)
+        if needsNamePrompt {
+            needsNamePrompt = false
+            showNamePrompt = true
+        } else {
+            openViewerIfReady()
         }
     }
 
@@ -859,8 +874,9 @@ final class TrainingViewModel: ObservableObject {
     /// One bar for everything after Start training: preparing the frames, training, and the mesh.
     /// The first run is split 15% / 75% / 10% by what the logs of real device runs showed
     /// (preprocessing 14-36 s, training about 0.1 s per iteration, mesh about 10 s); "Train more"
-    /// has no preprocessing, so it is 90% / 10%. Training is exact (iteration / total); the other
-    /// two follow the stages the log reports and creep toward the next one in between.
+    /// has no preprocessing, so it is 90% / 10%. A build without the mesh gives its 10% to training.
+    /// Training is exact (iteration / total); the other two follow the stages the log reports and
+    /// creep toward the next one in between.
     @Published private(set) var overallProgress: Double = 0
     /// What is being done now ("Training", "Generating mesh", ...).
     @Published private(set) var progressLabel = ""
@@ -926,7 +942,8 @@ final class TrainingViewModel: ObservableObject {
 
     private func refreshProgress() {
         let preEnd = includesPreprocessing ? 0.15 : 0.0
-        let trainEnd = 0.90
+        // Without a mesh, training fills the bar to the end.
+        let trainEnd = AppFeatures.meshGeneration ? 0.90 : 1.0
         if let start = meshStartDate, case .running = meshPhase {
             // Mesh: creeps toward the end over its usual ten seconds.
             let dt = Date().timeIntervalSince(start)

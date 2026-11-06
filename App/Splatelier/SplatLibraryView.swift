@@ -202,6 +202,7 @@ struct SplatLibraryView: View {
             items.append(SplatViewerShareItem(title: "Mesh (OBJ)", systemImage: "triangle", url: mesh))
         }
         // The training log and the mesh log go out together as "Log".
+        guard AppFeatures.developerInfo else { return items }
         let base = item.mainURL.deletingPathExtension()
         let logs = [base.appendingPathExtension("log"), URL(fileURLWithPath: base.path + "_mesh.log")]
             .filter { FileManager.default.fileExists(atPath: $0.path) }
@@ -230,13 +231,19 @@ struct SplatLibraryView: View {
                 NavigationLink {
                     SplatViewerScreen(
                         url: item.mainURL,
-                        seedURL: item.seedURL,
+                        // The seed points and capture cameras are for development.
+                        seedURL: AppFeatures.developerInfo ? item.seedURL : nil,
                         meshURL: item.meshURL,
+                        // Without these the viewer has no CAD layer and no Import button.
                         cadURL: item.cadURL,
-                        cadPlacement: CADModelFiles.loadPlacement(for: item.mainURL),
-                        onCADPlacementChange: { CADModelFiles.savePlacement($0, for: item.mainURL) },
-                        onImportCAD: { try CADModelFiles.attach($0, to: item.mainURL) },
-                        onRemoveCAD: { CADModelFiles.remove(for: item.mainURL) },
+                        cadPlacement: AppFeatures.cadModels
+                            ? CADModelFiles.loadPlacement(for: item.mainURL) : nil,
+                        onCADPlacementChange: AppFeatures.cadModels
+                            ? { CADModelFiles.savePlacement($0, for: item.mainURL) } : nil,
+                        onImportCAD: AppFeatures.cadModels
+                            ? { try CADModelFiles.attach($0, to: item.mainURL) } : nil,
+                        onRemoveCAD: AppFeatures.cadModels
+                            ? { CADModelFiles.remove(for: item.mainURL) } : nil,
                         name: item.name,
                         shareItems: shareItems(for: item),
                         cropExport: SplatExportShare.cropExport,
@@ -284,21 +291,23 @@ struct SplatLibraryView: View {
             Label("Share", systemImage: "square.and.arrow.up")
         }
         // A CAD model (STEP) shown in the scene, to be moved into place in the viewer.
-        Button {
-            cadTarget = item
-            importingCAD = true
-        } label: {
-            Label(item.cadURL == nil ? "Add CAD model" : "Replace CAD model", systemImage: "cube.transparent")
-        }
-        if item.cadURL != nil {
-            Button(role: .destructive) {
-                CADModelFiles.remove(for: item.mainURL)
-                reload()
+        if AppFeatures.cadModels {
+            Button {
+                cadTarget = item
+                importingCAD = true
             } label: {
-                Label("Remove CAD model", systemImage: "cube.transparent")
+                Label(item.cadURL == nil ? "Add CAD model" : "Replace CAD model", systemImage: "cube.transparent")
+            }
+            if item.cadURL != nil {
+                Button(role: .destructive) {
+                    CADModelFiles.remove(for: item.mainURL)
+                    reload()
+                } label: {
+                    Label("Remove CAD model", systemImage: "cube.transparent")
+                }
             }
         }
-        if let record = item.settings {
+        if AppFeatures.developerInfo, let record = item.settings {
             Button {
                 settingsSheet = SettingsSheetData(
                     id: item.id, title: item.displayName, record: record)
@@ -427,12 +436,15 @@ struct SplatLibraryView: View {
                     }
                     Button("Cancel", role: .cancel) { deletingItem = nil }
                 } message: { item in
-                    Text("\(item.displayName) and all its files (PLY, mesh, logs, etc.) will be deleted. This can't be undone.")
+                    Text("\(item.displayName) and all its files (\(Self.relatedFiles)) will be deleted. This can't be undone.")
                 }
                 .position(x: deleteAnchorFrame.midX - origin.x, y: deleteAnchorFrame.midY - origin.y)
         }
         .allowsHitTesting(false)
     }
+
+    /// What deleting a capture removes, as the delete confirmations list it.
+    private static let relatedFiles = AppFeatures.meshGeneration ? "PLY, mesh, logs, etc." : "PLY, logs, etc."
 
     // MARK: - Selection bar
 
@@ -465,7 +477,7 @@ struct SplatLibraryView: View {
                     Button("Delete", role: .destructive) { batchDelete() }
                     Button("Cancel", role: .cancel) {}
                 } message: {
-                    Text("All related files (PLY, mesh, logs, etc.) will also be deleted. This can't be undone.")
+                    Text("All related files (\(Self.relatedFiles)) will also be deleted. This can't be undone.")
                 }
             }
             .padding(.horizontal)
@@ -562,8 +574,8 @@ struct SplatLibraryView: View {
             id: folder.lastPathComponent,
             mainURL: primary,
             seedURL: mainURL != nil ? seedURL : nil,
-            meshURL: meshURL,
-            cadURL: CADModelFiles.model(for: primary),
+            meshURL: AppFeatures.meshGeneration ? meshURL : nil,
+            cadURL: AppFeatures.cadModels ? CADModelFiles.model(for: primary) : nil,
             name: CaptureMetadataName.load(for: primary),
             settings: TrainingSettingsStore.load(for: primary),
             metrics: CaptureMetricsStore.load(for: primary),
@@ -576,7 +588,7 @@ struct SplatLibraryView: View {
             mainURL: url,
             seedURL: nil,
             meshURL: nil,
-            cadURL: CADModelFiles.model(for: url),
+            cadURL: AppFeatures.cadModels ? CADModelFiles.model(for: url) : nil,
             name: CaptureMetadataName.load(for: url),
             settings: TrainingSettingsStore.load(for: url),
             metrics: CaptureMetricsStore.load(for: url),

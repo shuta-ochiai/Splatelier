@@ -51,12 +51,14 @@ struct AboutView: View {
             List {
                 header
                     .listRowBackground(Color.clear)
-                Section {
-                    Link(destination: repoURL) {
-                        Label("Source code on GitHub", systemImage: "chevron.left.forwardslash.chevron.right")
-                    }
-                    Link(destination: issuesURL) {
-                        Label("Report a problem", systemImage: "exclamationmark.bubble")
+                if AppFeatures.projectLinks {
+                    Section {
+                        Link(destination: repoURL) {
+                            Label("Source code on GitHub", systemImage: "chevron.left.forwardslash.chevron.right")
+                        }
+                        Link(destination: issuesURL) {
+                            Label("Report a problem", systemImage: "exclamationmark.bubble")
+                        }
                     }
                 }
                 Section("Open source licenses") {
