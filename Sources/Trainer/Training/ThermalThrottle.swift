@@ -32,6 +32,7 @@ public enum ReplayCacheMode: String, Sendable {
             renderer.useReplayCache = true
             log("rasterizer: PocketGS Operator T replay cache enabled (K_max=\(replayKMax))")
         }
+        log("binning: pairs sorted by \(TileBinning.sortMethod)")
     }
 }
 

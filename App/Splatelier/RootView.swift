@@ -40,14 +40,17 @@ struct RootView: View {
     }
 
     private var launchOverlay: some View {
-        ZStack {
-            // Same color as the OS launch screen (LaunchBackground) and the video's background.
-            Color(red: 0x16 / 255, green: 0x1B / 255, blue: 0x46 / 255)
-            LaunchVideoView {
-                launchVideoEnded = true
-                if launchReady { endLaunch() }
+        GeometryReader { geo in
+            let fills = LaunchVideoView.fills(geo.size)
+            ZStack {
+                // Same color as the OS launch screen (LaunchBackground) and the video's background.
+                Color(red: 0x16 / 255, green: 0x1B / 255, blue: 0x46 / 255)
+                LaunchVideoView(fills: fills) {
+                    launchVideoEnded = true
+                    if launchReady { endLaunch() }
+                }
+                launchVersionLabel(size: geo.size, fills: fills)
             }
-            launchVersionLabel
         }
         .ignoresSafeArea()
         .contentShape(Rectangle())
@@ -56,25 +59,23 @@ struct RootView: View {
         .transition(.opacity)
     }
 
-    /// The version under the wordmark, fading in as the wordmark finishes. The video is shown aspect
-    /// fill (1080×1920), and the wordmark's baseline sits at y≈1474 px in it.
-    private var launchVersionLabel: some View {
-        GeometryReader { geo in
-            let scale = max(geo.size.width / 1080, geo.size.height / 1920)
-            let top = (geo.size.height - 1920 * scale) / 2
-            Text(AppVersion.full)
-                .font(.system(size: 15, design: .serif))
-                .tracking(1.5)
-                .foregroundStyle(Color(red: 0.96, green: 0.93, blue: 0.86).opacity(0.7))
-                .position(x: geo.size.width / 2, y: top + (1474 + 110) * scale)
-                .opacity(showLaunchVersion ? 1 : 0)
-                .animation(.easeIn(duration: 0.8), value: showLaunchVersion)
-        }
-        .allowsHitTesting(false)
-        .task {
-            try? await Task.sleep(for: .seconds(2.8))
-            showLaunchVersion = true
-        }
+    /// The version under the wordmark, fading in as the wordmark finishes. The video (1080×1920) is
+    /// centered at `LaunchVideoView.scale`, and the wordmark's baseline sits at y≈1474 px in it.
+    private func launchVersionLabel(size: CGSize, fills: Bool) -> some View {
+        let scale = LaunchVideoView.scale(for: size, fills: fills)
+        let top = (size.height - 1920 * scale) / 2
+        return Text(AppVersion.full)
+            .font(.system(size: 15, design: .serif))
+            .tracking(1.5)
+            .foregroundStyle(Color(red: 0.96, green: 0.93, blue: 0.86).opacity(0.7))
+            .position(x: size.width / 2, y: top + (1474 + 110) * scale)
+            .opacity(showLaunchVersion ? 1 : 0)
+            .animation(.easeIn(duration: 0.8), value: showLaunchVersion)
+            .allowsHitTesting(false)
+            .task {
+                try? await Task.sleep(for: .seconds(2.8))
+                showLaunchVersion = true
+            }
     }
 
     /// Builds the tabs under the animation, then fades the animation out.

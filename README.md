@@ -73,6 +73,9 @@ leaves out the experimental LiDAR depth, validation datasets and the information
 development, and trains with the default iterations and Gaussian cap
 (`App/Splatelier/AppFeatures.swift`). Archive with that scheme for an App Store upload.
 
+On iPhone the app is portrait only. On iPad it takes every orientation and any window size, as
+iPadOS requires; columns of cards and buttons stay at a readable width in a wide window.
+
 ## Using the app
 
 1. In the **Capture** tab, tap **Start capture** and walk slowly around the subject. Keep it in view
