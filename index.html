@@ -1,0 +1,478 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Splatelier</title>
+<meta name="description" content="Capture, train and view 3D Gaussian splats entirely on your iPhone. No server, no upload, no desktop GPU.">
+<meta property="og:title" content="Splatelier">
+<meta property="og:description" content="Capture, train and view 3D Gaussian splats entirely on your iPhone.">
+<link rel="icon" type="image/png" href="assets/favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #f6efe2;
+  --bg-2: #efe6d4;
+  --card: #fffaf1;
+  --ink: #1c1f45;
+  --ink-2: #4a4c6a;
+  --muted: #7a7a8c;
+  --accent: #5b3fc4;
+  --accent-soft: #e6defa;
+  --line: #e2d7c3;
+  --viewer-bg: #14152c;
+  --shadow: 0 1px 2px rgba(28, 31, 69, .06), 0 12px 40px rgba(28, 31, 69, .10);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121327;
+    --bg-2: #181a33;
+    --card: #1c1e3a;
+    --ink: #f1ecff;
+    --ink-2: #c4c1dc;
+    --muted: #8d8aa8;
+    --accent: #a993ff;
+    --accent-soft: #2c2652;
+    --line: #2c2e50;
+    --viewer-bg: #0b0c1c;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 12px 40px rgba(0, 0, 0, .35);
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 16px/1.6 Inter, system-ui, -apple-system, sans-serif;
+}
+a { color: var(--accent); }
+.wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+@media (max-width: 640px) { .wrap { padding: 0 16px; } }
+
+header.top { display: flex; align-items: center; justify-content: space-between; padding: 20px 0; }
+.brand { display: flex; align-items: center; gap: 10px; color: var(--ink); text-decoration: none; font: 28px/1 "Instrument Serif", Georgia, serif; }
+.brand img { width: 34px; height: 34px; border-radius: 8px; }
+.top nav { display: flex; gap: 20px; font-size: 15px; }
+.top nav a { color: var(--ink-2); text-decoration: none; }
+.top nav a:hover { color: var(--accent); }
+@media (max-width: 640px) { .top nav a.opt { display: none; } }
+
+.hero { padding: 40px 0 28px; }
+.eyebrow { font: 500 13px/1 "IBM Plex Mono", ui-monospace, monospace; letter-spacing: .18em; text-transform: uppercase; color: var(--accent); }
+h1 { font: 400 clamp(44px, 7vw, 84px)/1.02 "Instrument Serif", Georgia, serif; letter-spacing: -.01em; margin: 16px 0 18px; max-width: 14ch; }
+.lede { font-size: clamp(17px, 2vw, 20px); color: var(--ink-2); max-width: 46ch; margin: 0 0 28px; }
+.cta { display: flex; flex-wrap: wrap; gap: 12px; }
+.btn { display: inline-flex; align-items: center; gap: 8px; padding: 12px 20px; border-radius: 999px; font-weight: 600; font-size: 15px; text-decoration: none; border: 1px solid var(--line); color: var(--ink); background: var(--card); }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn:hover { transform: translateY(-1px); }
+.btn svg { width: 18px; height: 18px; fill: currentColor; }
+
+.stage { margin: 36px 0 12px; }
+.viewer {
+  position: relative; aspect-ratio: 16 / 10; width: 100%;
+  border-radius: 20px; overflow: hidden; background: var(--viewer-bg); box-shadow: var(--shadow);
+  touch-action: none;
+}
+@media (max-width: 640px) { .viewer { aspect-ratio: 4 / 5; border-radius: 16px; } }
+.viewer canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; }
+.viewer canvas:active { cursor: grabbing; }
+.viewer .status {
+  position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none;
+  color: #d9d6f2; font: 500 13px/1.4 "IBM Plex Mono", monospace; letter-spacing: .04em; transition: opacity .4s;
+}
+.viewer .status .bar { width: 180px; height: 3px; background: rgba(255,255,255,.15); border-radius: 2px; margin-top: 10px; overflow: hidden; }
+.viewer .status .bar i { display: block; height: 100%; width: 0; background: #a993ff; transition: width .15s; }
+.viewer .status.hidden { opacity: 0; }
+.viewer .hint {
+  position: absolute; left: 14px; bottom: 12px; color: rgba(255,255,255,.75);
+  font: 12px/1.4 "IBM Plex Mono", monospace; pointer-events: none; text-shadow: 0 1px 3px rgba(0,0,0,.6);
+}
+.viewer .hint .narrow { display: none; }
+@media (max-width: 640px), (pointer: coarse) {
+  .viewer .hint .wide { display: none; }
+  .viewer .hint .narrow { display: inline; }
+}
+.viewer .reset {
+  position: absolute; right: 12px; bottom: 10px; border: 0; border-radius: 999px; padding: 6px 12px;
+  background: rgba(20, 21, 44, .6); color: #fff; font: 12px/1.4 "IBM Plex Mono", monospace; cursor: pointer;
+  backdrop-filter: blur(6px);
+}
+.viewer .modes {
+  position: absolute; top: 12px; right: 12px; display: flex; padding: 3px; gap: 2px;
+  border-radius: 999px; background: rgba(20, 21, 44, .6); backdrop-filter: blur(6px);
+}
+.viewer .modes button {
+  border: 0; border-radius: 999px; padding: 6px 14px; background: transparent; color: rgba(255,255,255,.8);
+  font: 500 13px/1.2 Inter, sans-serif; cursor: pointer;
+}
+.viewer .modes button[aria-pressed="true"] { background: #fff; color: #14152c; }
+.scenes { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; align-items: center; }
+.scene {
+  border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 999px;
+  padding: 8px 16px; font: 500 14px/1.2 Inter, sans-serif; cursor: pointer;
+}
+.scene[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.scene-info { margin-left: auto; color: var(--muted); font: 13px/1.4 "IBM Plex Mono", monospace; }
+@media (max-width: 640px) { .scene-info { margin-left: 0; width: 100%; } }
+.caption { color: var(--muted); font-size: 14px; margin: 10px 0 0; }
+
+section { padding: 72px 0 8px; }
+.showcase { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+.tool.wide { grid-column: 1 / -1; display: grid; grid-template-columns: 1.5fr 1fr; gap: 8px 24px; align-items: center; }
+.tool.wide h3 { margin-top: 0; align-self: end; }
+.tool.wide .media { grid-row: span 2; }
+.tool.wide p { align-self: start; }
+.media.portrait { aspect-ratio: 540 / 1048; }
+@media (max-width: 760px) {
+  .showcase { grid-template-columns: 1fr; }
+  .tool.wide { grid-template-columns: 1fr; }
+  .tool.wide .media { grid-row: auto; }
+  .media.portrait { width: min(100%, 300px); margin: 0 auto; }
+}
+.tool { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 14px 14px 20px; }
+.tool h3 { font-size: 18px; margin: 16px 6px 6px; }
+.tool p { margin: 0 6px; color: var(--ink-2); font-size: 15px; }
+.media {
+  aspect-ratio: 16 / 10; border-radius: 12px; overflow: hidden; background: var(--viewer-bg);
+  display: grid; place-items: center;
+}
+.media img, .media video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.media video { object-fit: contain; }
+.media span {
+  color: #8d8aa8; font: 13px/1.4 "IBM Plex Mono", monospace; border: 1px dashed #4a4c6a;
+  border-radius: 8px; padding: 8px 12px;
+}
+h2 { font: 400 clamp(34px, 4.5vw, 52px)/1.1 "Instrument Serif", Georgia, serif; margin: 12px 0 28px; max-width: 22ch; }
+.steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; counter-reset: step; }
+@media (max-width: 900px) { .steps { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 560px) { .steps { grid-template-columns: 1fr; } }
+.step { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 20px; }
+.step::before {
+  counter-increment: step; content: "0" counter(step);
+  font: 500 13px/1 "IBM Plex Mono", monospace; color: var(--accent); letter-spacing: .1em;
+}
+.step h3, .feature h3 { font-size: 17px; margin: 12px 0 6px; }
+.step p, .feature p { margin: 0; color: var(--ink-2); font-size: 15px; }
+
+.features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px 32px; }
+@media (max-width: 900px) { .features { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 560px) { .features { grid-template-columns: 1fr; } }
+.feature { border-top: 1px solid var(--line); padding-top: 16px; }
+.feature h3 { margin-top: 0; }
+
+.start { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; align-items: start; }
+@media (max-width: 820px) { .start { grid-template-columns: 1fr; } }
+.start ul { margin: 0; padding-left: 20px; color: var(--ink-2); }
+.start li { margin: 6px 0; }
+pre {
+  margin: 0; padding: 18px 20px; border-radius: 14px; background: var(--viewer-bg); color: #e8e4ff;
+  font: 14px/1.7 "IBM Plex Mono", monospace; overflow-x: auto;
+}
+pre .c { color: #8d8aa8; }
+.note { color: var(--muted); font-size: 14px; margin-top: 12px; }
+
+footer { margin-top: 88px; padding: 28px 0 40px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; }
+footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 24px; justify-content: space-between; }
+footer a { color: var(--ink-2); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <a class="brand" href="./"><img src="assets/icon.png" alt="">Splatelier</a>
+    <nav>
+      <a class="opt" href="#how">How it works</a>
+      <a class="opt" href="#start">Get started</a>
+      <a href="https://github.com/shuta-ochiai/Splatelier">GitHub</a>
+    </nav>
+  </header>
+
+  <div class="hero">
+    <div class="eyebrow">iOS · 3D Gaussian Splatting</div>
+    <h1>Gaussian splats, made on your iPhone.</h1>
+    <p class="lede">Walk around an object, and Splatelier captures, trains and shows it as a 3D Gaussian Splatting scene. Everything runs on the device: no server, no upload, no desktop GPU.</p>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/shuta-ochiai/Splatelier">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        View on GitHub
+      </a>
+      <a class="btn" href="#start">Build the app</a>
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="viewer" id="viewer">
+      <canvas id="canvas" aria-label="Interactive 3D Gaussian splat scene"></canvas>
+      <div class="status" id="status"><div><span id="status-text">Loading scene…</span><div class="bar"><i id="bar"></i></div></div></div>
+      <div class="hint" id="hint"><span class="wide">Drag to orbit · scroll to zoom · right-drag to pan · double-click to reset</span><span class="narrow">Drag to orbit · pinch to zoom</span></div>
+      <button class="reset" id="reset" type="button">Reset view</button>
+      <div class="modes" role="group" aria-label="Show">
+        <button type="button" data-mode="splats" aria-pressed="true">Splats</button>
+        <button type="button" data-mode="mesh" aria-pressed="false">Mesh</button>
+        <button type="button" data-mode="shape" aria-pressed="false">Shape</button>
+      </div>
+    </div>
+    <div class="scenes" role="group" aria-label="Scenes">
+      <button class="scene" data-scene="playground" aria-pressed="true">Playground slide</button>
+      <button class="scene" data-scene="lion" aria-pressed="false">Lion statue</button>
+      <button class="scene" data-scene="phone" aria-pressed="false">Pay phone</button>
+      <span class="scene-info" id="scene-info"></span>
+    </div>
+    <p class="caption">Each scene was captured on an iPhone 16 Pro and trained with the app’s pipeline: the playground on the phone, the lion and the pay phone from the same captures with the Mac tool, which runs the same training. They are shown here as exported, in a small WebGL viewer (base colors only). Until you take over, the camera circles the subject close to where the phone was during the capture, where the scene looks its best. Switch to Mesh or Shape to see the surface the app builds from the same capture.</p>
+  </div>
+
+  <section id="edit">
+    <div class="eyebrow">Mesh and editing</div>
+    <h2>More than splats: a mesh, and the tools to tidy up.</h2>
+    <div class="showcase">
+      <article class="tool wide">
+        <div class="media"><img src="assets/mesh-shape.jpg" alt="The lion statue scene as a gray mesh" loading="lazy"></div>
+        <h3>A mesh, made for you</h3>
+        <p>When training finishes, Splatelier fuses the trained Gaussians’ depth into a TSDF and builds a vertex-colored mesh. Show it with the splats or as plain shape in the viewer, measure on it, and export it as OBJ.</p>
+      </article>
+      <article class="tool">
+        <div class="media portrait"><video src="media/crop.mp4" poster="media/crop.jpg" muted loop playsinline preload="none" aria-label="Screen recording: cropping the lion statue with a sphere"></video></div>
+        <h3>Crop with a box, sphere or lasso</h3>
+        <p>Drag the handles of a box or sphere to keep or remove what is inside, or draw a loop on screen to cut through the scene. Crops only hide splats, so undo is instant.</p>
+      </article>
+      <article class="tool">
+        <div class="media portrait"><video src="media/floaters.mp4" poster="media/floaters.jpg" muted loop playsinline preload="none" aria-label="Screen recording: Auto Detect selects floaters in orange, then Delete removes them"></video></div>
+        <h3>Clear the floaters</h3>
+        <p>Tap stray splats to select them with a brush, or let Detect find the small clusters hanging around the scene, then delete them together.</p>
+      </article>
+      <article class="tool">
+        <div class="media portrait"><video src="media/color.mp4" poster="media/color.jpg" muted loop playsinline preload="none" aria-label="Screen recording: moving the temperature and saturation sliders, then Reset"></video></div>
+        <h3>Grade the colors</h3>
+        <p>Tint, temperature, saturation, brightness, black and white points and opacity. The grade is non-destructive: the trained data stays as it was, and Reset brings it back.</p>
+      </article>
+    </div>
+    <p class="note">The recordings show the app running in the iOS Simulator, on the scenes from the viewer above.</p>
+  </section>
+
+  <section id="how">
+    <div class="eyebrow">How it works</div>
+    <h2>From a short walk-around to a 3D scene.</h2>
+    <div class="steps">
+      <div class="step">
+        <h3>Capture</h3>
+        <p>ARKit records images and camera poses. Blurred and badly exposed frames are left out, and a live preview shows which parts are covered.</p>
+      </div>
+      <div class="step">
+        <h3>Poses and seeds</h3>
+        <p>Bundle adjustment refines the ARKit poses, with loop closures. Multi-view stereo turns the frames into dense seed points.</p>
+      </div>
+      <div class="step">
+        <h3>Train</h3>
+        <p>The Gaussians are trained on the iPhone’s GPU with Slang kernels on MLX, slowing down when the phone gets hot.</p>
+      </div>
+      <div class="step">
+        <h3>View and export</h3>
+        <p>A mesh is built automatically. Orbit, measure, crop and grade the result, and export splats or the mesh in standard formats.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Features</div>
+    <h2>Everything stays on the phone.</h2>
+    <div class="features">
+      <div class="feature">
+        <h3>Guided capture</h3>
+        <p>Blur and exposure filtering while you capture, a live splat preview of the coverage, and short animated tips.</p>
+      </div>
+      <div class="feature">
+        <h3>On-device training</h3>
+        <p>Pose refinement, dense seeds and training in one screen, with one progress bar and a picture that sharpens as it trains.</p>
+      </div>
+      <div class="feature">
+        <h3>Metric scale</h3>
+        <p>The scene keeps ARKit’s real-world scale, so distances you measure in the viewer are in meters.</p>
+      </div>
+      <div class="feature">
+        <h3>Train more</h3>
+        <p>Not sharp enough yet? Continue training a finished model from the viewer; the optimizer state is kept, so it picks up where it stopped.</p>
+      </div>
+      <div class="feature">
+        <h3>Standard formats</h3>
+        <p>Share 3DGS PLY, compressed PLY, SPZ, .splat, glTF (GLB), SOG, OpenUSD and the OBJ mesh. The Library also opens .ply, .splat and .spz files.</p>
+      </div>
+      <div class="feature">
+        <h3>Mac tools</h3>
+        <p>Retrain a capture on a Mac, train and evaluate on COLMAP scenes, and convert PLY files from the command line.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="start">
+    <div class="eyebrow">Get started</div>
+    <h2>Build it with Xcode.</h2>
+    <div class="start">
+      <div>
+        <ul>
+          <li>An iPhone or iPad with iOS 18 or later. LiDAR is not required.</li>
+          <li>An Apple Silicon Mac with macOS 15 and Xcode 16 or later.</li>
+          <li>An Apple account added to Xcode, to sign the app.</li>
+        </ul>
+        <p class="note">Splatelier is an early release built from source; it is not on the App Store. See the <a href="https://github.com/shuta-ochiai/Splatelier#install-the-app">README</a> for signing and the full steps.</p>
+      </div>
+      <pre><span class="c"># clone and open the project</span>
+git clone https://github.com/shuta-ochiai/Splatelier.git
+cd Splatelier
+open App/Splatelier.xcodeproj
+<span class="c"># choose your team, select your device, run</span></pre>
+    </div>
+  </section>
+</div>
+
+<footer>
+  <div class="wrap">
+    <span>Splatelier · Apache License 2.0</span>
+    <span><a href="https://github.com/shuta-ochiai/Splatelier">github.com/shuta-ochiai/Splatelier</a></span>
+  </div>
+</footer>
+
+<script type="module">
+// Bump VERSION (here and in the import) whenever the viewer or the scene files change, so browsers
+// don't keep showing cached copies.
+import { SplatViewer, parseMesh } from './viewer.js?v=20261108c';
+const VERSION = '20261108c';
+const versioned = (url) => `${url}?v=${VERSION}`;
+
+const SCENES = {
+  playground: { file: 'scenes/playground.splat', path: 'scenes/playground.path.json', cam: { target: [0.016, -1.722, -3.148], yaw: -0.747, pitch: 0.657, dist: 4.5, fovY: 56 } },
+  lion:       { file: 'scenes/lion.splat',       path: 'scenes/lion.path.json', cam: { target: [0.062, -0.97, -0.889],  yaw: -2.647, pitch: 0.75,  dist: 1.9, fovY: 56 } },
+  phone:      { file: 'scenes/phone.splat',      path: 'scenes/phone.path.json', cam: { target: [-0.225, -1.376, -0.704], yaw: 1.64,  pitch: 0.774, dist: 2.3, fovY: 56 } },
+};
+
+const status = document.getElementById('status');
+const statusText = document.getElementById('status-text');
+const bar = document.getElementById('bar');
+const info = document.getElementById('scene-info');
+const cache = new Map();
+let viewer;
+try {
+  viewer = new SplatViewer(document.getElementById('canvas'));
+  window.splatViewer = viewer;
+} catch (e) {
+  statusText.textContent = 'This browser cannot show the 3D scene (WebGL 2 is needed).';
+  bar.parentElement.remove();
+}
+
+async function fetchFile(url) {
+  if (cache.has(url)) return cache.get(url);
+  const res = await fetch(versioned(url));
+  if (!res.ok) throw new Error(res.status + ' ' + res.statusText);
+  const total = Number(res.headers.get('content-length')) || 0;
+  const reader = res.body.getReader();
+  const parts = [];
+  let got = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    parts.push(value);
+    got += value.length;
+    if (total) bar.style.width = `${Math.min(100, (100 * got) / total)}%`;
+  }
+  const buf = new Uint8Array(got);
+  let o = 0;
+  for (const p of parts) { buf.set(p, o); o += p.length; }
+  cache.set(url, buf.buffer);
+  return buf.buffer;
+}
+
+const meshes = new Map();
+let current = null;
+let mode = 'splats';
+let meshShown = null;
+
+function loading(text) {
+  status.classList.remove('hidden');
+  statusText.textContent = text;
+  bar.style.width = '0%';
+}
+
+function describe(name) {
+  const splat = cache.get(SCENES[name].file);
+  if (!splat) return;
+  const mesh = meshes.get(name);
+  info.textContent = mode !== 'splats' && mesh
+    ? `${Math.round(mesh.triangles / 1000)}k triangles · simplified for the web`
+    : `${Math.round(splat.byteLength / 32 / 1000)}k splats · ${(splat.byteLength / 1e6).toFixed(1)} MB`;
+}
+
+async function showMesh(name) {
+  if (meshShown === name) return;
+  if (!meshes.has(name)) {
+    loading('Loading mesh…');
+    const buffer = await fetchFile(SCENES[name].file.replace('.splat', '.mesh'));
+    meshes.set(name, parseMesh(buffer));
+  }
+  if (current !== name || mode === 'splats') return;
+  viewer.setMesh(meshes.get(name));
+  meshShown = name;
+  status.classList.add('hidden');
+}
+
+async function show(name) {
+  if (!viewer) return;
+  current = name;
+  for (const b of document.querySelectorAll('.scene')) b.setAttribute('aria-pressed', String(b.dataset.scene === name));
+  loading('Loading scene…');
+  try {
+    // The capture's own camera path, when there is one: views near the training views look best.
+    const pathReq = SCENES[name].path
+      ? fetch(versioned(SCENES[name].path)).then((r) => (r.ok ? r.json() : null)).catch(() => null)
+      : Promise.resolve(null);
+    const [buffer, path] = await Promise.all([fetchFile(SCENES[name].file), pathReq]);
+    if (current !== name) return;
+    if (mode === 'splats') viewer.onFirstFrame = () => status.classList.add('hidden');
+    viewer.setSplats(buffer, SCENES[name].cam);
+    viewer.setPath(path);
+    if (mode !== 'splats') await showMesh(name);
+    describe(name);
+  } catch (e) {
+    statusText.textContent = `Could not load the scene (${e.message}).`;
+  }
+}
+
+async function setMode(next) {
+  if (!viewer || next === mode) return;
+  mode = next;
+  for (const b of document.querySelectorAll('.modes button')) b.setAttribute('aria-pressed', String(b.dataset.mode === mode));
+  viewer.setMode(mode);
+  try {
+    if (mode !== 'splats' && current) await showMesh(current);
+    else status.classList.add('hidden');
+    describe(current);
+  } catch (e) {
+    statusText.textContent = `Could not load the mesh (${e.message}).`;
+  }
+}
+
+for (const b of document.querySelectorAll('.modes button')) b.addEventListener('click', () => setMode(b.dataset.mode));
+for (const b of document.querySelectorAll('.scene')) {
+  b.addEventListener('click', () => { history.replaceState(null, '', `#${b.dataset.scene}`); show(b.dataset.scene); });
+}
+document.getElementById('reset').addEventListener('click', () => viewer && viewer.resetView());
+// Screen recordings play while on screen (and not at all when the viewer asks for less motion).
+const clips = document.querySelectorAll('.media video');
+if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+  for (const v of clips) v.controls = true;
+} else if ('IntersectionObserver' in window) {
+  const io = new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      if (e.isIntersecting) e.target.play().catch(() => { e.target.controls = true; });
+      else e.target.pause();
+    }
+  }, { threshold: 0.4 });
+  for (const v of clips) io.observe(v);
+}
+
+const initial = location.hash.slice(1);
+show(SCENES[initial] ? initial : 'playground');
+</script>
+</body>
+</html>
