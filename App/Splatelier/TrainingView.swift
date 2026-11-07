@@ -149,6 +149,7 @@ struct TrainingView: View {
                         header
                         if AppFeatures.trainingSettings { AnyView(trainingSettingsCard) }
                         if lowPowerMode { AnyView(lowPowerNotice) }
+                        if !DeviceSupport.canTrain { AnyView(unsupportedDeviceNotice) }
                         AnyView(startButton)
                     }
                     .frame(maxWidth: DesignSystem.readableWidth)
@@ -392,6 +393,18 @@ struct TrainingView: View {
         .buttonStyle(.borderedProminent)
         .tint(Color.kikyoFill)
         .controlSize(.large)
+        .disabled(!DeviceSupport.canTrain)
+    }
+
+    /// On a device that can't train (see `DeviceSupport`); a capture saved on another device can
+    /// still be opened here, but not trained.
+    private var unsupportedDeviceNotice: some View {
+        Label(DeviceSupport.unsupportedMessage, systemImage: "exclamationmark.triangle.fill")
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(.yellow)
+            .padding()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .cardBackground()
     }
 
     private func settingHeader(_ title: String, help: TrainingHelp) -> some View {

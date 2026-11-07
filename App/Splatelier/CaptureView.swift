@@ -154,6 +154,7 @@ struct CaptureView: View {
             }
             .frame(maxHeight: .infinity, alignment: .top)
             Group {
+                if !DeviceSupport.canTrain { unsupportedDeviceNotice }
                 if AppFeatures.lidarDepth && ARKitCaptureSession.isLiDARAvailable {
                     Toggle("LiDAR depth (experimental)", isOn: $useLiDAR)
                         .padding(.horizontal)
@@ -561,6 +562,17 @@ struct CaptureView: View {
         .buttonStyle(.borderedProminent)
         .tint(Color.kikyoFill)
         .controlSize(.large)
+        .disabled(!DeviceSupport.canTrain)
+    }
+
+    /// Above Start capture on a device that can't train (see `DeviceSupport`).
+    private var unsupportedDeviceNotice: some View {
+        Label(DeviceSupport.unsupportedMessage, systemImage: "exclamationmark.triangle.fill")
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(.yellow)
+            .padding()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .cardBackground()
     }
 
     private func row(_ label: String, _ value: String) -> some View {

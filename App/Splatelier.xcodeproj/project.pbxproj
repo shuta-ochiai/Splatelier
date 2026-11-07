@@ -42,6 +42,7 @@
 		CA3DF9EA157FB97FAAA25696 /* cadmpeg.txt in Resources */ = {isa = PBXBuildFile; fileRef = 1C69033F657662496456997A /* cadmpeg.txt */; };
 		CDA7832F7C8BC941633CC7B7 /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 222B06897FC2E276AB4462F4 /* DesignSystem.swift */; };
 		D22D93101E7B98B7AF530BC0 /* TrainingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1CC444B02994F0756CA1681 /* TrainingView.swift */; };
+		D8A1F774BBC1F34A8D5E7BB4 /* DeviceSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3146F7A9B004422C3E1A7EA2 /* DeviceSupport.swift */; };
 		D8D67C1E2084074269A25FF6 /* SplatViewerKit in Frameworks */ = {isa = PBXBuildFile; productRef = 4E33263388A0B551FBF6A6E1 /* SplatViewerKit */; };
 		E1294DC40EA46275311A3A5E /* CaptureViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6415796D99C0BA08F2A7C122 /* CaptureViewModel.swift */; };
 		E63DA16526DE76C5F7B14B86 /* swift-numerics.txt in Resources */ = {isa = PBXBuildFile; fileRef = A635EA42807AABF63B5C7812 /* swift-numerics.txt */; };
@@ -62,6 +63,7 @@
 		1DFDB32D079E7B9B7340FBB5 /* guide_turn.mp4 */ = {isa = PBXFileReference; path = guide_turn.mp4; sourceTree = "<group>"; };
 		222B06897FC2E276AB4462F4 /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
 		304812711AF3443F715DF7F9 /* ShareOptionsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareOptionsSheet.swift; sourceTree = "<group>"; };
+		3146F7A9B004422C3E1A7EA2 /* DeviceSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceSupport.swift; sourceTree = "<group>"; };
 		32632ECDB986EBB1F4C83F97 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		360CBE487E38E97640AD5677 /* fmt.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = fmt.txt; sourceTree = "<group>"; };
 		381CC46EA36AC4A9AF165BEC /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -153,6 +155,7 @@
 				DADE075C65792EE63CAD5B27 /* CaptureView.swift */,
 				6415796D99C0BA08F2A7C122 /* CaptureViewModel.swift */,
 				222B06897FC2E276AB4462F4 /* DesignSystem.swift */,
+				3146F7A9B004422C3E1A7EA2 /* DeviceSupport.swift */,
 				0F3068CFC477ECA713F841EA /* FrameReviewView.swift */,
 				AE1374C4B556E184452A79D5 /* GuideClipView.swift */,
 				381CC46EA36AC4A9AF165BEC /* Info.plist */,
@@ -303,6 +306,7 @@
 				1DAE351555942B38E85D4D15 /* CaptureView.swift in Sources */,
 				E1294DC40EA46275311A3A5E /* CaptureViewModel.swift in Sources */,
 				CDA7832F7C8BC941633CC7B7 /* DesignSystem.swift in Sources */,
+				D8A1F774BBC1F34A8D5E7BB4 /* DeviceSupport.swift in Sources */,
 				806640FD40AE058896A9399D /* FrameReviewView.swift in Sources */,
 				49666DB4953BB06BA86C2086 /* GuideClipView.swift in Sources */,
 				1E5CF178161A77EED99F8687 /* LaunchVideoView.swift in Sources */,
