@@ -153,11 +153,14 @@ struct CaptureView: View {
                     .frame(maxHeight: .infinity)
             }
             .frame(maxHeight: .infinity, alignment: .top)
-            if ARKitCaptureSession.isLiDARAvailable {
-                Toggle("LiDAR depth (experimental)", isOn: $useLiDAR)
-                    .padding(.horizontal)
+            Group {
+                if ARKitCaptureSession.isLiDARAvailable {
+                    Toggle("LiDAR depth (experimental)", isOn: $useLiDAR)
+                        .padding(.horizontal)
+                }
+                controlRow
             }
-            controlRow
+            .frame(maxWidth: DesignSystem.readableWidth)
         }
         .padding()
         .sheet(isPresented: $showValidationList) { validationListSheet }
@@ -222,6 +225,7 @@ struct CaptureView: View {
                 controlRow
                     .padding()
                     .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+                    .frame(maxWidth: DesignSystem.readableWidth)
                     .padding(.horizontal)
                     .padding(.bottom)
             }

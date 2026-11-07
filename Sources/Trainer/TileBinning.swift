@@ -7,7 +7,8 @@ import MLXFast
 
 /// Tile binning result for the rasterizer. Entries are ordered by (tile_id, depth) for every tile
 /// each Gaussian's AABB overlaps. On the GPU: tile_aabb → cumsum → tile_emit_pairs → argSort →
-/// tile_lower_bound. Only n_isects is read back to the host.
+/// tile_lower_bound. Only n_isects is read back to the host (and the keys, on a GPU whose argSort
+/// is wrong; see `gpuArgSortWorks`).
 public struct TileBinningResult {
     public let flattenIds: MLXArray      // [n_isects] int32, front to back within a tile
     public let tileOffsets: MLXArray     // [numTiles + 1] int32, tile t is flattenIds[off[t]..<off[t+1]]
@@ -32,6 +33,38 @@ public enum TileBinning {
     /// Benchmarks only: when set, `bin` waits for the GPU after each stage and reports its time
     /// (ms) here.
     nonisolated(unsafe) public static var stageHook: ((String, Double) -> Void)?
+
+    /// Whether MLX's `argSort` orders correctly on this GPU. On an A14 (iPad Air, 4th generation)
+    /// it does not: a large array comes back as a permutation in close to random order, and a small
+    /// one with indices out of range. Binning then put Gaussians in tiles they don't touch, the 8-px
+    /// split counted and wrote different lists, and the rasterizer read Gaussian indices from slots
+    /// nothing had written (a GPU page fault). Checked once, on random keys sorted by both of MLX's
+    /// paths (one threadgroup, and the multi-block merge).
+    public static let gpuArgSortWorks: Bool = {
+        var rng = SystemRandomNumberGenerator()
+        for n in [1000, 8192] {
+            let keys = (0..<n).map { _ in Int32(truncatingIfNeeded: rng.next() & 0x7fff_ffff) }
+            guard ArgSortCheck.sorts(keys, by: MLX.argSort(MLXArray(keys, [n])).asArray(Int32.self)) else {
+                return false
+            }
+        }
+        return true
+    }()
+
+    /// How binning sorts its pairs on this device, for the training log.
+    public static var sortMethod: String {
+        if gpuArgSortWorks { return "MLX argSort" }
+        return MPSArgSort.shared != nil ? "MPSGraph argSort (MLX's is wrong on this GPU)"
+                                        : "CPU sort (MLX's and MPSGraph's are wrong on this GPU)"
+    }
+
+    /// `argSort` of the binning keys (non-negative int32): MLX's where it works, else MPSGraph's,
+    /// else the CPU's.
+    static func argSortKeys(_ keys: MLXArray, onGPU: Bool = gpuArgSortWorks) -> MLXArray {
+        if onGPU { return MLX.argSort(keys) }
+        if let mps = MPSArgSort.shared { return mps.argSort(keys) }
+        return MPSArgSort.cpuArgSort(keys)
+    }
 
     private static func stage(_ name: String, _ arrays: [MLXArray], _ t: inout Date) {
         guard let hook = stageHook else { return }
@@ -247,7 +280,7 @@ public enum TileBinning {
         // 4. Sort on a single 31-bit non-negative int32 key (half the bandwidth of a 64-bit key,
         //    and MLX's sort blocks
         //    become twice as large).
-        let sortedIdx = MLX.argSort(sortKeys)
+        let sortedIdx = argSortKeys(sortKeys)
         stage("argsort", [sortedIdx], &t)
         let flattenIds = gaussIndices[sortedIdx]
 

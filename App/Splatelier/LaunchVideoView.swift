@@ -11,7 +11,19 @@ import SwiftUI
 /// Plays the bundled launch.mp4 once, filling the screen. Calls `onEnd` when it has played to the
 /// end (or at once if the file can't be played).
 struct LaunchVideoView: UIViewRepresentable {
+    /// Fill the view (portrait windows), or fit inside it (landscape ones, where filling would crop
+    /// the portrait video's wordmark off the bottom). The background around it is the same color.
+    let fills: Bool
     let onEnd: () -> Void
+
+    /// How the 1080×1920 video is scaled into a view of `size`, matching `fills`.
+    static func scale(for size: CGSize, fills: Bool) -> CGFloat {
+        let sx = size.width / 1080, sy = size.height / 1920
+        return fills ? max(sx, sy) : min(sx, sy)
+    }
+
+    /// Fill a window at least as tall as it is wide; fit inside a wider one.
+    static func fills(_ size: CGSize) -> Bool { size.height >= size.width }
 
     func makeUIView(context: Context) -> LaunchPlayerView {
         let view = LaunchPlayerView()
@@ -23,13 +35,15 @@ struct LaunchVideoView: UIViewRepresentable {
         player.isMuted = true
         player.actionAtItemEnd = .pause
         view.playerLayer.player = player
-        view.playerLayer.videoGravity = .resizeAspectFill
+        view.playerLayer.videoGravity = fills ? .resizeAspectFill : .resizeAspect
         context.coordinator.observe(player, onEnd: onEnd)
         player.play()
         return view
     }
 
-    func updateUIView(_ uiView: LaunchPlayerView, context: Context) {}
+    func updateUIView(_ uiView: LaunchPlayerView, context: Context) {
+        uiView.playerLayer.videoGravity = fills ? .resizeAspectFill : .resizeAspect
+    }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 

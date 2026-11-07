@@ -66,6 +66,9 @@ and compiled to Metal.
 4. Select the **Splatelier** scheme and your device, and run. The scheme builds in Release, because
    training in Debug is much slower.
 
+On iPhone the app is portrait only. On iPad it takes every orientation and any window size, as
+iPadOS requires; columns of cards and buttons stay at a readable width in a wide window.
+
 ## Using the app
 
 1. In the **Capture** tab, tap **Start capture** and walk slowly around the subject. Keep it in view

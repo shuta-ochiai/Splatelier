@@ -4,6 +4,7 @@
 // About sheet: version, links and the open source licenses the app ships with.
 
 import SwiftUI
+import UIKit
 import Trainer
 
 /// The version the app shows, read from Info.plist (the release version). The build number
@@ -92,7 +93,7 @@ struct AboutView: View {
             Text(AppVersion.full)
                 .font(.subheadline.monospacedDigit())
                 .foregroundStyle(.secondary)
-            Text("Capture, train and view 3D Gaussian splats on your iPhone.")
+            Text("Capture, train and view 3D Gaussian splats on your \(UIDevice.current.model).")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
