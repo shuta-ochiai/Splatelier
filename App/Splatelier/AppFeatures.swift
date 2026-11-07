@@ -20,7 +20,8 @@ enum AppFeatures {
     static let validationDatasets = false
     /// What is there for development: GPU memory and loss while training, the training settings
     /// of a capture, the seed points and capture cameras in the viewer, the relocalization notice
-    /// after a capture, and sharing the training logs.
+    /// after a capture, and sharing the training logs. Off, the files behind them aren't written
+    /// either (the log, the seed PLY, the settings and metrics sidecars).
     static let developerInfo = false
     /// The iterations and Gaussian cap before training (off: the defaults, the recommendation for
     /// the frame count and `AppPreset.defaultGaussianCap`).

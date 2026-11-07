@@ -92,7 +92,8 @@ struct TrainingSettingsRecord: Codable {
     }
 }
 
-/// Training result metrics (`<base>.metrics.json`). Shown on the Library card.
+/// Training result metrics (`<base>.metrics.json`), for comparing runs. Not written where
+/// `AppFeatures.developerInfo` is off (the App Store build), which keeps only what it shows.
 struct CaptureMetricsRecord: Codable {
     let version: Int
     let finalSmoothLoss: Float   // Rolling mean over the trailing window (same as "smooth" in the log)
@@ -106,6 +107,7 @@ enum CaptureMetricsStore {
     }
 
     static func save(_ record: CaptureMetricsRecord, for fileURL: URL) {
+        guard AppFeatures.developerInfo else { return }
         if let data = try? JSONEncoder().encode(record) {
             try? data.write(to: sidecarURL(for: fileURL), options: .atomic)
         }
@@ -126,6 +128,8 @@ enum TrainingSettingsStore {
     }
 
     static func save(_ record: TrainingSettingsRecord, for fileURL: URL) {
+        // Only "View training settings" reads it, and the App Store build leaves that out.
+        guard AppFeatures.developerInfo else { return }
         if let data = try? JSONEncoder().encode(record) {
             try? data.write(to: sidecarURL(for: fileURL), options: .atomic)
         }
@@ -345,7 +349,9 @@ final class TrainingViewModel: ObservableObject {
             ),
             for: plyURL
         )
-        let logURL = captureDir.appendingPathComponent("capture_\(timestamp).log")
+        // The App Store build can't share the log, so it writes none.
+        let logURL: URL? = AppFeatures.developerInfo
+            ? captureDir.appendingPathComponent("capture_\(timestamp).log") : nil
         let thumbURL = captureDir.appendingPathComponent("capture_\(timestamp).png")
         // Use a "_seed" suffix as a separate base so it does not collide with Library's base
         // parsing (up to the first ".").
@@ -357,8 +363,8 @@ final class TrainingViewModel: ObservableObject {
         let alreadyPersisted = (resumeDatasetURL != nil)
         // Local copy so the [weak self] closure can reference it without going through self.
         let preserveDataset = preserveDataset
-        FileManager.default.createFile(atPath: logURL.path, contents: nil)
-        let logHandle = try? FileHandle(forWritingTo: logURL)
+        if let logURL { FileManager.default.createFile(atPath: logURL.path, contents: nil) }
+        let logHandle = logURL.flatMap { try? FileHandle(forWritingTo: $0) }
         if let h = logHandle {
             let header = "=== splatelier \(AppVersion.full) log @\(timestamp), \(effectiveIterations) iter ===\n"
             if let d = header.data(using: .utf8) { h.write(d) }
@@ -398,6 +404,12 @@ final class TrainingViewModel: ObservableObject {
                     do {
                         let tSave = Date()
                         savedDataset = try CaptureDatasetStore.save(captured, to: datasetURL)
+                        // Hundreds of MB that training deletes once it succeeds: keep it out of
+                        // iCloud backups (App Store Review Guideline 2.23).
+                        var excluded = URLResourceValues()
+                        excluded.isExcludedFromBackup = true
+                        var datasetDir = datasetURL
+                        try? datasetDir.setResourceValues(excluded)
                         logHandler(String(format: "[dataset] saved %d frames for crash recovery → %@ [timing] datasetSave = %.2fs",
                                           captured.frames.count, datasetURL.lastPathComponent,
                                           Date().timeIntervalSince(tSave)))
@@ -435,7 +447,9 @@ final class TrainingViewModel: ObservableObject {
                     thumbnailPNG: thumbURL,
                     // Always save the pre-training seed point cloud + camera poses to a PLY for
                     // inspection (the viewer's Seed / camera display).
-                    seedInspectionPLY: seedURL,
+                    // The seed points and capture cameras (about 60 MB) are only for the
+                    // viewer's development layers, which the App Store build leaves out.
+                    seedInspectionPLY: AppFeatures.developerInfo ? seedURL : nil,
                     onThermalThrottle: thermalHandler,
                     onPreview: previewHandler,
                     log: logHandler
