@@ -225,6 +225,7 @@ struct CaptureView: View {
                 controlRow
                     .padding()
                     .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+                    .frame(maxWidth: DesignSystem.readableWidth)
                     .padding(.horizontal)
                     .padding(.bottom)
             }
