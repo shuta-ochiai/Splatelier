@@ -71,8 +71,7 @@ builds the version for the App Store (the `AppStore` configuration, with the `AP
 stops at the trained splats, with no mesh after training and no CAD models in the viewer, and
 leaves out the experimental LiDAR depth, validation datasets and the information that is there for
 development, and trains with the default iterations and Gaussian cap
-(`App/Splatelier/AppFeatures.swift`). It is iPhone only, because the app is portrait only. Archive
-with that scheme for an App Store upload.
+(`App/Splatelier/AppFeatures.swift`). Archive with that scheme for an App Store upload.
 
 ## Using the app
 

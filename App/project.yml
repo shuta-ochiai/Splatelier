@@ -135,9 +135,6 @@ targets:
         # Read by `AppFeatures` (App/Splatelier/AppFeatures.swift).
         AppStore:
           SWIFT_ACTIVE_COMPILATION_CONDITIONS: APP_STORE
-          # iPhone only on the App Store: an iPad app has to support every orientation (multitasking),
-          # and the app is portrait only. iPad can be added later; once shipped it can't be removed.
-          TARGETED_DEVICE_FAMILY: "1"
     dependencies:
       - package: splatelier
         product: Trainer
