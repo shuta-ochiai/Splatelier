@@ -48,15 +48,24 @@ final class MPSArgSort: @unchecked Sendable {
             : MLX.concatenated([keys.reshaped([n]), MLXArray.full([padded - n], values: MLXArray(Int32.max))])
         lock.lock()
         defer { lock.unlock() }
-        guard let buffer = input.asMTLBuffer(device: device, noCopy: true)
-                ?? input.asMTLBuffer(device: device, noCopy: false) else {
-            return Self.cpuArgSort(keys)
-        }
-        let data = MPSGraphTensorData(buffer, shape: [NSNumber(value: padded)], dataType: .int32)
-        let result = graph.run(with: queue, feeds: [self.input: data], targetTensors: [output], targetOperations: nil)
         var order = [Int32](repeating: 0, count: padded)
-        result[output]?.mpsndarray().readBytes(&order, strideBytes: nil)
-        withExtendedLifetime(input) {}
+        // MPSGraph hands back its buffers autoreleased (the input's wrapper, the result and its
+        // ndarray). A caller without a pool of its own, such as the thumbnail pass that renders
+        // every view after training, kept every call's buffers until it ended: 236 views on an
+        // iPad Air (4th generation) went past its memory limit. Drain them here, every call.
+        let sorted: Bool = autoreleasepool {
+            guard let buffer = input.asMTLBuffer(device: device, noCopy: true)
+                    ?? input.asMTLBuffer(device: device, noCopy: false) else {
+                return false
+            }
+            let data = MPSGraphTensorData(buffer, shape: [NSNumber(value: padded)], dataType: .int32)
+            let result = graph.run(with: queue, feeds: [self.input: data], targetTensors: [output],
+                                   targetOperations: nil)
+            result[output]?.mpsndarray().readBytes(&order, strideBytes: nil)
+            withExtendedLifetime(input) {}
+            return true
+        }
+        guard sorted else { return Self.cpuArgSort(keys) }
         // The padding sorts last, but a real key may equal it, so drop the padding by index.
         if padded != n { order.removeAll { Int($0) >= n } }
         return MLXArray(order, [n])
