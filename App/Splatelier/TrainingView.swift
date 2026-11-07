@@ -474,16 +474,19 @@ struct TrainingView: View {
             case .completed(let url, _, let count, let finalLoss):
                 Label("Training complete", systemImage: "checkmark.seal.fill")
                     .font(.headline).foregroundStyle(.green)
-                Text("\(count) gaussians").font(.body.monospacedDigit())
-                Text("Total \(vm.cumulativeIterations) iter").font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
-                if AppFeatures.developerInfo, let finalLoss {
-                    Text("final loss \(String(format: "%.4f", finalLoss))")
-                        .font(.body.monospacedDigit())
+                // The Gaussian count, iterations, loss and file name are for development.
+                if AppFeatures.developerInfo {
+                    Text("\(count) gaussians").font(.body.monospacedDigit())
+                    Text("Total \(vm.cumulativeIterations) iter").font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                    if let finalLoss {
+                        Text("final loss \(String(format: "%.4f", finalLoss))")
+                            .font(.body.monospacedDigit())
+                    }
+                    Text(url.lastPathComponent).font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1).truncationMode(.middle)
                 }
-                Text(url.lastPathComponent).font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1).truncationMode(.middle)
             case .failed(let msg):
                 Label("Training failed", systemImage: "xmark.octagon.fill")
                     .font(.headline).foregroundStyle(.red)
