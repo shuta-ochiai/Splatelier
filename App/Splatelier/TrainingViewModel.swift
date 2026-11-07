@@ -969,7 +969,8 @@ final class TrainingViewModel: ObservableObject {
                 let total = Double(Swift.max(1, runningTotalIterations))
                 overallProgress = preEnd + (trainEnd - preEnd) * Swift.min(1, Double(iter) / total)
                 progressLabel = "Training"
-                progressDetail = "iter \(iter) / \(runningTotalIterations)"
+                // The App Store build shows the percentage alone; the iteration count is for development.
+                progressDetail = AppFeatures.developerInfo ? "iter \(iter) / \(runningTotalIterations)" : ""
             } else {
                 // Preprocessing: from the last finished stage toward the next one.
                 let floor = preMarkersSeen == 0 ? 0 : Self.preStages[preMarkersSeen - 1].fraction
