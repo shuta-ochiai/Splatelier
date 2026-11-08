@@ -126,6 +126,22 @@ section { padding: 72px 0 8px; }
 .tool.wide .media { grid-row: span 2; }
 .tool.wide p { align-self: start; }
 .media.portrait { aspect-ratio: 540 / 1048; }
+/* Interactive mesh: the still image shows until the mesh has loaded (and without WebGL). */
+.media.mesh-view {
+  position: relative; display: block; touch-action: none;
+  background: var(--viewer-bg) url("assets/mesh-shape.jpg") center / cover no-repeat;
+}
+.media.mesh-view canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; }
+.media.mesh-view canvas:active { cursor: grabbing; }
+.media.mesh-view .modes {
+  position: absolute; top: 10px; right: 10px; display: flex; padding: 3px; gap: 2px;
+  border-radius: 999px; background: rgba(20, 21, 44, .6); backdrop-filter: blur(6px);
+}
+.media.mesh-view .modes button {
+  border: 0; border-radius: 999px; padding: 5px 12px; background: transparent; color: rgba(255,255,255,.8);
+  font: 500 12px/1.2 Inter, sans-serif; cursor: pointer;
+}
+.media.mesh-view .modes button[aria-pressed="true"] { background: #fff; color: #14152c; }
 @media (max-width: 760px) {
   .showcase { grid-template-columns: 1fr; }
   .tool.wide { grid-template-columns: 1fr; }
@@ -221,7 +237,7 @@ footer a { color: var(--ink-2); }
       <button class="scene" data-scene="phone" aria-pressed="false">Pay phone</button>
       <span class="scene-info" id="scene-info"></span>
     </div>
-    <p class="caption">Each scene was captured on an iPhone 16 Pro and trained with the app’s pipeline: the playground on the phone, the lion and the pay phone from the same captures with the Mac tool, which runs the same training. They are shown here as exported, in a small WebGL viewer (base colors only). Until you take over, the camera circles the subject close to where the phone was during the capture, where the scene looks its best. Switch to Mesh or Shape to see the surface the app builds from the same capture.</p>
+    <p class="caption">Each scene was captured and trained on an iPhone 16 Pro, and is shown here as exported, in a small WebGL viewer (base colors only). Until you take over, the camera circles the subject close to where the phone was during the capture, where the scene looks its best. Switch to Mesh or Shape to see the surface the app builds from the same capture.</p>
   </div>
 
   <section id="edit">
@@ -229,9 +245,15 @@ footer a { color: var(--ink-2); }
     <h2>More than splats: a mesh, and the tools to tidy up.</h2>
     <div class="showcase">
       <article class="tool wide">
-        <div class="media"><img src="assets/mesh-shape.jpg" alt="The lion statue scene as a gray mesh" loading="lazy"></div>
-        <h3>A mesh, made for you</h3>
-        <p>When training finishes, Splatelier fuses the trained Gaussians’ depth into a TSDF and builds a vertex-colored mesh. Show it with the splats or as plain shape in the viewer, measure on it, and export it as OBJ.</p>
+        <div class="media mesh-view" id="mesh-view">
+          <canvas id="mesh-canvas" aria-label="Interactive 3D mesh of the lion statue scene"></canvas>
+          <div class="modes" role="group" aria-label="Mesh display">
+            <button type="button" data-mesh-mode="shape" aria-pressed="true">Shape</button>
+            <button type="button" data-mesh-mode="mesh" aria-pressed="false">Colors</button>
+          </div>
+        </div>
+        <h3>A mesh from the same capture</h3>
+        <p>Splatelier can turn a trained scene into a vertex-colored mesh: it fuses the Gaussians’ depth into a TSDF and extracts the surface. Show it with the splats or as plain shape in the viewer, measure on it, and export it as OBJ.</p>
       </article>
       <article class="tool">
         <div class="media portrait"><video src="media/crop.mp4" poster="media/crop.jpg" muted loop playsinline preload="none" aria-label="Screen recording: cropping the lion statue with a sphere"></video></div>
@@ -270,7 +292,7 @@ footer a { color: var(--ink-2); }
       </div>
       <div class="step">
         <h3>View and export</h3>
-        <p>A mesh is built automatically. Orbit, measure, crop and grade the result, and export splats or the mesh in standard formats.</p>
+        <p>Orbit, measure, crop and grade the result, make a mesh from it, and export the splats or the mesh in standard formats.</p>
       </div>
     </div>
   </section>
@@ -337,8 +359,8 @@ open App/Splatelier.xcodeproj
 <script type="module">
 // Bump VERSION (here and in the import) whenever the viewer or the scene files change, so browsers
 // don't keep showing cached copies.
-import { SplatViewer, parseMesh } from './viewer.js?v=20261108c';
-const VERSION = '20261108c';
+import { SplatViewer, parseMesh } from './viewer.js?v=20261108e';
+const VERSION = '20261108e';
 const versioned = (url) => `${url}?v=${VERSION}`;
 
 const SCENES = {
@@ -473,6 +495,41 @@ if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
 
 const initial = location.hash.slice(1);
 show(SCENES[initial] ? initial : 'playground');
+
+// The mesh card: a second viewer with the lion's mesh, loaded when the card comes into view and
+// orbiting like the main viewer. The still image behind it stays if WebGL or the load fails.
+const meshView = document.getElementById('mesh-view');
+async function startMeshCard() {
+  let v;
+  try { v = new SplatViewer(document.getElementById('mesh-canvas')); } catch { return; }
+  try {
+    if (!meshes.has('lion')) {
+      const res = await fetch(versioned('scenes/lion.mesh'));
+      if (!res.ok) throw new Error(res.status);
+      meshes.set('lion', parseMesh(await res.arrayBuffer()));
+    }
+    const path = await fetch(versioned(SCENES.lion.path)).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    v.setMesh(meshes.get('lion'));
+    v.setMode('shape');
+    v.setHome(SCENES.lion.cam);
+    v.setPath(path);
+    meshView.style.backgroundImage = 'none';
+  } catch { return; }
+  for (const b of meshView.querySelectorAll('[data-mesh-mode]')) {
+    b.addEventListener('click', () => {
+      v.setMode(b.dataset.meshMode);
+      for (const o of meshView.querySelectorAll('[data-mesh-mode]')) o.setAttribute('aria-pressed', String(o === b));
+    });
+  }
+}
+if ('IntersectionObserver' in window) {
+  const once = new IntersectionObserver((entries) => {
+    if (entries.some((e) => e.isIntersecting)) { once.disconnect(); startMeshCard(); }
+  }, { rootMargin: '200px' });
+  once.observe(meshView);
+} else {
+  startMeshCard();
+}
 </script>
 </body>
 </html>

@@ -250,6 +250,13 @@ export class SplatViewer {
     this.installControls();
     this.resizeObserver = new ResizeObserver(() => { this.dirty = true; });
     this.resizeObserver.observe(canvas);
+    this.paused = false;
+    if ('IntersectionObserver' in window) {
+      new IntersectionObserver((entries) => {
+        this.paused = !entries[entries.length - 1].isIntersecting;
+        if (!this.paused) this.dirty = true;
+      }).observe(canvas);
+    }
     this.t0 = performance.now();
     // The frame timestamp (aligned to the display refresh) drives the motion, so steps are even.
     const loop = (ts) => { this.frame(ts); requestAnimationFrame(loop); };
@@ -407,6 +414,13 @@ export class SplatViewer {
     return { eye: this.orbitEye((lo + clamp(f, 0, 1)) / (m - 1)), target: p.target };
   }
 
+  // For a viewer without splats (a mesh only): the view that Reset and the orbit start from.
+  setHome(cam) {
+    this.home = { ...cam, target: cam.target.slice() };
+    this.fovY = ((cam.fovY ?? 50) * Math.PI) / 180;
+    this.setCamera(cam);
+  }
+
   resetView() {
     if (this.path) this.restartAuto();
     else if (this.home) this.setCamera(this.home);
@@ -453,6 +467,7 @@ export class SplatViewer {
   }
 
   frame(ts = performance.now()) {
+    if (this.paused) { this.lastTs = ts; return; }      // off screen: draw nothing
     const gl = this.gl;
     const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
     const w = Math.round(this.canvas.clientWidth * dpr), h = Math.round(this.canvas.clientHeight * dpr);
@@ -466,7 +481,8 @@ export class SplatViewer {
       if (Math.abs(Math.log(this.dist / this.distGoal)) < 1e-3) { this.dist = this.distGoal; this.distGoal = null; }
       this.dirty = true;
     }
-    if (this.autoSway && this.count) {
+    const hasContent = this.count > 0 || (this.mode !== 'splats' && this.meshCount > 0);
+    if (this.autoSway && hasContent) {
       const t = Math.max(0, ts - this.t0) / 1000;
       if (this.path) {
         const { eye, target } = this.pathPose(t);
@@ -484,7 +500,7 @@ export class SplatViewer {
       }
       this.dirty = true;
     }
-    if (!this.dirty || !this.count) return;
+    if (!this.dirty || !hasContent) return;
     this.dirty = false;
     const view = this.viewMatrix();
     const fy = (0.5 * h) / Math.tan(0.5 * this.fovY);
