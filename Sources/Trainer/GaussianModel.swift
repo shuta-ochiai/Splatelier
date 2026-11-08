@@ -76,8 +76,9 @@ public final class GaussianModel {
 
     /// Foreground SH degree the models of this process carry (1–3; the kernel handles up to 3).
     /// 2 is the default: on an iPhone 16 Pro it trains about 9% longer than degree 1 and heats the
-    /// phone about as much, for about +0.25 dB of held-out PSNR. Degree 3 adds only about another
-    /// 0.08 dB but trains about 24% longer than degree 1 and reaches the serious thermal state,
+    /// phone about as much, for about +0.16 dB of held-out PSNR on average (up in 7 of 8 captures).
+    /// Degree 3 adds almost nothing on average, varies more between captures (one outdoor capture
+    /// lost 0.23 dB), trains about 24% longer than degree 1 and reaches the serious thermal state,
     /// mostly from the Adam step over shN and its moments.
     /// Experiment hook (`SPLATELIER_SH_DEGREE`): set it once at startup, before any model, trainer
     /// or PLY is made, since it fixes the shape of shN everywhere.
