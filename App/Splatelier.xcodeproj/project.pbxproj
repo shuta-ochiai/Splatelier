@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		34A4CF592217EB1A587AB2BE /* DINOv3.txt in Resources */ = {isa = PBXBuildFile; fileRef = E3433B133989D8E7CE1C196B /* DINOv3.txt */; };
+		E9FCD5DC22122941EEA11F21 /* FlexGlue.txt in Resources */ = {isa = PBXBuildFile; fileRef = 42B4AB2B48F6A57C61E0CAE0 /* FlexGlue.txt */; };
 		01DE23788286703E4855E8C1 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32632ECDB986EBB1F4C83F97 /* RootView.swift */; };
 		08D5D1562685698D761475E7 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B8797B29940BF5CBEF3B92DC /* Assets.xcassets */; };
 		0A728E054B6350E87C05C079 /* launch.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = 117ADD30B81D1B38F22AAA67 /* launch.mp4 */; };
@@ -49,6 +51,8 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		42B4AB2B48F6A57C61E0CAE0 /* FlexGlue.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = FlexGlue.txt; sourceTree = "<group>"; };
+		E3433B133989D8E7CE1C196B /* DINOv3.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = DINOv3.txt; sourceTree = "<group>"; };
 		048A89475E71C4E8D52C87AA /* mlx-swift.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "mlx-swift.txt"; sourceTree = "<group>"; };
 		04A654A6F3CE144B29AC2196 /* guide_angles.mp4 */ = {isa = PBXFileReference; path = guide_angles.mp4; sourceTree = "<group>"; };
 		F47585790BBEA0F1D316AE87 /* guide_cool.mp4 */ = {isa = PBXFileReference; path = guide_cool.mp4; sourceTree = "<group>"; };
@@ -108,6 +112,8 @@
 		136BADA5979A62B20AC87CC7 /* Licenses */ = {
 			isa = PBXGroup;
 			children = (
+				E3433B133989D8E7CE1C196B /* DINOv3.txt */,
+				42B4AB2B48F6A57C61E0CAE0 /* FlexGlue.txt */,
 				1C69033F657662496456997A /* cadmpeg.txt */,
 				360CBE487E38E97640AD5677 /* fmt.txt */,
 				0AA06C0E20ABD473CA332C58 /* metal-cpp.txt */,
@@ -199,6 +205,7 @@
 			buildConfigurationList = 7F0F7D377C88FD387439ADB8 /* Build configuration list for PBXNativeTarget "Splatelier" */;
 			buildPhases = (
 				73C9EB9A6592A9C76B1F22A6 /* Sources */,
+				81E9173258F03A07DD8A34D7 /* Bundle FlexGlue models */,
 				72DD51996850DF29D23C5346 /* Resources */,
 				CCEF06FB555777D1455A0AE2 /* Frameworks */,
 			);
@@ -261,6 +268,8 @@
 				08D5D1562685698D761475E7 /* Assets.xcassets in Resources */,
 				9E182E3B3AE4A089C9DF4F69 /* MetalSplatter.txt in Resources */,
 				CA3DF9EA157FB97FAAA25696 /* cadmpeg.txt in Resources */,
+				34A4CF592217EB1A587AB2BE /* DINOv3.txt in Resources */,
+				E9FCD5DC22122941EEA11F21 /* FlexGlue.txt in Resources */,
 				20CC4713AD79BB9EFCB08138 /* Splatelier.txt in Resources */,
 				108FD00B671709BEF68DDC25 /* fmt.txt in Resources */,
 				B9249B43E69C7EFBB1C0D8C3 /* guide_angles.mp4 in Resources */,
@@ -283,6 +292,28 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		81E9173258F03A07DD8A34D7 /* Bundle FlexGlue models */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Bundle FlexGlue models";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "SRC=\"$SRCROOT/FlexGlueModels\"\nDST=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/FlexGlue\"\nrm -rf \"$DST\"\n[ -d \"$SRC\" ] || exit 0\nmkdir -p \"$DST\"\nfor m in \"$SRC\"/*.mlpackage; do\n  xcrun coremlcompiler compile \"$m\" \"$DST\" > /dev/null || exit 1\ndone\ncp \"$SRC\"/*.safetensors \"$DST\"/\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		73C9EB9A6592A9C76B1F22A6 /* Sources */ = {
@@ -390,6 +421,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = "io.github.shuta-ochiai.splatelier";
 				SDKROOT = iphoneos;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				SWIFT_STRICT_CONCURRENCY = minimal;
 				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -413,6 +445,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = "io.github.shuta-ochiai.splatelier";
 				SDKROOT = iphoneos;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				SWIFT_STRICT_CONCURRENCY = minimal;
 				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
