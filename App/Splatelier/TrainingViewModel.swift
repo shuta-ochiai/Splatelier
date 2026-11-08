@@ -299,7 +299,7 @@ final class TrainingViewModel: ObservableObject {
             let env = AppFeatures.developerEnvironment
             let tile = env["SPLATELIER_TILE"] ?? "\(CaptureTraining.AppPreset.tileSize)"
             let final = env["SPLATELIER_FINAL_FRAC"] ?? "\(CaptureTraining.AppPreset.finalResample?.fraction ?? 0)"
-            captureName = "auto \(tile)px final \(final)"
+            captureName = "auto \(tile)px final \(final) sh\(GaussianModel.maxShDegree)"
         }
         phase = .running(iter: 0, latestLoss: nil)
         elapsedSec = 0
@@ -1087,9 +1087,10 @@ final class TrainingViewModel: ObservableObject {
 
     private nonisolated static func trainingPerformanceSettingsLine(initCap: Int) -> String {
         String(format:
-            "[settings] training perf: initCap=%d frameQuality=on opticalFlow=on lambdaSSIM=%.2f replayCache=%@ K=%d",
+            "[settings] training perf: initCap=%d frameQuality=on opticalFlow=on lambdaSSIM=%.2f replayCache=%@ K=%d shDegree=%d",
             initCap, CaptureTraining.AppPreset.lambdaSSIM,
-            CaptureTraining.AppPreset.replayCache.rawValue as NSString, CaptureTraining.AppPreset.replayKMax
+            CaptureTraining.AppPreset.replayCache.rawValue as NSString, CaptureTraining.AppPreset.replayKMax,
+            GaussianModel.maxShDegree
         )
     }
 }

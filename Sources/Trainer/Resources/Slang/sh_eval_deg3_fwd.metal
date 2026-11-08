@@ -101,7 +101,7 @@ struct KernelContext_0
         *((&kernelContext_0)->colors_0+(oBase_0 + 2U)) = 0.0;
         return;
     }
-    uint sN_0 = i_0 * 9U;
+    uint sN_0 = i_0 * uint((&kernelContext_0)->degree_buf_0[int(1)]) * 3U;
     int deg_0 = (&kernelContext_0)->degree_buf_0[int(0)];
     uint _S6 = oBase_0 + 1U;
     uint _S7 = oBase_0 + 2U;
@@ -129,6 +129,24 @@ struct KernelContext_0
         (&sh_1)->b1_0 = float3((&kernelContext_0)->shN_0[sN_0], (&kernelContext_0)->shN_0[sN_0 + 1U], (&kernelContext_0)->shN_0[sN_0 + 2U]);
         (&sh_1)->b2_0 = float3((&kernelContext_0)->shN_0[sN_0 + 3U], (&kernelContext_0)->shN_0[sN_0 + 4U], (&kernelContext_0)->shN_0[sN_0 + 5U]);
         (&sh_1)->b3_0 = float3((&kernelContext_0)->shN_0[sN_0 + 6U], (&kernelContext_0)->shN_0[sN_0 + 7U], (&kernelContext_0)->shN_0[sN_0 + 8U]);
+    }
+    if(deg_0 >= int(2))
+    {
+        (&sh_1)->b4_0 = float3((&kernelContext_0)->shN_0[sN_0 + 9U], (&kernelContext_0)->shN_0[sN_0 + 10U], (&kernelContext_0)->shN_0[sN_0 + 11U]);
+        (&sh_1)->b5_0 = float3((&kernelContext_0)->shN_0[sN_0 + 12U], (&kernelContext_0)->shN_0[sN_0 + 13U], (&kernelContext_0)->shN_0[sN_0 + 14U]);
+        (&sh_1)->b6_0 = float3((&kernelContext_0)->shN_0[sN_0 + 15U], (&kernelContext_0)->shN_0[sN_0 + 16U], (&kernelContext_0)->shN_0[sN_0 + 17U]);
+        (&sh_1)->b7_0 = float3((&kernelContext_0)->shN_0[sN_0 + 18U], (&kernelContext_0)->shN_0[sN_0 + 19U], (&kernelContext_0)->shN_0[sN_0 + 20U]);
+        (&sh_1)->b8_0 = float3((&kernelContext_0)->shN_0[sN_0 + 21U], (&kernelContext_0)->shN_0[sN_0 + 22U], (&kernelContext_0)->shN_0[sN_0 + 23U]);
+    }
+    if(deg_0 >= int(3))
+    {
+        (&sh_1)->b9_0 = float3((&kernelContext_0)->shN_0[sN_0 + 24U], (&kernelContext_0)->shN_0[sN_0 + 25U], (&kernelContext_0)->shN_0[sN_0 + 26U]);
+        (&sh_1)->b10_0 = float3((&kernelContext_0)->shN_0[sN_0 + 27U], (&kernelContext_0)->shN_0[sN_0 + 28U], (&kernelContext_0)->shN_0[sN_0 + 29U]);
+        (&sh_1)->b11_0 = float3((&kernelContext_0)->shN_0[sN_0 + 30U], (&kernelContext_0)->shN_0[sN_0 + 31U], (&kernelContext_0)->shN_0[sN_0 + 32U]);
+        (&sh_1)->b12_0 = float3((&kernelContext_0)->shN_0[sN_0 + 33U], (&kernelContext_0)->shN_0[sN_0 + 34U], (&kernelContext_0)->shN_0[sN_0 + 35U]);
+        (&sh_1)->b13_0 = float3((&kernelContext_0)->shN_0[sN_0 + 36U], (&kernelContext_0)->shN_0[sN_0 + 37U], (&kernelContext_0)->shN_0[sN_0 + 38U]);
+        (&sh_1)->b14_0 = float3((&kernelContext_0)->shN_0[sN_0 + 39U], (&kernelContext_0)->shN_0[sN_0 + 40U], (&kernelContext_0)->shN_0[sN_0 + 41U]);
+        (&sh_1)->b15_0 = float3((&kernelContext_0)->shN_0[sN_0 + 42U], (&kernelContext_0)->shN_0[sN_0 + 43U], (&kernelContext_0)->shN_0[sN_0 + 44U]);
     }
     thread SHBands16_0 _S9 = sh_1;
     float3 _S10 = sh_eval_deg3_0(deg_0, dir_1, &_S9);

@@ -205,7 +205,7 @@ sources. It does not run the tests, because most of them need a Metal GPU: run `
   long-axis split for densification, whose prune takes faint Gaussians larger than the median; a
   directional spherical-harmonics background; per-frame exposure and white balance gains; fused
   SSIM; coarse-to-fine; thermal throttling; continued training with the Adam state kept.
-- **Output**: a standard 3DGS PLY (SH degree 1, written in the degree-3 layout so common viewers read
+- **Output**: a standard 3DGS PLY (SH degree 2, written in the degree-3 layout so common viewers read
   it) with the background baked into a far shell of Gaussians, and a TSDF mesh that is generated
   automatically after training.
 - **Viewer**: [MetalSplatter](https://github.com/scier/MetalSplatter) with local patches: blending that
