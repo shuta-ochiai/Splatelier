@@ -81,6 +81,7 @@
 		8E0CE9C4A930FDA0C48A6EAF /* Splatelier.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Splatelier.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		8F5825658976B5EAFF5F0609 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		9CDD1105446E7504D3E5DC30 /* SplatLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplatLibraryView.swift; sourceTree = "<group>"; };
+		9E2C0FB35E1C7BAB3356746A /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = "<group>"; };
 		A1CC444B02994F0756CA1681 /* TrainingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainingView.swift; sourceTree = "<group>"; };
 		A3623F5700962DAAE44C4F86 /* mlx.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = mlx.txt; sourceTree = "<group>"; };
 		A635EA42807AABF63B5C7812 /* swift-numerics.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "swift-numerics.txt"; sourceTree = "<group>"; };
@@ -91,6 +92,7 @@
 		CC9ECD3EFACEFC22C2C11415 /* guide_subjects.mp4 */ = {isa = PBXFileReference; path = guide_subjects.mp4; sourceTree = "<group>"; };
 		D08F13DBF1F74C9DD78CBFE7 /* guide_slow.mp4 */ = {isa = PBXFileReference; path = guide_slow.mp4; sourceTree = "<group>"; };
 		5255952A58A7D197B00C4F61 /* splatelier */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "splatelier"; path = ..; sourceTree = SOURCE_ROOT; };
+		D77DDAA5A03DC15E6204E877 /* Local.xcconfig.example */ = {isa = PBXFileReference; path = Local.xcconfig.example; sourceTree = "<group>"; };
 		DADE075C65792EE63CAD5B27 /* CaptureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureView.swift; sourceTree = "<group>"; };
 		DBF730EC4E24862592C75822 /* TrainingViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainingViewModel.swift; sourceTree = "<group>"; };
 		DCE0FA924591D2503221DD4C /* LaunchVideoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchVideoView.swift; sourceTree = "<group>"; };
@@ -115,6 +117,15 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		097970B114C456A7FF5A165C /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				D77DDAA5A03DC15E6204E877 /* Local.xcconfig.example */,
+				9E2C0FB35E1C7BAB3356746A /* Signing.xcconfig */,
+			);
+			path = Config;
+			sourceTree = "<group>";
+		};
 		136BADA5979A62B20AC87CC7 /* Licenses */ = {
 			isa = PBXGroup;
 			children = (
@@ -200,6 +211,7 @@
 		D484762E8193EC11800DE94D = {
 			isa = PBXGroup;
 			children = (
+				097970B114C456A7FF5A165C /* Config */,
 				AEFA5A2F95EBA9F696C42B6E /* Packages */,
 				8A4E952097985AD77B81B6B6 /* Splatelier */,
 				956EEC4690C9A3ACA808146C /* Products */,
@@ -242,7 +254,7 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					C4D752EDA89B41CA008D4A3C = {
-						DevelopmentTeam = 434V3FTL9C;
+						DevelopmentTeam = "";
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -474,13 +486,13 @@
 		};
 		21BCDB4F11DDED343D1C9756 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 9E2C0FB35E1C7BAB3356746A /* Signing.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Splatelier/Splatelier.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = 434V3FTL9C;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Splatelier/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
@@ -488,7 +500,6 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "io.github.shuta-ochiai.splatelier";
 				SDKROOT = iphoneos;
 				SWIFT_STRICT_CONCURRENCY = minimal;
 				SWIFT_VERSION = 6.0;
@@ -498,13 +509,13 @@
 		};
 		3636E1912340E4A4CAEF8760 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 9E2C0FB35E1C7BAB3356746A /* Signing.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Splatelier/Splatelier.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = 434V3FTL9C;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Splatelier/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
@@ -512,7 +523,6 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "io.github.shuta-ochiai.splatelier";
 				SDKROOT = iphoneos;
 				SWIFT_STRICT_CONCURRENCY = minimal;
 				SWIFT_VERSION = 6.0;
@@ -522,13 +532,13 @@
 		};
 		C5F7F7F5F8927E1DAE5CBD19 /* AppStore */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 9E2C0FB35E1C7BAB3356746A /* Signing.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Splatelier/Splatelier.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = 434V3FTL9C;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Splatelier/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
@@ -536,7 +546,6 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "io.github.shuta-ochiai.splatelier";
 				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = APP_STORE;
 				SWIFT_STRICT_CONCURRENCY = minimal;

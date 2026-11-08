@@ -202,6 +202,13 @@ if let meter = gpuEnergyMeter {
 // (adds idle time between stages).
 GaussianRenderer.stageTiming = ProcessInfo.processInfo.environment["STAGE_TIMING"] == "1"
 
+// SPLATELIER_SH_DEGREE=1|2|3: foreground SH degree the models carry (experiment; default 2). Set
+// before any model is made, since it fixes the shape of shN.
+if let degree = ProcessInfo.processInfo.environment["SPLATELIER_SH_DEGREE"].flatMap({ Int($0) }) {
+    GaussianModel.configuredShDegree = degree
+    print("foreground SH degree: \(GaussianModel.maxShDegree) (\(GaussianModel.shRestBands) rest bands)")
+}
+
 
 // THERMAL_SIM=nominal|fair|serious: pins the thermalState seen by the thermal guard and reproduces
 // on the Mac iOS's slowdown at serious (sleep between steps).
@@ -625,7 +632,8 @@ case "dump-sparse":
         // No color information, so uniform gray.
         let colors = MLXArray([Float](repeating: 0.7, count: pts.count * 3), [pts.count, 3])
         let model = GaussianModel.fromPointCloud(positions: positions, colors: colors)
-        let stats = try PLYWriter.writeGaussianPLY(model: model, to: outputPLY)
+        // The capture's world is Y-up; written turned to the usual 3DGS axes like a trained PLY.
+        let stats = try PLYWriter.writeGaussianPLY(model: model, to: outputPLY, yUpWorld: true)
         print("dump-sparse: wrote \(stats.kept) sparse points (BA-refined "
             + "\(refined.baRefinedPoints?.count ?? 0), raw \(scene.sparsePoints.count)) to \(outputPLY.path)")
     } catch {
@@ -909,7 +917,7 @@ case "convert":
     do {
         let start = Date()
         let joulesStart = gpuEnergyMeter?.joules()
-        var table = try SplatTable.readPLY(url: inURL)
+        var table = try SplatTable.readPLYInUsualAxes(url: inURL)
         if args.count > 4, let degree = Int(args[4]), (0...3).contains(degree) {
             table = table.reducingSH(to: degree)
         }
@@ -943,9 +951,12 @@ case "cull":
     let maxAbsCoord = args.count > 6 ? (Float(args[6]) ?? 50.0) : 50.0
     do {
         let model = try PLYReader.readGaussianPLY(url: inURL)
+        // A turned PLY is read back into its Y-up world, so it is written turned again.
+        let turned = PLYAxes.header(of: inURL).map(PLYAxes.isTurned) ?? false
         let stats = try PLYWriter.writeGaussianPLY(
             model: model, to: outURL,
-            cull: .init(minOpacity: minOpacity, maxScale: maxScale, maxAbsCoord: maxAbsCoord)
+            cull: .init(minOpacity: minOpacity, maxScale: maxScale, maxAbsCoord: maxAbsCoord),
+            yUpWorld: turned
         )
         print("cull: \(stats.total) → \(stats.kept) (dropped \(stats.total - stats.kept))")
         print(String(format: "  NaN/Inf:        %d", stats.droppedNonFinite))

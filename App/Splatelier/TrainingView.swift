@@ -84,6 +84,7 @@ struct TrainingView: View {
     /// stored dataset stays where it is, so closing is harmless.
     let closeDiscards: Bool
     @State private var activeHelp: TrainingHelp?
+    @State private var showTrainingSettings = false
     @State private var showDiscardConfirm = false
 
     /// Thermal banner. critical (thermalPaused) means paused, serious (thermalThrottled) means
@@ -143,38 +144,32 @@ struct TrainingView: View {
         Group {
             // Without type erasure via AnyView the generic metadata gets deep, and on device the
             // SubstGenericParametersFromMetadata recursion overflows the stack.
-            if isIdle {
-                ScrollView {
-                    VStack(spacing: 16) {
-                        header
-                        if AppFeatures.trainingSettings { AnyView(trainingSettingsCard) }
-                        if lowPowerMode { AnyView(lowPowerNotice) }
-                        if !DeviceSupport.canTrain { AnyView(unsupportedDeviceNotice) }
-                        AnyView(startButton)
-                    }
-                    .frame(maxWidth: DesignSystem.readableWidth)
-                    .frame(maxWidth: .infinity)
-                    .padding(.horizontal)
-                    .padding(.top, 12)
-                    .padding(.bottom, 12)
-                }
-                .scrollIndicators(.hidden)
-            } else {
-                // What the model looks like now (it sharpens as it trains), then the progress and
-                // the measurements.
-                VStack(spacing: 16) {
-                    AnyView(previewCard).frame(maxHeight: .infinity)
+            // What the model looks like now (it sharpens as it trains), then the progress and the
+            // measurements. Before training the card shows the captured frames, with what is being
+            // trained, the training settings (a row that opens them in a sheet) and Start training
+            // under it; it stays in place when training starts, so the screen does not jump.
+            VStack(spacing: 16) {
+                AnyView(previewCard).frame(maxHeight: .infinity)
+                if isIdle {
+                    header
+                    if AppFeatures.trainingSettings { AnyView(trainingSettingsRow) }
+                    if lowPowerMode { AnyView(lowPowerNotice) }
+                    if !DeviceSupport.canTrain { AnyView(unsupportedDeviceNotice) }
+                    AnyView(startButton)
+                } else {
                     if lowPowerMode && vm.isBusy { AnyView(lowPowerNotice) }
                     AnyView(phaseCard)
                     AnyView(metricsCard)
                 }
-                .frame(maxWidth: DesignSystem.readableWidth)
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal)
-                .padding(.top, 12)
-                .padding(.bottom, 12)
             }
+            .frame(maxWidth: DesignSystem.readableWidth)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal)
+            .padding(.top, 12)
+            .padding(.bottom, 12)
+            .onAppear { vm.prepareFrameSlides() }
         }
+        .sheet(isPresented: $showTrainingSettings) { AnyView(trainingSettingsSheet) }
         .overlay(alignment: .top) { thermalPausedBanner }
         .onReceive(NotificationCenter.default.publisher(for: .NSProcessInfoPowerStateDidChange)) { _ in
             lowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled
@@ -193,13 +188,6 @@ struct TrainingView: View {
         // Do not touch the parent TabView's tab bar. It triggers a known bug where the layout
         // change at training start jumps to the Library tab on its own (paired with RootView's
         // explicit selection).
-        .alert(item: $activeHelp) { help in
-            Alert(
-                title: Text(help.title),
-                message: Text(help.message),
-                dismissButton: .default(Text("OK"))
-            )
-        }
         // Naming at the end of training. When training from a validation dataset, this holds the
         // valset name.
         .alert("Name this capture", isPresented: $vm.showNamePrompt) {
@@ -236,6 +224,8 @@ struct TrainingView: View {
             // The seed points and capture cameras are for development.
             seedURL: AppFeatures.developerInfo ? vm.seedPLYURL : nil,
             meshURL: vm.meshOBJURL,
+            sceneRotation: SceneRotationFile.load(for: target.plyURL),
+            onSceneRotationChange: { SceneRotationFile.save($0, for: target.plyURL) },
             name: CaptureMetadataName.load(for: target.plyURL),
             shareItems: shareItems,
             cropExport: SplatExportShare.cropExport,
@@ -270,7 +260,8 @@ struct TrainingView: View {
                     .id(vm.previewCount)
                     .transition(.opacity)
             } else if !vm.frameSlides.isEmpty {
-                // The frames are being prepared: show them, so the card is not empty.
+                // Before training, or while the frames are prepared: show them, so the card is
+                // not empty.
                 FrameSlideshow(images: vm.frameSlides)
             } else {
                 VStack(spacing: 10) {
@@ -337,16 +328,61 @@ struct TrainingView: View {
     }
 
     /// Iterations and the Gaussian cap in one card.
-    private var trainingSettingsCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Training settings").font(.headline)
-            iterationControls
-            Divider()
-            gaussianCapControls
+    /// Before training: the settings in one row, which opens them in a sheet (so the preview card
+    /// keeps its room above).
+    private var trainingSettingsRow: some View {
+        Button { showTrainingSettings = true } label: {
+            HStack(spacing: 10) {
+                Label("Training settings", systemImage: "gearshape")
+                    .foregroundStyle(.primary)
+                Spacer()
+                Text("\(vm.iterations) · \(vm.gaussianCap / 1000)k")
+                    .font(.subheadline.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
         }
-        .padding()
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .buttonStyle(.plain)
         .cardBackground()
+        .accessibilityHint("Iterations and Gaussian cap")
+    }
+
+    private var trainingSettingsSheet: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    iterationControls
+                    Divider()
+                    gaussianCapControls
+                }
+                .padding()
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .cardBackground()
+                .padding()
+            }
+            .navigationTitle("Training settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { showTrainingSettings = false }
+                }
+            }
+            // On the sheet, where its help button is: an alert on the screen behind can't show
+            // over the sheet.
+            .alert(item: $activeHelp) { help in
+                Alert(
+                    title: Text(help.title),
+                    message: Text(help.message),
+                    dismissButton: .default(Text("OK"))
+                )
+            }
+        }
+        .presentationDetents([.medium, .large])
     }
 
     private var iterationControls: some View {

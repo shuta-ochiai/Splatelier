@@ -8,6 +8,7 @@
 import Foundation
 import SwiftUI
 @preconcurrency import Capture
+import SplatViewerKit
 
 @MainActor
 final class CaptureViewModel: ObservableObject {
@@ -179,6 +180,29 @@ final class CaptureViewModel: ObservableObject {
 /// sidecar. The actual files are never renamed (that would break the companion base match, and with
 /// it the Library grouping and bulk delete). The sidecar also uses the base + "." prefix, so it is
 /// deleted together with the capture.
+/// How the viewer's Orient turned a scene upright, kept beside its splats as
+/// `<base>.orientation.json`. It starts with `<base>.`, so deleting the capture removes it too.
+enum SceneRotationFile {
+    static func url(for main: URL) -> URL {
+        main.deletingPathExtension().appendingPathExtension("orientation.json")
+    }
+
+    static func load(for main: URL) -> SplatViewerSceneRotation? {
+        guard let data = try? Data(contentsOf: url(for: main)) else { return nil }
+        return try? JSONDecoder().decode(SplatViewerSceneRotation.self, from: data)
+    }
+
+    /// Saves the rotation; one turned back to the file's own way is just forgotten.
+    static func save(_ rotation: SplatViewerSceneRotation, for main: URL) {
+        guard abs(abs(rotation.quaternion.real) - 1) > 1e-6 else {
+            try? FileManager.default.removeItem(at: url(for: main))
+            return
+        }
+        guard let data = try? JSONEncoder().encode(rotation) else { return }
+        try? data.write(to: url(for: main), options: .atomic)
+    }
+}
+
 enum CaptureMetadataName {
     private struct Meta: Codable { let version: Int; let name: String }
 

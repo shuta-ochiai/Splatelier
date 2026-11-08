@@ -22,9 +22,9 @@ extension CaptureTraining {
         /// Opacity of the seed Gaussians. Starting opaque (rather than 3DGS's 0.1) lets a short run
         /// settle on opaque surfaces instead of stacks of faint discs.
         public static let seedOpacity: Float = 0.5
-        /// Learning rate of the view-dependent (degree-1) SH coefficients: the DC colour's, not
+        /// Learning rate of the view-dependent (degree ≥ 1) SH coefficients: the DC colour's, not
         /// gsplat's DC / 20. A view is drawn about ten times a run, and at a twentieth of the rate
-        /// degree 1 hardly moved, so glossy surfaces such as stainless steel came out flat and dull.
+        /// these coefficients hardly moved, so glossy surfaces such as stainless steel came out flat and dull.
         public static let shNLearningRate: Float = 2.5e-3
         /// Weight λ of the D-SSIM term. Above 3DGS's 0.2 it keeps more of the local contrast and
         /// edges, at about 0.1 dB of held-out PSNR.

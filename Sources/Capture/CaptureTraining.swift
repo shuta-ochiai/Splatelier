@@ -414,6 +414,8 @@ public enum CaptureTraining {
             opacityReg: opacityReg, scaleReg: scaleReg, lambdaSSIM: lambdaSSIM,
             replayCache: AppPreset.replayCache, replayKMax: replayKMax,
             outputPLY: outputPLY, thumbnailPNG: thumbnailPNG,
+            // ARKit's world is gravity-aligned, Y up.
+            yUpWorld: true,
             enableBackgroundSH: true,
             backgroundSHDegree: backgroundSHDegree,
             alphaLossWeight: alphaLossWeight,
@@ -422,8 +424,8 @@ public enum CaptureTraining {
             coarseToFineFraction: coarseToFineFraction,
             fineResample: fineResample,
             finalResample: finalResample,
-            // Bring the SH degree warm-up forward so degree 1 takes effect from about 25% of
-            // training.
+            // Bring the SH degree warm-up forward: with the default degree 2, degree 1 takes
+            // effect from about 1/6 of training and degree 2 from about 1/3.
             useEarlySH: true,
             shNLR: shNLR,
             geometryRegularization: geometryRegularization,

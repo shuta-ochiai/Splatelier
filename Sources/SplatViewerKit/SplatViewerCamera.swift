@@ -17,14 +17,26 @@ struct SplatViewerCamera: Sendable {
     var fovyRadians: Float
     /// Width / height of the render target.
     var aspect: Float
+    /// Turn from the scene's own coordinates (the splats, mesh and CAD model, and everything placed
+    /// in them) to the viewer's, whose +Y is up for the orbit. Identity for a scene already Y-up; a
+    /// model made Z-up or upside down by another app is stood upright by turning this
+    /// (`SplatViewerSceneTurn`), without touching its file. Every other value here stays in the
+    /// scene's coordinates.
+    var sceneRotation = simd_quatf(ix: 0, iy: 0, iz: 0, r: 1)
 
     static let near: Float = 0.05
     static let far: Float = 1000
 
-    /// world→camera rotation (camera looks down -Z, +Y up).
+    /// world→camera rotation (camera looks down -Z, +Y up): the scene turned upright, then the orbit.
     var orbitRotation: simd_float4x4 {
         rotation(radians: elevation, axis: SIMD3<Float>(1, 0, 0))
             * rotation(radians: azimuth, axis: SIMD3<Float>(0, 1, 0))
+            * simd_float4x4(sceneRotation)
+    }
+
+    /// The viewer's up (what the orbit turns about) in world.
+    var up: SIMD3<Float> {
+        sceneRotation.inverse.act(SIMD3<Float>(0, 1, 0))
     }
 
     /// Look-at point to origin → azimuth rotation → elevation rotation → pull back by `distance`

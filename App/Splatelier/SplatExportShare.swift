@@ -18,7 +18,10 @@ enum SplatExportShare {
         guard url.pathExtension.lowercased() == "ply" else {
             return SplatViewerShareItem(title: title, systemImage: "cube.fill", url: url)
         }
-        var options = [SplatViewerShareItem.Option(title: "PLY (as trained)", url: url)]
+        // A capture written Y-up before captures were turned goes out turned, like newer ones.
+        var options = PLYAxes.isLegacyYUp(url)
+            ? [SplatViewerShareItem.Option(title: "PLY (as trained)") { try await export(url, as: .ply) }]
+            : [SplatViewerShareItem.Option(title: "PLY (as trained)", url: url)]
         for format in convertedFormats {
             options.append(SplatViewerShareItem.Option(title: format.displayName) {
                 try await export(url, as: format)
@@ -49,10 +52,12 @@ enum SplatExportShare {
         return dir
     }
 
-    /// The splats file to share in `format`: the file itself for the PLY as trained, and for
-    /// anything that is not a PLY (an imported .spz, say); otherwise a converted copy in `dir`.
+    /// The splats file to share in `format`: the file itself for the PLY as trained (unless it was
+    /// written Y-up, before captures were turned), and for anything that is not a PLY (an imported
+    /// .spz, say); otherwise a converted copy in `dir`.
     static func file(for url: URL, as format: SplatExportFormat, in dir: URL) async throws -> URL {
-        if format == .ply || url.pathExtension.lowercased() != "ply" { return url }
+        if url.pathExtension.lowercased() != "ply" { return url }
+        if format == .ply, !PLYAxes.isLegacyYUp(url) { return url }
         return try await convert(url, as: format, into: dir)
     }
 
@@ -61,7 +66,7 @@ enum SplatExportShare {
         try await Task.detached(priority: .userInitiated) {
             let out = format.url(replacingExtensionOf: dir.appendingPathComponent(plyURL.lastPathComponent))
             // readPLY already drops the zero padding above the trained SH degree.
-            let table = try SplatTable.readPLY(url: plyURL)
+            let table = try SplatTable.readPLYInUsualAxes(url: plyURL)
             try SplatExporter.write(table, format: format, to: out)
             return out
         }.value

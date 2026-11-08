@@ -14,6 +14,8 @@ import SwiftUI
 struct SplatViewerPreviewCamera {
     let azimuth: Float
     let elevation: Float
+    /// The source view's forward in the scene's coordinates.
+    let forward: SIMD3<Float>
     let distance: Float
     let fovyRadians: Float
     /// Orbit pivot on the source view's optical axis, `distance` ahead of its eye, so the orbit
@@ -29,10 +31,13 @@ struct SplatViewerPreviewCamera {
         let intrinsics: [Float]
     }
 
+    /// `sceneFromWorld` brings the source view from the capture's world into the splats'
+    /// coordinates (they may be turned from it, see `SplatViewerFileAxes`); `center` is in the latter.
     static func load(
         siblingOf url: URL,
         center: SIMD3<Float>,
-        defaultDistance: Float
+        defaultDistance: Float,
+        sceneFromWorld: simd_quatf = simd_quatf(ix: 0, iy: 0, iz: 0, r: 1)
     ) -> SplatViewerPreviewCamera? {
         let metadataURL = url.deletingPathExtension().appendingPathExtension("preview.json")
         guard let data = try? Data(contentsOf: metadataURL),
@@ -48,9 +53,10 @@ struct SplatViewerPreviewCamera {
         let fovy = 2 * atan(Float(metadata.height) / (2 * metadata.intrinsics[1]))
         guard fovy.isFinite, fovy > 0 else { return nil }
 
-        let forward = Self.cameraForwardWorld(fromTrainingViewmat: metadata.viewmat)
-        let eye = Self.cameraCenterWorld(fromTrainingViewmat: metadata.viewmat)
-        guard let forward, let eye else { return nil }
+        let forwardWorld = Self.cameraForwardWorld(fromTrainingViewmat: metadata.viewmat)
+        let eyeWorld = Self.cameraCenterWorld(fromTrainingViewmat: metadata.viewmat)
+        guard let forwardWorld, let eyeWorld else { return nil }
+        let forward = sceneFromWorld.act(forwardWorld), eye = sceneFromWorld.act(eyeWorld)
 
         let projectedDistance = simd_dot(center - eye, forward)
         let distance = projectedDistance.isFinite && projectedDistance > 0.05
@@ -60,6 +66,7 @@ struct SplatViewerPreviewCamera {
         return SplatViewerPreviewCamera(
             azimuth: angles.azimuth,
             elevation: angles.elevation,
+            forward: forward,
             distance: distance,
             fovyRadians: fovy,
             center: eye + forward * distance
@@ -84,6 +91,11 @@ struct SplatViewerPreviewCamera {
         )
         guard center.x.isFinite, center.y.isFinite, center.z.isFinite else { return nil }
         return center
+    }
+
+    /// Orbit angles that look along the source view once the scene is turned by `sceneRotation`.
+    func orbitAngles(sceneRotation: simd_quatf) -> (azimuth: Float, elevation: Float) {
+        Self.orbitAngles(lookingToward: sceneRotation.act(forward))
     }
 
     private static func orbitAngles(lookingToward forward: SIMD3<Float>) -> (azimuth: Float, elevation: Float) {
@@ -170,12 +182,12 @@ final class SplatViewerModel: ObservableObject {
     var cadOffset = SIMD3<Float>(0, 0, 0) { didSet { onNeedsRedraw?() } }
     var cadRotation = simd_quatf(ix: 0, iy: 0, iz: 0, r: 1) {
         didSet {
-            let turned = abs(abs(cadRotation.real) - 1) > 1e-6
-            if turned != isCADTurned { isCADTurned = turned }
+            updateCADTurned()
             onNeedsRedraw?()
         }
     }
-    /// The CAD model is turned from the way it was imported (what Reset rotation undoes).
+    /// The CAD model is turned from the way it was imported, upright in the viewer (what Reset
+    /// rotation undoes).
     @Published private(set) var isCADTurned = false
     /// Center and half sizes of the model's bounding box in its file coordinates.
     private(set) var cadPivot = SIMD3<Float>(0, 0, 0)
@@ -196,6 +208,15 @@ final class SplatViewerModel: ObservableObject {
     /// screen since the last call, and its end. Set by the renderer.
     var onTwistCAD: ((Float) -> Void)?
     var onTwistCADEnd: (() -> Void)?
+
+    /// The CAD model's rotation when it stands as in its file (Y up) in the viewer: undoing the
+    /// view's turn.
+    var cadUprightRotation: simd_quatf { viewRotation.inverse }
+
+    private func updateCADTurned() {
+        let turned = abs(abs(simd_dot(cadRotation.vector, cadUprightRotation.vector)) - 1) > 1e-6
+        if turned != isCADTurned { isCADTurned = turned }
+    }
 
     func setLoadingCAD(_ loading: Bool) {
         isLoadingCAD = loading
@@ -236,11 +257,11 @@ final class SplatViewerModel: ObservableObject {
         hasCAD = false
         cadLoadError = nil
         cadOffset = .zero
-        cadRotation = simd_quatf(ix: 0, iy: 0, iz: 0, r: 1)
+        cadRotation = cadUprightRotation
     }
 
     /// Sets up the CAD layer from its bounding box, starting from a saved placement or else shifted
-    /// by `offset` and unturned.
+    /// by `offset` and standing upright in the viewer.
     func setCAD(
         pivot: SIMD3<Float>, halfExtent: SIMD3<Float>, offset: SIMD3<Float>, saved: SplatViewerCADPlacement? = nil
     ) {
@@ -248,7 +269,89 @@ final class SplatViewerModel: ObservableObject {
         cadPivot = pivot
         cadHalfExtent = pointwiseMax(halfExtent, SIMD3(repeating: SplatViewerCropRegion.minimumSize))
         cadOffset = saved?.offset ?? offset
-        cadRotation = saved.map { simd_quatf(vector: $0.rotation) } ?? simd_quatf(ix: 0, iy: 0, iz: 0, r: 1)
+        cadRotation = saved.map { simd_quatf(vector: $0.rotation) } ?? cadUprightRotation
+    }
+
+    // MARK: Orient
+
+    /// The turn that stands the splats' file upright (`SplatViewerFileAxes`): a half turn about Z for
+    /// the usual 3DGS axes, none for a capture written Y-up. Set on loading.
+    private(set) var fileRotation = simd_quatf(ix: 0, iy: 0, iz: 0, r: 1)
+
+    /// Turn from the scene's coordinates to the viewer's (`SplatViewerCamera.sceneRotation`): the
+    /// file's, then Orient's.
+    var viewRotation: simd_quatf { sceneRotation * fileRotation }
+
+    func setFileRotation(_ rotation: simd_quatf) {
+        fileRotation = rotation
+        updateCADTurned()
+        onNeedsRedraw?()
+    }
+
+    /// Orient's turn, on top of the file's. Changed by Orient's buttons, which animate it.
+    private(set) var sceneRotation = simd_quatf(ix: 0, iy: 0, iz: 0, r: 1) {
+        didSet {
+            let turned = abs(abs(sceneRotation.real) - 1) > 1e-6
+            if turned != isSceneTurned { isSceneTurned = turned }
+            updateCADTurned()
+            onNeedsRedraw?()
+        }
+    }
+    /// The scene is turned from the way its file has it (what Orient's Reset undoes).
+    @Published private(set) var isSceneTurned = false
+    /// Orient mode: a band of buttons that turn the whole scene by quarter turns. Turning it on turns
+    /// the other modes off.
+    @Published var isOrienting = false {
+        didSet {
+            if isOrienting {
+                isMeasuring = false; isCropping = false; isColoring = false; isRemovingFloaters = false
+                isCADSelected = false
+            }
+        }
+    }
+    /// Told the scene rotation after each turn, to keep it for the next time the scene is opened.
+    var onSceneRotationChange: ((SplatViewerSceneRotation) -> Void)?
+    /// Where the turn in progress ends; the next press turns on from there.
+    private var sceneRotationTarget: simd_quatf?
+    private var sceneTurnID = 0
+    static let sceneTurnSeconds: Double = 0.25
+
+    /// Turns the scene a quarter turn as seen from the camera now, about the point it orbits.
+    func turnScene(_ turn: SplatViewerSceneTurn) {
+        let from = sceneRotationTarget ?? sceneRotation
+        animateScene(to: turn.applied(to: from, azimuth: azimuth, elevation: elevation))
+    }
+
+    /// Back to the way the scene's file has it.
+    func resetSceneRotation() {
+        animateScene(to: simd_quatf(ix: 0, iy: 0, iz: 0, r: 1))
+    }
+
+    /// Turns the scene to `target` over `sceneTurnSeconds`, so it is seen to turn, and tells
+    /// `onSceneRotationChange` the end straight away.
+    private func animateScene(to target: simd_quatf) {
+        let start = sceneRotation
+        sceneRotationTarget = target
+        sceneTurnID += 1
+        let id = sceneTurnID
+        onSceneRotationChange?(SplatViewerSceneRotation(target))
+        Task { [weak self] in
+            let begin = ContinuousClock.now
+            while true {
+                guard let self, self.sceneTurnID == id else { return }
+                let elapsed = (ContinuousClock.now - begin).components
+                let seconds = Double(elapsed.seconds) + Double(elapsed.attoseconds) * 1e-18
+                let t = Float(min(1, seconds / Self.sceneTurnSeconds))
+                // Ease in and out, so the turn reads as one motion.
+                let eased = t * t * (3 - 2 * t)
+                self.sceneRotation = t >= 1 ? target : simd_slerp(start, target, eased)
+                if t >= 1 {
+                    self.sceneRotationTarget = nil
+                    return
+                }
+                try? await Task.sleep(for: .milliseconds(16))
+            }
+        }
     }
 
     // MARK: Measurement
@@ -258,7 +361,7 @@ final class SplatViewerModel: ObservableObject {
     /// next time it is turned on.
     @Published var isMeasuring = false {
         didSet {
-            if isMeasuring { isCropping = false; isColoring = false; isRemovingFloaters = false; isCADSelected = false }
+            if isMeasuring { isCropping = false; isColoring = false; isRemovingFloaters = false; isCADSelected = false; isOrienting = false }
             onNeedsRedraw?()
         }
     }
@@ -306,7 +409,7 @@ final class SplatViewerModel: ObservableObject {
     /// orbits. Turning it on turns measure mode off.
     @Published var isCropping = false {
         didSet {
-            if isCropping { isMeasuring = false; isColoring = false; isRemovingFloaters = false; isCADSelected = false }
+            if isCropping { isMeasuring = false; isColoring = false; isRemovingFloaters = false; isCADSelected = false; isOrienting = false }
             if !isCropping { cropProjection.setLasso([]) }
             onCropSelectionRefresh?()
             onNeedsRedraw?()
@@ -320,7 +423,7 @@ final class SplatViewerModel: ObservableObject {
     /// closes the others, so only one panel sits over the view.
     @Published var isColoring = false {
         didSet {
-            if isColoring { isMeasuring = false; isCropping = false; isRemovingFloaters = false; isCADSelected = false }
+            if isColoring { isMeasuring = false; isCropping = false; isRemovingFloaters = false; isCADSelected = false; isOrienting = false }
             onNeedsRedraw?()
         }
     }
@@ -384,7 +487,7 @@ final class SplatViewerModel: ObservableObject {
     @Published var isRemovingFloaters = false {
         didSet {
             guard isRemovingFloaters != oldValue else { return }
-            if isRemovingFloaters { isMeasuring = false; isCropping = false; isColoring = false; isCADSelected = false }
+            if isRemovingFloaters { isMeasuring = false; isCropping = false; isColoring = false; isCADSelected = false; isOrienting = false }
             onFloaterModeChange?(isRemovingFloaters)
             onNeedsRedraw?()
         }
@@ -443,8 +546,13 @@ final class SplatViewerModel: ObservableObject {
 
     /// Formats and conversions offered for a cropped result. Set by the screen that made the viewer.
     let cropExport: SplatViewerCropExport?
-    init(cropExport: SplatViewerCropExport? = nil) {
+    init(cropExport: SplatViewerCropExport? = nil, sceneRotation: SplatViewerSceneRotation? = nil) {
         self.cropExport = cropExport
+        // Observers don't run in an initializer.
+        if let sceneRotation {
+            self.sceneRotation = sceneRotation.quaternion
+            isSceneTurned = abs(abs(self.sceneRotation.real) - 1) > 1e-6
+        }
     }
 
     /// The colour grade on the foreground. The renderer bakes it in through `onColorGradeApply`.
@@ -472,8 +580,9 @@ final class SplatViewerModel: ObservableObject {
         self.previewCamera = previewCamera
         self.framedCenter = previewCamera?.center ?? center
         if let previewCamera {
-            self.azimuth = previewCamera.azimuth
-            self.elevation = previewCamera.elevation
+            let angles = previewCamera.orbitAngles(sceneRotation: viewRotation)
+            self.azimuth = angles.azimuth
+            self.elevation = angles.elevation
             self.distance = previewCamera.distance
             self.center = previewCamera.center
             self.fovyRadians = previewCamera.fovyRadians
@@ -493,8 +602,9 @@ final class SplatViewerModel: ObservableObject {
     /// Resets the camera to the initial auto-framing pose.
     func resetCamera() {
         if let previewCamera {
-            azimuth = previewCamera.azimuth
-            elevation = previewCamera.elevation
+            let angles = previewCamera.orbitAngles(sceneRotation: viewRotation)
+            azimuth = angles.azimuth
+            elevation = angles.elevation
         } else {
             azimuth = 0
             elevation = 0

@@ -299,7 +299,7 @@ final class TrainingViewModel: ObservableObject {
             let env = AppFeatures.developerEnvironment
             let tile = env["SPLATELIER_TILE"] ?? "\(CaptureTraining.AppPreset.tileSize)"
             let final = env["SPLATELIER_FINAL_FRAC"] ?? "\(CaptureTraining.AppPreset.finalResample?.fraction ?? 0)"
-            captureName = "auto \(tile)px final \(final)"
+            captureName = "auto \(tile)px final \(final) sh\(GaussianModel.maxShDegree)"
         }
         phase = .running(iter: 0, latestLoss: nil)
         elapsedSec = 0
@@ -310,7 +310,8 @@ final class TrainingViewModel: ObservableObject {
         resumableSession = nil
         beginProgress(includesPreprocessing: true)
         previewImage = nil
-        loadFrameSlides()
+        // Already on screen when the card was shown before training (prepareFrameSlides).
+        if frameSlides.isEmpty { loadFrameSlides() }
 
         // GPU training stops if the app is suspended by screen lock, so disable auto-lock during
         // training. Always set it back to false on completion/failure.
@@ -879,6 +880,52 @@ final class TrainingViewModel: ObservableObject {
         }
     }
 
+    /// Before training: the captured frames in the preview card, where the model's picture will
+    /// appear (the screen without training settings shows the card from the start).
+    func prepareFrameSlides() {
+        guard case .idle = phase, frameSlides.isEmpty, previewImage == nil else { return }
+        loadFrameSlides()
+    }
+
+    // MARK: - Frame quality before training
+
+    /// How many frames pass the quality check training applies (CaptureFrameQualityFilter with its
+    /// default parameters, as CaptureGeometry uses), and why the others don't.
+    struct FrameQualitySummary: Equatable {
+        let total: Int
+        let kept: Int
+        /// Dropped for motion blur or a blurred patch.
+        let blurred: Int
+        /// Dropped for being too dark or too bright.
+        let badlyExposed: Int
+        /// False when the capture is too short for the check, which then keeps every frame.
+        let checked: Bool
+
+        init(reviews: [CaptureFrameQualityFilter.FrameReview], checked: Bool) {
+            let dropped = reviews.filter { !$0.kept }
+            total = reviews.count
+            kept = reviews.count - dropped.count
+            blurred = dropped.filter { $0.reasons.contains("blur") || $0.reasons.contains("localblur") }.count
+            badlyExposed = dropped.filter { $0.reasons.contains("exposure") }.count
+            self.checked = checked
+        }
+    }
+
+    /// Set once the check has run on the capture (see `reviewFrameQuality`).
+    @Published private(set) var frameQuality: FrameQualitySummary?
+
+    /// Runs the quality check once before training, for the capture card's line. Like Review
+    /// frames it runs on the main actor (CapturedFrame is not Sendable), so the caller lets the
+    /// screen appear first.
+    func reviewFrameQuality() {
+        guard frameQuality == nil, case .idle = phase else { return }
+        let parameters = CaptureFrameQualityFilter.Parameters()
+        let checked = parameters.enabled && scene.frames.count >= parameters.minFrameCountForFiltering
+        frameQuality = FrameQualitySummary(
+            reviews: CaptureFrameQualityFilter.review(scene: scene, parameters: parameters),
+            checked: checked)
+    }
+
     /// Handler for the pictures the training loop produces (on the training thread). The pictures
     /// are in sensor orientation, so the image is marked turned upright by its view's pose (a
     /// portrait capture lies on its side, a landscape one does not).
@@ -1040,9 +1087,10 @@ final class TrainingViewModel: ObservableObject {
 
     private nonisolated static func trainingPerformanceSettingsLine(initCap: Int) -> String {
         String(format:
-            "[settings] training perf: initCap=%d frameQuality=on opticalFlow=on lambdaSSIM=%.2f replayCache=%@ K=%d",
+            "[settings] training perf: initCap=%d frameQuality=on opticalFlow=on lambdaSSIM=%.2f replayCache=%@ K=%d shDegree=%d",
             initCap, CaptureTraining.AppPreset.lambdaSSIM,
-            CaptureTraining.AppPreset.replayCache.rawValue as NSString, CaptureTraining.AppPreset.replayKMax
+            CaptureTraining.AppPreset.replayCache.rawValue as NSString, CaptureTraining.AppPreset.replayKMax,
+            GaussianModel.maxShDegree
         )
     }
 }

@@ -18,7 +18,7 @@ public final class GaussianRenderer {
         public let shDirs: MLXArray          // [N, 3] unit view directions
         public let shDirsLen: MLXArray       // [N, 1] ‖means - campos‖ (for the normalize Jacobian in backward)
         public let sh0: MLXArray             // [N, 3] band 0 (DC)
-        public let shNFlat: MLXArray         // [N, 9] higher-order coefficients (shN flattened)
+        public let shNFlat: MLXArray         // [N, R*3] higher-order coefficients (shN flattened)
         public let shDegree: Int             // SH degree used in this forward
         public let scales: MLXArray          // [N, 3] exp(logScales)
         public let opacities: MLXArray       // [N] sigmoid(logitOpacities)
@@ -134,6 +134,12 @@ public final class GaussianRenderer {
     public static let replayCacheCountMask: Int32   = 0x3FFFFFFF
     public static let replayCacheOverflowBit: Int32 = 0x40000000
 
+    /// Highest SH degree that `restBands` higher-order coefficients per channel can hold
+    /// (3 → 1, 8 → 2, 15 → 3).
+    static func shDegree(restBands: Int) -> Int {
+        restBands >= 15 ? 3 : restBands >= 8 ? 2 : restBands >= 3 ? 1 : 0
+    }
+
     public init() throws {
         self.projectFwd = try SlangCompiledKernel.load(name: "project_to_screen_fwd")
         self.projectBwd = try SlangCompiledKernel.load(name: "project_to_screen_bwd")
@@ -234,8 +240,10 @@ public final class GaussianRenderer {
         // Pass sh0 and shN as separate buffers (the reshape does not copy). The kernel skips
         // higher-order loads based on degree.
         let sh0 = model.sh0                                                       // [N, 3]
-        let shNFlat = model.shN.reshaped([n, GaussianModel.shRestBands * 3])      // [N, 9]
-        let degBuf = MLXArray([Int32(shDegree)], [1])
+        let restBands = model.shN.shape[1]
+        let shNFlat = model.shN.reshaped([n, restBands * 3])                      // [N, R*3]
+        let activeDegree = Swift.min(shDegree, Self.shDegree(restBands: restBands))
+        let degBuf = MLXArray([Int32(activeDegree), Int32(restBands)], [2])
         let nBuf = MLXArray([Int32(n)], [1])
         // Pass radii so SH evaluation is skipped for culled Gaussians (same visibility test as
         // tile_binning). Colors are stored as fp16 to halve bandwidth. The rasterizer reads them
@@ -401,7 +409,7 @@ public final class GaussianRenderer {
             let dLogSZ   = MLXArray.zeros([n, 3])
             let dLogOpZ  = MLXArray.zeros([n])
             let dSh0Z    = MLXArray.zeros([n, 3])
-            let dShNZ    = MLXArray.zeros([n, GaussianModel.shRestBands, 3])
+            let dShNZ    = MLXArray.zeros([n, cache.shNFlat.shape[1] / 3, 3])
             eval(dMeansZ, dQuatsZ, dLogSZ, dLogOpZ, dSh0Z, dShNZ)
             mark("rasterize_bwd", since: tRasterBwd)
             return Gradients(
@@ -487,19 +495,21 @@ public final class GaussianRenderer {
         // SH bwd (as in gsplat) returns gradDirs, the gradient w.r.t. the unit dir. For means,
         // multiply by the Jacobian (I - n nᵀ)/‖u‖ of dir = u/‖u‖, with u = means - campos, in MLX.
         let tSHBwd = Date()
-        let degBuf = MLXArray([Int32(cache.shDegree)], [1])
+        let restBands = cache.shNFlat.shape[1] / 3
+        let activeDegree = Swift.min(cache.shDegree, Self.shDegree(restBands: restBands))
+        let degBuf = MLXArray([Int32(activeDegree), Int32(restBands)], [2])
         let nBuf = MLXArray([Int32(n)], [1])
         // Skip SH backward for Gaussians culled by radii (the kernel writes a 0 gradient).
         let shBwd = shEvalBwd(
             [cache.shDirs, cache.sh0, cache.shNFlat, degBuf, nBuf, vColors, cache.radii],
             grid: (((n + 63) / 64) * 64, 1, 1),
             threadGroup: (64, 1, 1),
-            outputShapes: [[n * 3], [n * 3], [n * GaussianModel.shRestBands * 3]],
+            outputShapes: [[n * 3], [n * 3], [n * restBands * 3]],
             outputDTypes: [.float32, .float32, .float32]
         )
         let gradDirs = shBwd[0].reshaped([n, 3])
         let dSh0 = shBwd[1].reshaped([n, 3])
-        let dShN = shBwd[2].reshaped([n, GaussianModel.shRestBands, 3])
+        let dShN = shBwd[2].reshaped([n, restBands, 3])
         let nDotG = (cache.shDirs * gradDirs).sum(axis: 1, keepDims: true)        // [N, 1]
         let dMeansFromSH = (gradDirs - cache.shDirs * nDotG) / cache.shDirsLen    // [N, 3]
         let dMeansTotal = dMeans + dMeansFromSH

@@ -49,10 +49,13 @@ public enum TrainingDriver {
         public let geometryRegularization: GeometryRegularization?
         /// Cumulative iteration count (initial run + continuations).
         public internal(set) var totalIterations: Int
+        /// The world is Y-up (a capture), so the PLY is written turned to the usual 3DGS axes.
+        public let yUpWorld: Bool
 
         init(trainer: GaussianTrainer, views: [TrainView], viewSampler: ViewSampler,
              sceneScale: Float, maxShDegree: Int, geometryRegularization: GeometryRegularization?,
-             totalIterations: Int) {
+             totalIterations: Int, yUpWorld: Bool) {
+            self.yUpWorld = yUpWorld
             self.trainer = trainer
             self.views = views
             self.viewSampler = viewSampler
