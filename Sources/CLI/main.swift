@@ -48,7 +48,11 @@ func usage() {
     print("           0 = all frames)")
     print("         THERMAL_SIM=nominal|fair|serious fixes the thermal guard's thermalState (reproduces the serious slow-down)")
     print("         GEO_REG=0 turns off the geometric regularization (on as in the app)")
-    print("         POSE_SOURCE=arkit trains on the ARKit poses instead of the BA poses (BA still runs)")
+    print("         POSE_SOURCE=arkit trains on the ARKit poses instead of the BA poses (BA still runs);")
+    print("           POSE_SOURCE=capture starts BA from ARKit's streamed capture-time poses instead of the anchors'")
+    print("           final ones (datasets saved since they were recorded)")
+    print("         WIDE_LOOP_MODELS=<folder> turns on the experimental wide-angle loop closure (FlexGlue models")
+    print("           made by scripts/flexglue/export_models.py), as the app's switch does")
     print("         SEED_ALLOC=confidence keeps MVS or LiDAR per cell by confidence and caps per cell")
     print("           (cells SEED_CELL_PX=<pixels across at the seen depth>, default 16; SEED_LIDAR_WEIGHT=<w>, default 1)")
     print("         LIDAR_COLOR=0 leaves the LiDAR seed points mid-grey instead of colored from the images")
@@ -60,6 +64,13 @@ func usage() {
     print("         MESH_HYBRID=<path.obj> after training, the MVS mesh with holes filled from the trained Gaussians;")
     print("         MESH_GOF=<path.obj> after training, the level set of the trained Gaussians' opacity field;")
     print("           MESH_GS_TSDF=<path.obj> TSDF of the same Gaussian depth maps (GOF_* knobs in MeshCapture.swift)")
+    print("         TILE_SIZE=<px> rasterizer tiles (the app's 8 by default; 8-px lists are split from sorted 16-px ones)")
+    print("         FINAL_RES=<num>/<den>|full|off FINAL_FRAC=<fraction> the last fraction of the iterations at that")
+    print("           resolution (off in the app; FINAL_FRAC defaults to 0.25)")
+    print("         LAMBDA_SSIM=<λ> the D-SSIM weight, keeping the app's densification")
+    print("         BENCH_STAGES=1 after training, the time and GPU energy of the parts of a step at 2/3 and full")
+    print("           resolution, the rasterizer and the whole step with 16-px and 8-px tiles")
+    print("         STAGE_TIMING=1 waits for the GPU after each stage and logs the stage times")
     print("         gpu energy= in the training log is the IOReport GPU energy (system-wide value)")
     print("")
     print("  splatelier gs-mesh <dataset.valset> <trained.ply>")
@@ -74,10 +85,18 @@ func usage() {
     print("  splatelier dump-sparse <dataset.valset> <output.ply>")
     print("    Writes the .valset sparse points (ORB+BA refined) as a gaussian PLY for inspection in a viewer.")
     print("")
+    print("  splatelier render-poses <trained.ply> <pose_dump.json> <outDir> <frame>...")
+    print("    Renders a trained PLY from the poses of a train-capture POSE_DUMP at the given frames (0-based,")
+    print("    time order) to <outDir>/<frame>_render.png, to compare with the frames' photos.")
+    print("")
     print("  splatelier view <ply>")
     print("    Open a window and render a .ply (or .splat/.spz) with MetalSplatter.")
     print("    Drag to orbit, scroll to zoom; close the window to quit.")
     print("    env: VIEWER_TRANSPARENCY=sorted|stochastic|movement (default movement = stochastic alpha only while interacting)")
+    print("")
+    print("  splatelier view-cad <model.{step,stp}> [splats.ply]")
+    print("    Open the app's viewer in a window with a CAD model (STEP), optionally over splats; click it to place it.")
+    print("    STEP import needs StepMesh.xcframework (scripts/build-stepmesh.sh).")
     print("")
     print("  splatelier convert <in.ply> <out.{ply,compressed.ply,spz,splat,glb,sog,usda}> [shDegree]")
     print("    Convert a trained PLY to another splat format, picked by the output extension.")
@@ -183,6 +202,7 @@ if let meter = gpuEnergyMeter {
 // (adds idle time between stages).
 GaussianRenderer.stageTiming = ProcessInfo.processInfo.environment["STAGE_TIMING"] == "1"
 
+
 // THERMAL_SIM=nominal|fair|serious: pins the thermalState seen by the thermal guard and reproduces
 // on the Mac iOS's slowdown at serious (sleep between steps).
 if let token = ProcessInfo.processInfo.environment["THERMAL_SIM"]?.lowercased() {
@@ -279,8 +299,10 @@ case "train-capture":
               let start = lr.first else { return nil }
         return (start, lr.count > 1 ? lr[1] : start)
     }
+    // [lambdaSSIM] or LAMBDA_SSIM=<λ> (the env keeps the app's densification).
     let lambdaSSIM: Float = args.count > 6
-        ? (Float(args[6]) ?? CaptureTraining.AppPreset.lambdaSSIM) : CaptureTraining.AppPreset.lambdaSSIM
+        ? (Float(args[6]) ?? CaptureTraining.AppPreset.lambdaSSIM)
+        : (env["LAMBDA_SSIM"].flatMap { Float($0) } ?? CaptureTraining.AppPreset.lambdaSSIM)
     MLX.Memory.peakMemory = 0
     #if os(macOS)
     // GPU energy is system-wide. If other processes are using the GPU the A/B gets mixed, so check
@@ -292,9 +314,17 @@ case "train-capture":
     #endif
     do {
         FileHandle.standardError.write(Data("loading \(valsetURL.lastPathComponent)…\n".utf8))
-        let scene = try CaptureDatasetStore.load(from: valsetURL)
+        var scene = try CaptureDatasetStore.load(from: valsetURL)
         FileHandle.standardError.write(Data(
             "loaded \(scene.frames.count) frames, \(scene.sparsePoints.count) sparse points\n".utf8))
+        // POSE_SOURCE=capture: start from ARKit's streamed poses at capture time instead of the
+        // anchors' final poses (frames saved without them keep the anchor pose).
+        if env["POSE_SOURCE"] == "capture" {
+            let withCapture = scene.frames.filter { $0.captureViewmat != nil }.count
+            scene = scene.withFrames(scene.frames.map { f in f.captureViewmat.map(f.withViewmat) ?? f })
+            FileHandle.standardError.write(Data(
+                "POSE_SOURCE=capture: \(withCapture)/\(scene.frames.count) frames use the streamed capture-time pose\n".utf8))
+        }
         // Default: the app's recommendation for the capture's frame count.
         let iterations = (args.count > 4 ? Int(args[4]) : nil)
             ?? CaptureTraining.recommendedIterations(frameCount: scene.frames.count, mvs: true)
@@ -347,6 +377,8 @@ case "train-capture":
             // UNDISTORT_MIN_TRACK=2 also uses points seen in only 2 views for distortion estimation
             // (default 3; for checking when it is rejected for lack of edge observations).
             lensDistortion: .init(minTrackLength: env["UNDISTORT_MIN_TRACK"].flatMap { Int($0) } ?? 3),
+            // WIDE_LOOP_MODELS=<folder> turns on the experimental wide-angle loop closure
+            wideLoopModels: env["WIDE_LOOP_MODELS"].map { URL(fileURLWithPath: $0) },
             // MOTION_BLUR_MAX=<px> overrides the motion blur gate (0 = image-based gates only);
             // FQ_LOG_ALL=1 lists every dropped frame.
             frameQualityFilter: {
@@ -386,6 +418,8 @@ case "train-capture":
         let result = try CaptureTraining.train(
             geometry: geometry,
             iterations: iterations,
+            // TILE_SIZE=<px>: rasterizer tile size (the app's by default).
+            tileSize: env["TILE_SIZE"].flatMap { Int($0) } ?? CaptureTraining.AppPreset.tileSize,
             strategy: densificationStrategy,
             // REG=<w>: overrides the opacity / scale regularization weight.
             opacityReg: env["REG"].flatMap { Float($0) } ?? CaptureTraining.AppPreset.regularization,
@@ -445,6 +479,20 @@ case "train-capture":
                 }
                 return CaptureTraining.AppPreset.fineResample
             }(),
+            // FINAL_RES=<num>/<den> | full | off with FINAL_FRAC=<fraction>: the last fraction of
+            // the iterations at that resolution (the app's by default).
+            finalResample: {
+                let preset = CaptureTraining.AppPreset.finalResample
+                guard let v = env["FINAL_RES"] else {
+                    guard let f = env["FINAL_FRAC"].flatMap({ Float($0) }) else { return preset }
+                    return preset.map { (f, $0.num, $0.den) }
+                }
+                if v.lowercased() == "off" { return nil }
+                let frac = env["FINAL_FRAC"].flatMap { Float($0) } ?? preset?.fraction ?? 0.25
+                if v.lowercased() == "full" { return (frac, 1, 1) }
+                let p = v.split(separator: "/").compactMap { Int($0) }
+                return p.count == 2 && p[0] > 0 && p[1] >= p[0] ? (frac, p[0], p[1]) : nil
+            }(),
             outputPLY: outputPLY,
             // SEED_PLY=<path>: writes the pre-training seed point cloud + cameras.
             seedInspectionPLY: env["SEED_PLY"].map { URL(fileURLWithPath: $0) },
@@ -500,6 +548,10 @@ case "train-capture":
                                   sourceName: valsetURL.lastPathComponent,
                                   to: meshOBJ, excluding: heldOutViews, log: logErr)) {
             logErr("mesh: no surface reconstructed")
+        }
+        // BENCH_STAGES=1: GPU energy of the parts of a step on the trained model (StepBenchmark.swift).
+        if env["BENCH_STAGES"] == "1", let session = result.session {
+            TrainingDriver.benchmarkStepStages(session: session, log: logErr)
         }
         // MESH_HYBRID / MESH_GOF / MESH_GS_TSDF: meshes using the trained Gaussians (MeshCapture.swift).
         if let session = result.session {
@@ -676,6 +728,19 @@ case "view":
     exit(1)
     #endif
 
+case "view-cad":
+    guard args.count >= 3 else { usage(); exit(1) }
+    let cadURL = URL(fileURLWithPath: args[2])
+    let splatURL = args.count > 3 ? URL(fileURLWithPath: args[3]) : nil
+    #if os(macOS)
+    MainActor.assumeIsolated {
+        CADViewerApp.run(cadURL: cadURL, splatURL: splatURL)
+    }
+    #else
+    print("view-cad is only supported on macOS")
+    exit(1)
+    #endif
+
 case "train-view":
     guard args.count >= 3 else { usage(); exit(1) }
     let dir = URL(fileURLWithPath: args[2])
@@ -772,6 +837,36 @@ case "render":
         #endif
     } catch {
         print("render failed: \(error)"); exit(1)
+    }
+
+case "render-poses":
+    // Renders a trained PLY from the poses of a POSE_DUMP json (the BA poses training used) at the
+    // given frames of the dump (0-based, time order), to compare with the frames' photos.
+    guard args.count >= 6 else { print("usage: splatelier render-poses <ply> <pose_dump.json> <outDir> <frame>..."); exit(1) }
+    do {
+        let model = try PLYReader.readGaussianPLY(url: URL(fileURLWithPath: args[2]))
+        struct Dump: Decodable {
+            struct F: Decodable { let timestamp: Double; let viewmat: [Float]; let intrinsics: [Float]; let width: Int; let height: Int }
+            let frames: [F]
+        }
+        let dump = try JSONDecoder().decode(Dump.self, from: Data(contentsOf: URL(fileURLWithPath: args[3])))
+        let frames = dump.frames.sorted { $0.timestamp < $1.timestamp }
+        let outDir = URL(fileURLWithPath: args[4])
+        try FileManager.default.createDirectory(at: outDir, withIntermediateDirectories: true)
+        let renderer = try GaussianRenderer()
+        for a in args[5...] {
+            guard let i = Int(a), i >= 0, i < frames.count else { continue }
+            let f = frames[i]
+            let cam = Camera(viewmat: MLXArray(f.viewmat, [16]), intrinsics: MLXArray(f.intrinsics, [4]),
+                             width: f.width, height: f.height, background: MLXArray([Float(0), 0, 0], [3]))
+            let (render, _, _) = renderer.forward(model: model, camera: cam)
+            eval(render)
+            #if os(macOS)
+            saveImagePNG(render, to: outDir.appendingPathComponent(String(format: "%04d_render.png", i)))
+            #endif
+        }
+    } catch {
+        print("render-poses failed: \(error)"); exit(1)
     }
 
 case "stats":

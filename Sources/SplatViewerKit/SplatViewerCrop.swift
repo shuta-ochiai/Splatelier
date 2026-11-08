@@ -41,9 +41,9 @@ enum SplatViewerCropShape: String, CaseIterable, Identifiable {
 
 /// A grab point of the crop region.
 enum SplatViewerCropHandle: Equatable {
-    /// Middle of one box face: the axis (0...2) and which side (+1 or -1).
+    /// Middle of one box face, along the box's own axis (0...2) and which side (+1 or -1).
     case face(axis: Int, side: Float)
-    /// Sphere center.
+    /// Center of the box or the sphere, which moves the whole region.
     case center
     /// Sphere surface on the camera's right, which drags the radius.
     case radius
@@ -52,8 +52,10 @@ enum SplatViewerCropHandle: Equatable {
 struct SplatViewerCropRegion: Equatable {
     var shape: SplatViewerCropShape
     var center: SIMD3<Float>
-    /// Box half sizes along world X, Y and Z.
+    /// Box half sizes along its own X, Y and Z.
     var halfExtent: SIMD3<Float>
+    /// Orientation of the box. A sphere has none.
+    var rotation = simd_quatf(ix: 0, iy: 0, iz: 0, r: 1)
     /// Sphere radius.
     var radius: Float
 
@@ -63,7 +65,7 @@ struct SplatViewerCropRegion: Equatable {
     func contains(_ p: SIMD3<Float>) -> Bool {
         switch shape {
         case .box:
-            let d = simd_abs(p - center)
+            let d = simd_abs(rotation.inverse.act(p - center))
             return d.x <= halfExtent.x && d.y <= halfExtent.y && d.z <= halfExtent.z
         case .sphere:
             return simd_distance_squared(p, center) <= radius * radius
@@ -122,13 +124,13 @@ struct SplatViewerCropRegion: Equatable {
     func handles(camera: SplatViewerCamera) -> [(handle: SplatViewerCropHandle, position: SIMD3<Float>)] {
         switch shape {
         case .box:
-            return (0..<3).flatMap { axis in
+            let faces = (0..<3).flatMap { axis in
                 [Float(1), -1].map { side in
-                    var p = center
-                    p[axis] += side * halfExtent[axis]
-                    return (SplatViewerCropHandle.face(axis: axis, side: side), p)
+                    (SplatViewerCropHandle.face(axis: axis, side: side),
+                     center + axisDirection(axis) * (side * halfExtent[axis]))
                 }
             }
+            return faces + [(.center, center)]
         case .sphere:
             return [
                 (.center, center),
@@ -148,14 +150,15 @@ struct SplatViewerCropRegion: Equatable {
         var region = self
         switch (shape, handle) {
         case let (.box, .face(axis, side)):
-            var at = center
-            at[axis] += side * halfExtent[axis]
-            guard let column = screenColumn(at: at, along: axisUnit(axis), camera: camera, viewSize: viewSize)
+            let direction = axisDirection(axis)
+            let at = center + direction * (side * halfExtent[axis])
+            guard let column = screenColumn(at: at, along: direction, camera: camera, viewSize: viewSize)
             else { return self }
             let m = simd_dot(d, column) / simd_dot(column, column)
-            // The opposite face stays where it is; only the grabbed face moves.
-            var lo = center[axis] - halfExtent[axis]
-            var hi = center[axis] + halfExtent[axis]
+            // The opposite face stays where it is; only the grabbed face moves. `lo` and `hi` are
+            // offsets from the center along the box's axis.
+            var lo = -halfExtent[axis]
+            var hi = halfExtent[axis]
             if side > 0 {
                 hi += m
                 hi = max(hi, lo + 2 * Self.minimumSize)
@@ -163,9 +166,9 @@ struct SplatViewerCropRegion: Equatable {
                 lo += m
                 lo = min(lo, hi - 2 * Self.minimumSize)
             }
-            region.center[axis] = (lo + hi) / 2
+            region.center = center + direction * ((lo + hi) / 2)
             region.halfExtent[axis] = (hi - lo) / 2
-        case (.sphere, .center):
+        case (.box, .center), (.sphere, .center):
             // Moves the center in the screen plane: the camera's right and up, solved by least
             // squares so the center follows the drag.
             let right = camera.axis(0), up = camera.axis(1)
@@ -192,10 +195,11 @@ struct SplatViewerCropRegion: Equatable {
         return region
     }
 
-    private func axisUnit(_ axis: Int) -> SIMD3<Float> {
+    /// World direction of one of the box's axes.
+    private func axisDirection(_ axis: Int) -> SIMD3<Float> {
         var u = SIMD3<Float>.zero
         u[axis] = 1
-        return u
+        return rotation.act(u)
     }
 
     /// Screen movement in pixels for a unit world movement of `at` along `u`. nil if it can't be
@@ -267,6 +271,23 @@ struct SplatCropFrame: Equatable {
 
     var segments: [Segment] = []
     var handles: [SIMD2<Float>] = []
+    /// The handle that moves the region, drawn apart from the others (box and sphere alike).
+    var moveHandles: [SIMD2<Float>] = []
+    /// The three rings that turn the box, one per box axis, as outline segments
+    /// (`SplatViewerCADGizmo`, as for a CAD model).
+    var rings: [[Segment]] = []
+    /// Arrowheads on the rings, showing that they turn (the CAD model's rings).
+    var ringArrows: [Arrow] = []
+    /// The outline is drawn in the selection colour (a selected CAD model's box), not white.
+    var isSelection = false
+
+    struct Arrow: Equatable {
+        /// Which ring, for its colour.
+        var axis: Int
+        /// Normalized screen position and direction along the ring.
+        var at: SIMD2<Float>
+        var direction: SIMD2<Float>
+    }
 
     nonisolated static func make(region: SplatViewerCropRegion, camera: SplatViewerCamera) -> SplatCropFrame {
         var frame = SplatCropFrame()
@@ -278,8 +299,9 @@ struct SplatCropFrame: Equatable {
             else { continue }
             frame.segments.append(Segment(a: pa, b: pb))
         }
-        frame.handles = region.handles(camera: camera).compactMap {
-            camera.project(cameraSpace: camera.cameraSpace($0.position))
+        for item in region.handles(camera: camera) {
+            guard let p = camera.project(cameraSpace: camera.cameraSpace(item.position)) else { continue }
+            if item.handle == .center { frame.moveHandles.append(p) } else { frame.handles.append(p) }
         }
         return frame
     }
@@ -289,11 +311,12 @@ struct SplatCropFrame: Equatable {
         switch region.shape {
         case .box:
             let h = region.halfExtent, c = region.center
-            let corners: [SIMD3<Float>] = (0..<8).map { i in
-                c + SIMD3(
-                    (i & 1 == 0 ? -1 : 1) * h.x,
-                    (i & 2 == 0 ? -1 : 1) * h.y,
-                    (i & 4 == 0 ? -1 : 1) * h.z)
+            let corners: [SIMD3<Float>] = (0..<8).map { (i: Int) -> SIMD3<Float> in
+                let sx: Float = i & 1 == 0 ? -1 : 1
+                let sy: Float = i & 2 == 0 ? -1 : 1
+                let sz: Float = i & 4 == 0 ? -1 : 1
+                let offset = SIMD3<Float>(sx * h.x, sy * h.y, sz * h.z)
+                return c + region.rotation.act(offset)
             }
             // Corners that differ in one bit are joined by an edge.
             var edges: [(SIMD3<Float>, SIMD3<Float>)] = []
@@ -348,6 +371,11 @@ final class SplatCropProjection: ObservableObject {
 struct SplatCropOverlay: View {
     @ObservedObject var projection: SplatCropProjection
 
+    /// Colours of the rings around the box's X, Y and Z axes.
+    private static let ringColors: [Color] = [.red, .green, .blue]
+    /// The orange a selected CAD model is tinted with (`SplatViewerMeshLayer`'s shader).
+    static let selectionColor = Color(red: 1.0, green: 0.55, blue: 0.1)
+
     var body: some View {
         Canvas { context, size in
             func point(_ p: SIMD2<Float>) -> CGPoint {
@@ -371,12 +399,45 @@ struct SplatCropOverlay: View {
             }
             context.stroke(outline, with: .color(.black.opacity(0.5)), lineWidth: 3)
             context.stroke(
-                outline, with: .color(joined ? SplatViewerFloaterHighlight.swiftUIColor : .white),
-                lineWidth: joined ? 2.5 : 1.5)
+                outline,
+                with: .color(projection.frame.isSelection ? Self.selectionColor
+                    : joined ? SplatViewerFloaterHighlight.swiftUIColor : .white),
+                lineWidth: joined || projection.frame.isSelection ? 2.5 : 1.5)
+            for (axis, segments) in projection.frame.rings.enumerated() {
+                var ring = Path()
+                for segment in segments {
+                    ring.move(to: point(segment.a))
+                    ring.addLine(to: point(segment.b))
+                }
+                context.stroke(ring, with: .color(.black.opacity(0.5)), lineWidth: 4)
+                context.stroke(ring, with: .color(Self.ringColors[axis]), lineWidth: 2.5)
+            }
+            for arrow in projection.frame.ringArrows {
+                let c = point(arrow.at)
+                // The direction is in normalized units; scale it to points before measuring angles.
+                var dx = CGFloat(arrow.direction.x) * size.width, dy = CGFloat(arrow.direction.y) * size.height
+                let length = (dx * dx + dy * dy).squareRoot()
+                guard length > 0 else { continue }
+                dx /= length
+                dy /= length
+                var head = Path()
+                head.move(to: CGPoint(x: c.x + dx * 9, y: c.y + dy * 9))
+                head.addLine(to: CGPoint(x: c.x - dx * 6 - dy * 7, y: c.y - dy * 6 + dx * 7))
+                head.addLine(to: CGPoint(x: c.x - dx * 6 + dy * 7, y: c.y - dy * 6 - dx * 7))
+                head.closeSubpath()
+                context.fill(head, with: .color(Self.ringColors[arrow.axis]))
+                context.stroke(head, with: .color(.black.opacity(0.6)), lineWidth: 1)
+            }
             for h in projection.frame.handles {
                 let c = point(h)
                 let dot = Path(ellipseIn: CGRect(x: c.x - 9, y: c.y - 9, width: 18, height: 18))
                 context.fill(dot, with: .color(.white))
+                context.stroke(dot, with: .color(.black.opacity(0.6)), lineWidth: 1.5)
+            }
+            for h in projection.frame.moveHandles {
+                let c = point(h)
+                let dot = Path(ellipseIn: CGRect(x: c.x - 9, y: c.y - 9, width: 18, height: 18))
+                context.fill(dot, with: .color(.cyan))
                 context.stroke(dot, with: .color(.black.opacity(0.6)), lineWidth: 1.5)
             }
         }

@@ -163,6 +163,8 @@ public enum BackgroundSH {
 public final class BackgroundSHKernels {
     private let fwd: MLXFast.MLXFastKernel
     private let bwd: MLXFast.MLXFastKernel
+    /// Pixels each thread of the coefficient backward sums before the threadgroup reduction.
+    public static let pixelsPerThread = 16
 
     public init() throws {
         self.fwd = try SlangCompiledKernel.load(name: "background_sh_fwd")
@@ -195,15 +197,16 @@ public final class BackgroundSHKernels {
     public func backwardCoeffs(
         vRender: MLXArray, renderAlpha: MLXArray,
         width w: Int, height h: Int, degree: Int,
-        fx: Float, fy: Float, cx: Float, cy: Float, viewmatRowMajor vm: [Float]
+        fx: Float, fy: Float, cx: Float, cy: Float, viewmatRowMajor vm: [Float],
+        pixelsPerThread: Int = BackgroundSHKernels.pixelsPerThread
     ) -> MLXArray {
         let p = w * h
-        let numGroups = (p + 63) / 64
+        let numGroups = (p + 64 * pixelsPerThread - 1) / (64 * pixelsPerThread)
         let bands = (degree + 1) * (degree + 1)
         let out = bwd(
             [vRender.reshaped([p * 3]), renderAlpha.reshaped([p]),
              MLXArray(vm, [16]), MLXArray([fx, fy, cx, cy], [4]),
-             MLXArray([Int32(w), Int32(h), Int32(degree)], [3])],
+             MLXArray([Int32(w), Int32(h), Int32(degree), Int32(pixelsPerThread)], [4])],
             grid: (numGroups * 64, 1, 1),
             threadGroup: (64, 1, 1),
             outputShapes: [[numGroups * 75]],

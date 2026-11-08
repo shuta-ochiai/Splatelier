@@ -150,7 +150,8 @@ func marquardtBARefinesPhoneScalePosesOnGPUSchurPath() {
 }
 
 /// A camera with very few, very noisy observations has an orientation the data alone cannot fix.
-/// With the weak prior on ARKit poses (IGR default), that camera stays near its prior pose.
+/// With the priors on ARKit poses (IGR default: loose on the poses, tight on the motion between
+/// consecutive cameras), that camera stays near its prior pose.
 @Test
 func posePriorHoldsWeaklyObservedCamera() {
     var rng = LCG(s: 11)
@@ -197,10 +198,76 @@ func posePriorHoldsWeaklyObservedCamera() {
     withPrior.iterations = 20
     var noPrior = withPrior
     noPrior.priorRotationSigmaDeg = nil; noPrior.priorPositionSigma = nil
+    noPrior.relativePriorRotationSigmaDeg = nil; noPrior.relativePriorPositionSigma = nil
     let eWith = run(withPrior), eWithout = run(noPrior)
     // Without the prior, the 6 noisy observations can pull it worse than the initial 0.4°. With the
     // prior it is held toward the prior pose (= ground truth): smaller error than without the
     // prior, and no worse than initial.
     #expect(eWith < 0.8 * eWithout, "with prior \(eWith)° vs without \(eWithout)°")
     #expect(eWith < 0.4, "weak camera rotation error with prior: \(eWith)° (initial 0.4°)")
+}
+
+/// The prior trajectory has a step (its source re-anchored the second half by 1° and 3 cm), and
+/// the two halves are tied only by a few shared points. The absolute pose prior holds the second
+/// half at the stepped poses; with the relative prior between consecutive cameras only the edge
+/// across the step disagrees, its Huber cap lets go, and the shared points pull the second half
+/// back.
+@Test
+func relativePriorLetsGoOfAStepInThePriorTrajectory() {
+    var rng = LCG(s: 7)
+    let fx: Float = 760, cx: Float = 540, cy: Float = 405
+    let nCam = 6
+    var trueVMs: [[Float]] = []
+    var centers: [SIMD3<Float>] = []
+    var rots: [[Float]] = []
+    for i in 0..<nCam {
+        let a = (Float(i) - 2.5) * 4
+        let R = rotation(axis: SIMD3(0, 1, 0), deg: a)
+        let c = SIMD3<Float>(-0.8 * sin(a * .pi / 180), 0, 0.8 - 0.8 * cos(a * .pi / 180))
+        rots.append(R); centers.append(c)
+        trueVMs.append(viewmat(R: R, center: c))
+    }
+    // 350 points per half seen only by that half, 40 seen by every camera.
+    var pts: [SIMD3<Float>] = []
+    var seenBy: [ClosedRange<Int>] = []
+    for k in 0..<740 {
+        pts.append(SIMD3((rng.next() - 0.5) * 0.6, (rng.next() - 0.5) * 0.45, 0.6 + rng.next() * 0.5))
+        seenBy.append(k < 350 ? 0...2 : (k < 700 ? 3...5 : 0...5))
+    }
+    var obs: [BundleAdjustment.Observation] = []
+    for (pi, p) in pts.enumerated() {
+        for ci in seenBy[pi] {
+            let v = trueVMs[ci]
+            let x = v[0] * p.x + v[1] * p.y + v[2] * p.z + v[3]
+            let y = v[4] * p.x + v[5] * p.y + v[6] * p.z + v[7]
+            let z = v[8] * p.x + v[9] * p.y + v[10] * p.z + v[11]
+            obs.append(.init(cameraIndex: ci, pointIndex: pi,
+                             pixel: SIMD2(fx * x / z + cx + 0.3 * rng.gauss(), fx * y / z + cy + 0.3 * rng.gauss())))
+        }
+    }
+    // Prior (and initial) poses: ground truth, with cameras 3...5 moved rigidly by 1° and 3 cm.
+    let W = rotation(axis: SIMD3(0.3, 1, 0.2), deg: 1)
+    let Wt = [W[0], W[3], W[6], W[1], W[4], W[7], W[2], W[5], W[8]]
+    var priorVMs = trueVMs
+    for i in 3..<nCam {
+        let c = centers[i]
+        let wc = SIMD3<Float>(W[0] * c.x + W[1] * c.y + W[2] * c.z,
+                              W[3] * c.x + W[4] * c.y + W[5] * c.z,
+                              W[6] * c.x + W[7] * c.y + W[8] * c.z) + SIMD3(0.03, 0, 0)
+        priorVMs[i] = viewmat(R: mul3(rots[i], Wt), center: wc)
+    }
+    let intr = Array(repeating: (fx: fx, fy: fx, cx: cx, cy: cy), count: nCam)
+    func run(_ p: BundleAdjustment.Parameters) -> Float {
+        let r = BundleAdjustment.refine(state: .init(viewmats: priorVMs, points: pts), intrinsics: intr,
+                                        observations: obs, parameters: p, priorViewmats: priorVMs)
+        return (3..<nCam).map { rotationErrorDeg(r.state.viewmats[$0], trueVMs[$0]) }.max()!
+    }
+    var absolute = IterativeGeometricRefinement.Parameters().baParameters
+    absolute.iterations = 30
+    absolute.priorRotationSigmaDeg = 0.25; absolute.priorPositionSigma = 0.01
+    absolute.relativePriorRotationSigmaDeg = nil; absolute.relativePriorPositionSigma = nil
+    let eAbsolute = run(absolute)
+    let eDefault = run({ var p = IterativeGeometricRefinement.Parameters().baParameters; p.iterations = 30; return p }())
+    #expect(eDefault < 0.5 * eAbsolute, "default \(eDefault)° vs absolute prior only \(eAbsolute)°")
+    #expect(eDefault < 0.3, "second half rotation error with the default prior: \(eDefault)° (step 1°)")
 }

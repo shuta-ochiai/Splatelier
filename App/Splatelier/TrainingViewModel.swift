@@ -9,6 +9,7 @@
 import Foundation
 import UIKit
 import MLX
+import SplatViewerKit
 @preconcurrency import Trainer
 @preconcurrency import Capture
 
@@ -40,6 +41,8 @@ struct TrainingSettingsRecord: Codable {
     let enableAnchorReg: Bool
     let enableMVS: Bool?
     let opticalFlowWeighting: Bool?
+    /// Experimental wide-angle loop closure with FlexGlue. nil in records from before it was added.
+    let wideLoopClosure: Bool?
     let maxShDegree: Int?
     /// App version that trained it, e.g. "0.1.0" ("0.1.0 (1)" in older records, with the build
     /// number). nil in records from before it was added.
@@ -75,6 +78,7 @@ struct TrainingSettingsRecord: Codable {
                 ("Exclude sparse", onOff(!includeSparse)),
                 ("Frame quality filter", onOff(frameQualityFilter)),
                 ("Optical flow weighting", opticalFlowWeighting.map(onOff) ?? "-"),
+                ("Wide-angle loop closure (experimental)", wideLoopClosure.map(onOff) ?? "-"),
             ]),
             ("Advanced", [
                 ("MCMC densification", onOff(mcmcDensification)),
@@ -91,7 +95,8 @@ struct TrainingSettingsRecord: Codable {
     }
 }
 
-/// Training result metrics (`<base>.metrics.json`). Shown on the Library card.
+/// Training result metrics (`<base>.metrics.json`), for comparing runs. Not written where
+/// `AppFeatures.developerInfo` is off (the App Store build), which keeps only what it shows.
 struct CaptureMetricsRecord: Codable {
     let version: Int
     let finalSmoothLoss: Float   // Rolling mean over the trailing window (same as "smooth" in the log)
@@ -105,6 +110,7 @@ enum CaptureMetricsStore {
     }
 
     static func save(_ record: CaptureMetricsRecord, for fileURL: URL) {
+        guard AppFeatures.developerInfo else { return }
         if let data = try? JSONEncoder().encode(record) {
             try? data.write(to: sidecarURL(for: fileURL), options: .atomic)
         }
@@ -125,6 +131,8 @@ enum TrainingSettingsStore {
     }
 
     static func save(_ record: TrainingSettingsRecord, for fileURL: URL) {
+        // Only "View training settings" reads it, and the App Store build leaves that out.
+        guard AppFeatures.developerInfo else { return }
         if let data = try? JSONEncoder().encode(record) {
             try? data.write(to: sidecarURL(for: fileURL), options: .atomic)
         }
@@ -224,7 +232,8 @@ final class TrainingViewModel: ObservableObject {
     private nonisolated static func loadGaussianCap() -> Int {
         let defaults = UserDefaults.standard
         let preset = CaptureTraining.AppPreset.defaultGaussianCap
-        guard defaults.object(forKey: gaussianCapKey) != nil else { return preset }
+        // Without the setting on screen, a value saved by an earlier build must not linger.
+        guard AppFeatures.trainingSettings, defaults.object(forKey: gaussianCapKey) != nil else { return preset }
         let saved = defaults.integer(forKey: gaussianCapKey)
         // 200k was removed from the choices; reset it to the default (prevents the picker from
         // showing no selection).
@@ -266,8 +275,32 @@ final class TrainingViewModel: ObservableObject {
         CaptureMetadataName.save(captureName, for: url)
     }
 
+    /// UserDefaults key of the experimental wide-angle loop closure switch (CaptureView).
+    static let wideLoopClosureKey = "training.wideLoopClosure"
+    /// The FlexGlue models bundled with the app (built in only when they were there at build time).
+    static var bundledWideLoopModels: URL? {
+        guard AppFeatures.wideLoopClosure,
+              let dir = Bundle.main.resourceURL?.appendingPathComponent("FlexGlue"),
+              FlexGlueMatcher.modelsPresent(in: dir) else { return nil }
+        return dir
+    }
+    /// The model folder when the experimental wide-angle loop closure is switched on.
+    static var wideLoopModels: URL? {
+        UserDefaults.standard.bool(forKey: wideLoopClosureKey) ? bundledWideLoopModels : nil
+    }
+
+    /// Launched for an unattended run (`SPLATELIER_AUTOTRAIN`): no naming popup; the capture is
+    /// named after its resolution plan instead.
+    private let unattended = AppFeatures.developerEnvironment["SPLATELIER_AUTOTRAIN"] != nil
+
     func start() {
         guard case .idle = phase, !isGeneratingMesh else { return }
+        if unattended && captureName.isEmpty {
+            let env = AppFeatures.developerEnvironment
+            let tile = env["SPLATELIER_TILE"] ?? "\(CaptureTraining.AppPreset.tileSize)"
+            let final = env["SPLATELIER_FINAL_FRAC"] ?? "\(CaptureTraining.AppPreset.finalResample?.fraction ?? 0)"
+            captureName = "auto \(tile)px final \(final)"
+        }
         phase = .running(iter: 0, latestLoss: nil)
         elapsedSec = 0
         peakMemoryBytes = 0
@@ -289,6 +322,7 @@ final class TrainingViewModel: ObservableObject {
         startMetricsTimer(since: startTime)
 
         let captured = scene
+        let wideLoopModels = Self.wideLoopModels
         let cap = gaussianCap
         let totalIter = iterations
         let effectiveIterations = totalIter
@@ -328,12 +362,15 @@ final class TrainingViewModel: ObservableObject {
                 enableAnchorReg: false,
                 enableMVS: true,
                 opticalFlowWeighting: true,
+                wideLoopClosure: wideLoopModels != nil,
                 maxShDegree: GaussianModel.maxShDegree,
                 appVersion: AppVersion.plain
             ),
             for: plyURL
         )
-        let logURL = captureDir.appendingPathComponent("capture_\(timestamp).log")
+        // The App Store build can't share the log, so it writes none.
+        let logURL: URL? = AppFeatures.developerInfo
+            ? captureDir.appendingPathComponent("capture_\(timestamp).log") : nil
         let thumbURL = captureDir.appendingPathComponent("capture_\(timestamp).png")
         // Use a "_seed" suffix as a separate base so it does not collide with Library's base
         // parsing (up to the first ".").
@@ -345,8 +382,8 @@ final class TrainingViewModel: ObservableObject {
         let alreadyPersisted = (resumeDatasetURL != nil)
         // Local copy so the [weak self] closure can reference it without going through self.
         let preserveDataset = preserveDataset
-        FileManager.default.createFile(atPath: logURL.path, contents: nil)
-        let logHandle = try? FileHandle(forWritingTo: logURL)
+        if let logURL { FileManager.default.createFile(atPath: logURL.path, contents: nil) }
+        let logHandle = logURL.flatMap { try? FileHandle(forWritingTo: $0) }
         if let h = logHandle {
             let header = "=== splatelier \(AppVersion.full) log @\(timestamp), \(effectiveIterations) iter ===\n"
             if let d = header.data(using: .utf8) { h.write(d) }
@@ -386,6 +423,12 @@ final class TrainingViewModel: ObservableObject {
                     do {
                         let tSave = Date()
                         savedDataset = try CaptureDatasetStore.save(captured, to: datasetURL)
+                        // Hundreds of MB that training deletes once it succeeds: keep it out of
+                        // iCloud backups (App Store Review Guideline 2.23).
+                        var excluded = URLResourceValues()
+                        excluded.isExcludedFromBackup = true
+                        var datasetDir = datasetURL
+                        try? datasetDir.setResourceValues(excluded)
                         logHandler(String(format: "[dataset] saved %d frames for crash recovery → %@ [timing] datasetSave = %.2fs",
                                           captured.frames.count, datasetURL.lastPathComponent,
                                           Date().timeIntervalSince(tSave)))
@@ -400,25 +443,42 @@ final class TrainingViewModel: ObservableObject {
                 logHandler("[MVS mode] MVS dense seed (cost mode m=5, 3-view consistency "
                     + "+ depth averaging, voxel 3mm, window 1), "
                     + "disc-init uncapped, coarse 1/\(CaptureTraining.AppPreset.coarseToFineFactor), strategy Hybrid")
-                let geometry = CaptureTraining.prepareGeometry(scene: captured, log: logHandler)
+                if wideLoopModels != nil { logHandler("[wide-angle loop closure] FlexGlue (experimental): on") }
+                let geometry = CaptureTraining.prepareGeometry(scene: captured, wideLoopModels: wideLoopModels, log: logHandler)
                 geometryCache.geometry = geometry
+                // Unattended A/B runs launched with devicectl can override the resolution plan:
+                // SPLATELIER_FINAL_FRAC=<fraction> of the iterations at the captured resolution
+                // (0: none) and SPLATELIER_TILE=<px> for the rasterizer tiles.
+                let env = AppFeatures.developerEnvironment
+                let finalResample = env["SPLATELIER_FINAL_FRAC"].flatMap { Float($0) }
+                    .map { $0 > 0 ? ($0, 1, 1) : nil } ?? CaptureTraining.AppPreset.finalResample
+                let tileSize = env["SPLATELIER_TILE"].flatMap { Int($0) } ?? CaptureTraining.AppPreset.tileSize
                 let result = try CaptureTraining.train(
                     geometry: geometry,
                     iterations: effectiveIterations,
+                    tileSize: tileSize,
                     strategy: strategy,
                     // The rest is the default, the app's configuration (AppPreset / MVSMode).
                     // Start from 5/6 of the cap (actual init = min(seed point count, that)); edge
                     // splits grow it to the cap.
                     maxInitGaussians: initCap,
+                    finalResample: finalResample,
                     outputPLY: plyURL,
                     thumbnailPNG: thumbURL,
                     // Always save the pre-training seed point cloud + camera poses to a PLY for
                     // inspection (the viewer's Seed / camera display).
-                    seedInspectionPLY: seedURL,
+                    // The seed points and capture cameras (about 60 MB) are only for the
+                    // viewer's development layers, which the App Store build leaves out.
+                    seedInspectionPLY: AppFeatures.developerInfo ? seedURL : nil,
                     onThermalThrottle: thermalHandler,
                     onPreview: previewHandler,
                     log: logHandler
                 )
+                // SPLATELIER_BENCH=1 (unattended runs): time the parts of a step on the trained
+                // model into the log.
+                if env["SPLATELIER_BENCH"] == "1", let session = result.session {
+                    TrainingDriver.benchmarkStepStages(session: session, log: logHandler)
+                }
                 try? logHandle?.close()
                 // Completed successfully, so delete the preserved data (validation datasets are
                 // kept). The frames may still read their images from it (meshing, training
@@ -470,8 +530,8 @@ final class TrainingViewModel: ObservableObject {
                         finalLoss: result.lossHistory.last
                     )
                     self.completedPlyURL = plyURL
-                    self.needsNamePrompt = true
-                    self.generateMesh()
+                    self.needsNamePrompt = !self.unattended
+                    self.finishTraining()
                 }
             } catch {
                 try? logHandle?.close()
@@ -607,7 +667,7 @@ final class TrainingViewModel: ObservableObject {
                         finalLoss: result.lossHistory.last
                     )
                     // The Gaussians changed, so rebuild the mesh (overwrites the same OBJ).
-                    self.generateMesh()
+                    self.finishTraining()
                 }
             } catch {
                 try? logHandle?.close()
@@ -734,19 +794,33 @@ final class TrainingViewModel: ObservableObject {
                 self.activeMemoryBytes = snap.activeMemory
                 self.elapsedSec = elapsedBase + Date().timeIntervalSince(startTime)
                 self.meshPhase = outcome
-                self.endProgress(finished: true)
-                // Training is only done once its mesh is: ask for a name (first run only), then open
-                // the viewer with all layers (a failed mesh still opens it, without the mesh).
-                if let plyURL = self.lastOutputPLY {
-                    self.pendingViewer = ViewerTarget(plyURL: plyURL, logURL: self.lastLogURL)
-                    if self.needsNamePrompt {
-                        self.needsNamePrompt = false
-                        self.showNamePrompt = true
-                    } else {
-                        self.openViewerIfReady()
-                    }
-                }
+                // A failed mesh still opens the viewer, without the mesh.
+                self.finishRun()
             }
+        }
+    }
+
+    /// After training or "Train more": the mesh where this build makes one (it finishes the run
+    /// when done), else the run is finished now.
+    private func finishTraining() {
+        if AppFeatures.meshGeneration {
+            generateMesh()
+        } else {
+            finishRun()
+        }
+    }
+
+    /// Training is only done once its mesh is (if any): ask for a name (first run only), then open
+    /// the viewer with all layers.
+    private func finishRun() {
+        endProgress(finished: true)
+        guard let plyURL = lastOutputPLY else { return }
+        pendingViewer = ViewerTarget(plyURL: plyURL, logURL: lastLogURL)
+        if needsNamePrompt {
+            needsNamePrompt = false
+            showNamePrompt = true
+        } else {
+            openViewerIfReady()
         }
     }
 
@@ -801,12 +875,13 @@ final class TrainingViewModel: ObservableObject {
         let n = Swift.min(count, frames.count)
         guard n > 0 else { frameSlides = []; return }
         frameSlides = (0..<n).compactMap { i in
-            FrameThumbnail.makeThumbnail(frames[i * frames.count / n].originalImage, maxDim: 480)
+            FrameThumbnail.makeThumbnail(frames[i * frames.count / n], maxDim: 480, original: true)
         }
     }
 
-    /// Handler for the pictures the training loop produces (on the training thread). The frames are
-    /// in sensor orientation, so the image is marked rotated for a portrait screen.
+    /// Handler for the pictures the training loop produces (on the training thread). The pictures
+    /// are in sensor orientation, so the image is marked turned upright by its view's pose (a
+    /// portrait capture lies on its side, a landscape one does not).
     private func makePreviewHandler() -> (TrainingPreviewFrame) -> Void {
         { [weak self] frame in
             guard let provider = CGDataProvider(data: Data(frame.rgba) as CFData),
@@ -817,7 +892,8 @@ final class TrainingViewModel: ObservableObject {
                     provider: provider, decode: nil, shouldInterpolate: true,
                     intent: .defaultIntent)
             else { return }
-            let image = UIImage(cgImage: cg, scale: 1, orientation: .right)
+            let turns = SplatViewerThumbnailOrientation.clockwiseQuarterTurns(viewmat: frame.viewmat) ?? 1
+            let image = UIImage(cgImage: cg, scale: 1, orientation: .clockwise(quarterTurns: turns))
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.previewImage = image
@@ -832,8 +908,9 @@ final class TrainingViewModel: ObservableObject {
     /// One bar for everything after Start training: preparing the frames, training, and the mesh.
     /// The first run is split 15% / 75% / 10% by what the logs of real device runs showed
     /// (preprocessing 14-36 s, training about 0.1 s per iteration, mesh about 10 s); "Train more"
-    /// has no preprocessing, so it is 90% / 10%. Training is exact (iteration / total); the other
-    /// two follow the stages the log reports and creep toward the next one in between.
+    /// has no preprocessing, so it is 90% / 10%. A build without the mesh gives its 10% to training.
+    /// Training is exact (iteration / total); the other two follow the stages the log reports and
+    /// creep toward the next one in between.
     @Published private(set) var overallProgress: Double = 0
     /// What is being done now ("Training", "Generating mesh", ...).
     @Published private(set) var progressLabel = ""
@@ -899,7 +976,8 @@ final class TrainingViewModel: ObservableObject {
 
     private func refreshProgress() {
         let preEnd = includesPreprocessing ? 0.15 : 0.0
-        let trainEnd = 0.90
+        // Without a mesh, training fills the bar to the end.
+        let trainEnd = AppFeatures.meshGeneration ? 0.90 : 1.0
         if let start = meshStartDate, case .running = meshPhase {
             // Mesh: creeps toward the end over its usual ten seconds.
             let dt = Date().timeIntervalSince(start)
@@ -911,7 +989,8 @@ final class TrainingViewModel: ObservableObject {
                 let total = Double(Swift.max(1, runningTotalIterations))
                 overallProgress = preEnd + (trainEnd - preEnd) * Swift.min(1, Double(iter) / total)
                 progressLabel = "Training"
-                progressDetail = "iter \(iter) / \(runningTotalIterations)"
+                // The App Store build shows the percentage alone; the iteration count is for development.
+                progressDetail = AppFeatures.developerInfo ? "iter \(iter) / \(runningTotalIterations)" : ""
             } else {
                 // Preprocessing: from the last finished stage toward the next one.
                 let floor = preMarkersSeen == 0 ? 0 : Self.preStages[preMarkersSeen - 1].fraction

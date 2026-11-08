@@ -755,7 +755,8 @@ private final class IOSImpl: NSObject, ARSessionDelegate {
                 featureObservations: p.featureObservations,
                 lidarSamples: p.lidarSamples,
                 cameraSettings: p.cameraSettings,
-                cameraMotion: p.cameraMotion
+                cameraMotion: p.cameraMotion,
+                captureCameraToWorld: p.seedTransform
             ))
             if let cur = anchorTransforms[p.anchorID], cur == p.seedTransform {
                 unsettled += 1

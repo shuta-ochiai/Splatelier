@@ -15,6 +15,8 @@ struct CaptureView: View {
     @State private var showFrameReview = false
     /// LiDAR depth during capture (LiDAR devices only). Still experimental, so off by default.
     @AppStorage("capture.useLiDAR") private var useLiDAR = false
+    /// Experimental wide-angle loop closure with FlexGlue (offered when the app has its models).
+    @AppStorage(TrainingViewModel.wideLoopClosureKey) private var wideLoopClosure = false
 
     // MARK: training (in this screen)
     /// Set once there is something to train: a fresh capture, a resumed dataset or a validation
@@ -31,6 +33,9 @@ struct CaptureView: View {
     @State private var pendingDatasetURL: URL?
     @State private var showAbout = false
     @State private var didCheckRecovery = false
+    @Environment(\.scenePhase) private var scenePhase
+    /// An unattended run (`SPLATELIER_AUTOTRAIN`) has started loading its dataset.
+    @State private var autoTrainStarted = false
     @State private var recoveryError: String?
 
     // MARK: validation datasets
@@ -87,9 +92,17 @@ struct CaptureView: View {
         .onAppear {
             checkForRecoverableDataset()
             refreshValidationSets()
+            startAutoTrainingIfRequested(trigger: "appear")
             // Compile the shaders for the splat display during capture ahead of time (so the first
             // capture start does not wait)
             CaptureSurfelRenderer.prewarm()
+        }
+        // A launch from devicectl can come while the app is not in front, before the screen has
+        // been laid out; try again whenever it becomes active.
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            refreshValidationSets()
+            startAutoTrainingIfRequested(trigger: "active")
         }
         // The capture just made becomes the thing to train.
         .onChange(of: vm.capturedScene != nil) { _, hasScene in
@@ -135,18 +148,26 @@ struct CaptureView: View {
         VStack(spacing: 24) {
             // Keep the card fixed on screen and scroll only the validation dataset list inside it.
             VStack(spacing: 24) {
-                if !validationSets.isEmpty { validationListButton }
+                if AppFeatures.validationDatasets && !validationSets.isEmpty { validationListButton }
                 if let err = vm.errorMessage { errorRow(err) }
                 // Capture tips (a different clip each time this screen appears).
                 GuideClipView()
                     .frame(maxHeight: .infinity)
             }
             .frame(maxHeight: .infinity, alignment: .top)
-            if ARKitCaptureSession.isLiDARAvailable {
-                Toggle("LiDAR depth (experimental)", isOn: $useLiDAR)
-                    .padding(.horizontal)
+            Group {
+                if !DeviceSupport.canTrain { unsupportedDeviceNotice }
+                if AppFeatures.lidarDepth && ARKitCaptureSession.isLiDARAvailable {
+                    Toggle("LiDAR depth (experimental)", isOn: $useLiDAR)
+                        .padding(.horizontal)
+                }
+                if TrainingViewModel.bundledWideLoopModels != nil {
+                    Toggle("Wide-angle loop closure (experimental)", isOn: $wideLoopClosure)
+                        .padding(.horizontal)
+                }
+                controlRow
             }
-            controlRow
+            .frame(maxWidth: DesignSystem.readableWidth)
         }
         .padding()
         .sheet(isPresented: $showValidationList) { validationListSheet }
@@ -211,6 +232,7 @@ struct CaptureView: View {
                 controlRow
                     .padding()
                     .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+                    .frame(maxWidth: DesignSystem.readableWidth)
                     .padding(.horizontal)
                     .padding(.bottom)
             }
@@ -245,7 +267,7 @@ struct CaptureView: View {
             if vm.diagnostics.qualityRejectedFrameCount > 0 {
                 hudItem(label: "Rejected", value: "\(vm.diagnostics.qualityRejectedFrameCount)")
             }
-            if vm.diagnostics.relocalizationOccurred {
+            if AppFeatures.developerInfo && vm.diagnostics.relocalizationOccurred {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundStyle(.orange)
             }
@@ -281,7 +303,7 @@ struct CaptureView: View {
                 .font(.subheadline.monospacedDigit())
                 .foregroundStyle(.secondary)
             // Only what needs attention. The detailed ARKit counters are in the processing log.
-            if vm.diagnostics.relocalizationOccurred {
+            if AppFeatures.developerInfo && vm.diagnostics.relocalizationOccurred {
                 Label("Relocalization observed", systemImage: "exclamationmark.triangle.fill")
                     .font(.caption)
                     .foregroundStyle(.orange)
@@ -300,7 +322,7 @@ struct CaptureView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.regular)
-                validationSaveButton
+                if AppFeatures.validationDatasets { validationSaveButton }
             }
             .padding(.top, 2)
             if case .failed(let msg) = vm.validationSaveState {
@@ -539,13 +561,24 @@ struct CaptureView: View {
     }
 
     private var captureStartButton: some View {
-        Button(action: { vm.start(useLiDAR: useLiDAR) }) {
+        Button(action: { vm.start(useLiDAR: AppFeatures.lidarDepth && useLiDAR) }) {
             Label("Start capture", systemImage: "record.circle")
                 .frame(maxWidth: .infinity)
         }
         .buttonStyle(.borderedProminent)
         .tint(Color.kikyoFill)
         .controlSize(.large)
+        .disabled(!DeviceSupport.canTrain)
+    }
+
+    /// Above Start capture on a device that can't train (see `DeviceSupport`).
+    private var unsupportedDeviceNotice: some View {
+        Label(DeviceSupport.unsupportedMessage, systemImage: "exclamationmark.triangle.fill")
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(.yellow)
+            .padding()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .cardBackground()
     }
 
     private func row(_ label: String, _ value: String) -> some View {
@@ -648,8 +681,42 @@ struct CaptureView: View {
         validationSets = out.sorted { $0.modifiedAt > $1.modifiedAt }
     }
 
+    /// For unattended runs launched with `devicectl … --environment-variables`:
+    /// SPLATELIER_AUTOTRAIN=<file or display name of a validation dataset> loads it and starts
+    /// training, as tapping it in the list and then Start training would.
+    /// Each step is appended to Documents/autotrain.log, which devicectl can copy back.
+    private func startAutoTrainingIfRequested(trigger: String) {
+        guard let key = AppFeatures.developerEnvironment["SPLATELIER_AUTOTRAIN"], !key.isEmpty,
+              !autoTrainStarted else { return }
+        guard trainer == nil, loadingValidationURL == nil else {
+            Self.autoTrainLog("\(trigger): a training panel is open or a dataset is loading")
+            return
+        }
+        guard let entry = validationSets.first(where: { $0.url.lastPathComponent.contains(key) || $0.name == key })
+        else {
+            Self.autoTrainLog("\(trigger): no validation dataset matches \(key) (\(validationSets.count) listed)")
+            return
+        }
+        autoTrainStarted = true
+        Self.autoTrainLog("\(trigger): loading \(entry.url.lastPathComponent)")
+        loadValidationDataset(entry.url, startTraining: true)
+    }
+
+    nonisolated static func autoTrainLog(_ message: String) {
+        let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("autotrain.log")
+        let line = Data("\(ISO8601DateFormatter().string(from: Date())) \(message)\n".utf8)
+        if let h = try? FileHandle(forWritingTo: url) {
+            h.seekToEndOfFile()
+            h.write(line)
+            try? h.close()
+        } else {
+            try? line.write(to: url)
+        }
+    }
+
     /// Load a validation dataset in the background and open the training panel for it.
-    private func loadValidationDataset(_ url: URL) {
+    private func loadValidationDataset(_ url: URL, startTraining: Bool = false) {
         guard loadingValidationURL == nil else { return }
         loadingValidationURL = url
         Task.detached {
@@ -661,8 +728,13 @@ struct CaptureView: View {
                     startStoredTraining(
                         scene: scene, url: url, preserve: true,
                         name: CaptureMetadataName.load(for: url) ?? "")
+                    if startTraining {
+                        trainer?.start()
+                        Self.autoTrainLog("loaded \(scene.frames.count) frames, training started: \(trainer != nil)")
+                    }
                 }
             } catch {
+                if startTraining { Self.autoTrainLog("loading failed: \(error)") }
                 await MainActor.run {
                     loadingValidationURL = nil
                     showValidationList = false

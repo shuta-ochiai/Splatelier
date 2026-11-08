@@ -6,6 +6,14 @@ options:
   deploymentTarget:
     iOS: "18.0"
 
+# Debug / Release build the app with every feature. AppStore is Release with the APP_STORE flag,
+# which leaves out what the App Store version does not offer yet (`AppFeatures`): the mesh made
+# after training, and CAD models in the viewer. Only the "Splatelier App Store" scheme uses it.
+configs:
+  Debug: debug
+  Release: release
+  AppStore: release
+
 # xcodegen spec. `xcodegen generate` regenerates Splatelier.xcodeproj.
 # References the Swift Package itself (../Package.swift) as a local package and
 # links the Trainer library product.
@@ -33,6 +41,18 @@ schemes:
       config: Release
     archive:
       config: Release
+  # The build that goes to the App Store: archive with this scheme (see `configs`). Run and Profile
+  # use it too, to try the limited app on a device.
+  Splatelier App Store:
+    build:
+      targets:
+        Splatelier: all
+    run:
+      config: AppStore
+    profile:
+      config: AppStore
+    archive:
+      config: AppStore
 
 targets:
   Splatelier:
@@ -48,7 +68,7 @@ targets:
         CFBundleDisplayName: Splatelier
         # The release version, kept equal to the git tag and to Splatelier.version
         # (Sources/Trainer/Splatelier.swift). CFBundleVersion is the build number.
-        CFBundleShortVersionString: "0.4.0"
+        CFBundleShortVersionString: "0.5.0"
         CFBundleVersion: "1"
         # Input is RGB + coarse pose from ARKit. CameraUsageDescription is the text shown in the OS dialog
         # when the ARSession starts. Unified as "Splatelier" to match the display name.
@@ -66,9 +86,33 @@ targets:
           UIApplicationSupportsMultipleScenes: false
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
+        # iPad takes every orientation: iPadOS requires it for multitasking and resizable windows
+        # (UIRequiresFullScreen is deprecated). iPhone stays portrait.
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
         UIRequiredDeviceCapabilities:
           - arm64
           - arkit
+        # The app uses no encryption beyond what iOS provides, so App Store Connect does not ask
+        # about export compliance on each upload.
+        ITSAppUsesNonExemptEncryption: false
+        # STEP CAD models, added to a capture from the Library ("Add CAD model"). iOS declares no
+        # type for them, so the Files picker could not offer them without this.
+        UTImportedTypeDeclarations:
+          - UTTypeIdentifier: org.iso.step
+            UTTypeDescription: STEP CAD model
+            UTTypeConformsTo:
+              - public.data
+              - public.3d-content
+            UTTypeTagSpecification:
+              public.filename-extension:
+                - step
+                - stp
+              public.mime-type:
+                - model/step
     # Increased-memory entitlement. On-device training at 1440 × many gaussians (dense seed of
     # hundreds of thousands of points + environment sphere) exceeds the default jetsam limit (~2-3GB)
     # and gets OOM-killed, so com.apple.developer.kernel.increased-memory-limit raises the limit
@@ -94,6 +138,40 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: io.github.shuta-ochiai.splatelier
         CODE_SIGN_STYLE: Automatic
         SWIFT_STRICT_CONCURRENCY: minimal
+        # The "Bundle FlexGlue models" script writes a folder of compiled models whose contents are
+        # not known ahead, which the user script sandbox would refuse.
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+      configs:
+        # Read by `AppFeatures` (App/Splatelier/AppFeatures.swift).
+        AppStore:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: APP_STORE
+    # Experimental wide-angle loop closure: bundle the FlexGlue models when App/FlexGlueModels holds
+    # them (made by scripts/flexglue/export_models.py). They are not in the repository (about 230 MB,
+    # and the descriptor's weights are under the DINOv3 License); without them the app builds as
+    # usual and does not offer the switch. The packages are compiled here so the app loads them
+    # directly, and encrypted when App/FlexGlueModels/flexglue.mlmodelkey (a Core ML model key made
+    # in Xcode for the team) is there: the license asks not to invite reverse engineering.
+    # The AppStore configuration never bundles them (see `AppFeatures.wideLoopClosure`).
+    postCompileScripts:
+      - name: Bundle FlexGlue models
+        basedOnDependencyAnalysis: false
+        script: |
+          SRC="$SRCROOT/FlexGlueModels"
+          DST="$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/FlexGlue"
+          rm -rf "$DST"
+          # The App Store version (AppStore configuration) leaves the experimental feature out.
+          [ "$CONFIGURATION" = "AppStore" ] && exit 0
+          [ -d "$SRC" ] || exit 0
+          mkdir -p "$DST"
+          KEY="$SRC/flexglue.mlmodelkey"
+          for m in "$SRC"/*.mlpackage; do
+            if [ -f "$KEY" ]; then
+              xcrun coremlcompiler compile "$m" "$DST" --encrypt "$KEY" > /dev/null || exit 1
+            else
+              xcrun coremlcompiler compile "$m" "$DST" > /dev/null || exit 1
+            fi
+          done
+          cp "$SRC"/*.safetensors "$DST"/
     dependencies:
       - package: splatelier
         product: Trainer

@@ -521,9 +521,33 @@ public enum CaptureBA {
         coarseLoopKeypoints: Int = 600,
         useARKitTracks: Bool = true,
         lensDistortion: LensDistortionEstimation.Parameters = .disabled,
+        wideLoopModels: URL? = nil,
         log: (String) -> Void = { print($0) }
     ) -> CapturedScene {
         guard scene.frames.count >= 2 else { return scene }
+        // Experimental wide-angle loop closure with FlexGlue (CaptureBA+FlexGlueLoop), models from
+        // `wideLoopModels`. It needs only the frames and ARKit's poses and points, so it runs on its
+        // own thread (with its own MLX stream) beside the ORB work below; its pairs join BA and the
+        // pose graph that runs before BA.
+        final class WideLoop: @unchecked Sendable {
+            let lock = NSLock(), done = DispatchSemaphore(value: 0)
+            var pairs: [FlexGlueLoopPair] = [], logs: [String] = []
+            let scene: CapturedScene
+            init(_ scene: CapturedScene) { self.scene = scene }
+        }
+        let wideLoop = WideLoop(scene)
+        if let wideLoopModels {
+            let parameters = FlexGlueLoopParameters(directory: wideLoopModels)
+            Thread {
+                let found = Stream.withNewDefaultStream(device: .gpu) {
+                    flexGlueLoopPairs(scene: wideLoop.scene, parameters: parameters, log: { line in
+                        wideLoop.lock.lock(); wideLoop.logs.append(line); wideLoop.lock.unlock()
+                    })
+                }
+                wideLoop.lock.lock(); wideLoop.pairs = found; wideLoop.lock.unlock()
+                wideLoop.done.signal()
+            }.start()
+        }
         let n = scene.frames.count
         var features: [ORBPipeline.FrameFeatures] = []
         features.reserveCapacity(n)
@@ -674,6 +698,21 @@ public enum CaptureBA {
                 ))
             }
         }
+        // Wide-angle loop pairs: their matches into BA, their fitted relative poses into the pose graph
+        var wideLoopEdges: [PoseGraph.Edge] = []
+        if wideLoopModels != nil {
+            let waitStart = Date()
+            wideLoop.done.wait()
+            wideLoop.lock.lock(); let lines = wideLoop.logs, found = wideLoop.pairs; wideLoop.lock.unlock()
+            lines.forEach(log)
+            for q in found {
+                for (a, b) in zip(q.uvA, q.uvB) { pairs.append(PairMatch(camA: q.a, camB: q.b, uvA: a, uvB: b)) }
+                wideLoopEdges.append(loopEdge(q.a, q.b, fit: q.fit, priorT: q.priorT, sigmaRotationRad: 0.3 * .pi / 180,
+                                              sigmaPosition: 0.03, huber: 2))
+            }
+            log(String(format: "wide-angle loop closure: +%d correspondences from %d pair(s) (waited %.1fs for it after the ORB matching)",
+                       found.reduce(0) { $0 + $1.uvA.count }, found.count, Date().timeIntervalSince(waitStart)))
+        }
         let loopCorrespondences = pairs.count - consecutiveMatchCount
         log(String(format: "loop closure: %d candidate(s) (%d by camera distance + %d by shared points) → %d verified frame-pair(s), +%d correspondences",
                    loopCandidates.count, nearPairs.count, addedPairs.count, loopFramePairs, loopCorrespondences))
@@ -727,7 +766,25 @@ public enum CaptureBA {
         // ill-conditioned and the cameras diverge).
         let nPoints = pairs.count + arkitTracks.count
         let intr: [Intrinsics] = scene.frames.map { $0.intrinsics }
-        let viewmats: [[Float]] = scene.frames.map { $0.viewmat }
+        var viewmats: [[Float]] = scene.frames.map { $0.viewmat }
+        // A wide-angle loop can be open by centimeters (tens of pixels): BA's robust kernel and
+        // outlier filter would discount its matches rather than move the cameras, so a pose graph
+        // over ARKit's frame-to-frame motion and the loop edges closes it first.
+        if !wideLoopEdges.isEmpty {
+            let pgStart = Date()
+            let odometry = (0..<(n - 1)).map {
+                PoseGraph.Edge.between($0, $0 + 1, viewmats: viewmats, sigmaRotationRad: 0.1 * .pi / 180,
+                                       sigmaPosition: 0.0025, huber: 2)
+            }
+            let pg = PoseGraph.optimize(viewmats: viewmats, edges: odometry + wideLoopEdges)
+            var moved: Float = 0
+            for (a, b) in zip(viewmats, pg.viewmats) {
+                moved = max(moved, simd_distance(FrameSubsampler.cameraCenter(viewmat: a), FrameSubsampler.cameraCenter(viewmat: b)))
+            }
+            log(String(format: "pose graph: %d odometry + %d wide-angle loop edge(s), cost %.1f → %.1f, cameras moved up to %.3f m; %.2fs",
+                       odometry.count, wideLoopEdges.count, pg.initialCost, pg.finalCost, moved, Date().timeIntervalSince(pgStart)))
+            viewmats = pg.viewmats
+        }
 
         var observations: [BundleAdjustment.Observation] = []
         observations.reserveCapacity(pairs.count * 2 + arkitTracks.reduce(0) { $0 + $1.count })

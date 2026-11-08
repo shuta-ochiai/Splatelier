@@ -119,46 +119,39 @@ struct KernelContext_0
     thread array<float, int(25)> bs_1;
     bgBasis_0(w3_0 * float3(rsqrt(max(dot(w3_0, w3_0), 9.99999968265522539e-21))) , deg_1, &bs_1);
     int _S13 = deg_1 + int(1);
-    uint nb_0 = uint(_S13 * _S13);
-    uint nb_1;
-    if(nb_0 > 25U)
-    {
-        nb_1 = 25U;
-    }
-    else
-    {
-        nb_1 = nb_0;
-    }
-    float3 _S14 = float3(0.0, 0.0, 0.0);
+    uint _S14 = uint(_S13 * _S13);
+    float3 _S15 = float3(0.0, 0.0, 0.0);
     uint b_0 = 0U;
-    float3 bg_0 = _S14;
+    float3 bg_0 = _S15;
     for(;;)
     {
-        if(b_0 < nb_1)
+        if(b_0 < 25U)
         {
         }
         else
         {
             break;
         }
-        uint _S15 = b_0 * 3U;
-        float3 bg_1 = bg_0 + float3(bs_1[b_0])  * float3((&kernelContext_0)->coeffs_fwd_0[_S15], (&kernelContext_0)->coeffs_fwd_0[_S15 + 1U], (&kernelContext_0)->coeffs_fwd_0[_S15 + 2U]);
+        if(b_0 < _S14)
+        {
+            uint _S16 = b_0 * 3U;
+            bg_0 = bg_0 + float3(bs_1[b_0])  * float3((&kernelContext_0)->coeffs_fwd_0[_S16], (&kernelContext_0)->coeffs_fwd_0[_S16 + 1U], (&kernelContext_0)->coeffs_fwd_0[_S16 + 2U]);
+        }
         b_0 = b_0 + 1U;
-        bg_0 = bg_1;
     }
     float oma_0 = 1.0 - (&kernelContext_0)->render_alpha_0[p_0];
     uint o_0 = p_0 * 3U;
-    float _S16 = bg_0.x;
-    *((&kernelContext_0)->composited_0+o_0) = (&kernelContext_0)->render_0[o_0] + oma_0 * _S16;
-    uint _S17 = o_0 + 1U;
-    float _S18 = bg_0.y;
-    *((&kernelContext_0)->composited_0+_S17) = (&kernelContext_0)->render_0[_S17] + oma_0 * _S18;
-    uint _S19 = o_0 + 2U;
-    float _S20 = bg_0.z;
-    *((&kernelContext_0)->composited_0+_S19) = (&kernelContext_0)->render_0[_S19] + oma_0 * _S20;
-    *((&kernelContext_0)->bg_out_0+o_0) = _S16;
-    *((&kernelContext_0)->bg_out_0+_S17) = _S18;
-    *((&kernelContext_0)->bg_out_0+_S19) = _S20;
+    float _S17 = bg_0.x;
+    *((&kernelContext_0)->composited_0+o_0) = (&kernelContext_0)->render_0[o_0] + oma_0 * _S17;
+    uint _S18 = o_0 + 1U;
+    float _S19 = bg_0.y;
+    *((&kernelContext_0)->composited_0+_S18) = (&kernelContext_0)->render_0[_S18] + oma_0 * _S19;
+    uint _S20 = o_0 + 2U;
+    float _S21 = bg_0.z;
+    *((&kernelContext_0)->composited_0+_S20) = (&kernelContext_0)->render_0[_S20] + oma_0 * _S21;
+    *((&kernelContext_0)->bg_out_0+o_0) = _S17;
+    *((&kernelContext_0)->bg_out_0+_S18) = _S19;
+    *((&kernelContext_0)->bg_out_0+_S20) = _S21;
     return;
 }
 

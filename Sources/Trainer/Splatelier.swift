@@ -3,5 +3,5 @@
 
 /// Namespace for the splatelier library.
 public enum Splatelier {
-    public static let version = "0.4.0"
+    public static let version = "0.5.0"
 }

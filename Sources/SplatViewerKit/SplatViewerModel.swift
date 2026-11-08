@@ -148,6 +148,109 @@ final class SplatViewerModel: ObservableObject {
         self.showMesh = showMesh
     }
 
+    // MARK: CAD model
+
+    /// A CAD model (STEP) is loaded. It is its own layer, apart from the mesh reconstructed from the
+    /// capture, and can be moved and turned by hand to sit it in the scene.
+    @Published private(set) var hasCAD = false
+    @Published var showCAD = true {
+        didSet {
+            if !showCAD { isCADSelected = false }
+            onNeedsRedraw?()
+        }
+    }
+    /// Why the CAD model didn't load, when the rest of the scene did.
+    @Published private(set) var cadLoadError: String?
+    /// Tapping or dragging the CAD model selects it: it is tinted, and a box around it shows a
+    /// small ring round each of its axes that turns it (`SplatViewerCADGizmo`), and buttons for
+    /// quarter turns show (`SplatViewerCADTurn`). Dragging the model moves it, settling on floors
+    /// within reach (`SplatViewerCADSurface`). Tapping elsewhere, or another mode, lets go of it.
+    @Published var isCADSelected = false { didSet { onNeedsRedraw?() } }
+    /// Placement of the CAD model: a turn about its own center (`cadPivot`), then a shift.
+    var cadOffset = SIMD3<Float>(0, 0, 0) { didSet { onNeedsRedraw?() } }
+    var cadRotation = simd_quatf(ix: 0, iy: 0, iz: 0, r: 1) {
+        didSet {
+            let turned = abs(abs(cadRotation.real) - 1) > 1e-6
+            if turned != isCADTurned { isCADTurned = turned }
+            onNeedsRedraw?()
+        }
+    }
+    /// The CAD model is turned from the way it was imported (what Reset rotation undoes).
+    @Published private(set) var isCADTurned = false
+    /// Center and half sizes of the model's bounding box in its file coordinates.
+    private(set) var cadPivot = SIMD3<Float>(0, 0, 0)
+    private(set) var cadHalfExtent = SIMD3<Float>(repeating: 0.5)
+    /// Outline, move handle and rings of the selected CAD model on screen.
+    let cadProjection = SplatCropProjection()
+    /// Told the placement after each move or turn, to keep it for the next time the scene is opened.
+    var onCADPlacementChange: ((SplatViewerCADPlacement) -> Void)?
+    /// A CAD model picked with Import is being read.
+    @Published private(set) var isLoadingCAD = false
+    /// Loads a CAD model into the open scene (replacing any). Set by the renderer.
+    var onLoadCAD: ((URL) -> Void)?
+    /// A quarter-turn button for the selected CAD model. Set by the renderer.
+    var onTurnCAD: ((SplatViewerCADTurn) -> Void)?
+    /// Takes the CAD model out of the scene. Set by the renderer.
+    var onRemoveCAD: (() -> Void)?
+    /// A two-finger twist or trackpad rotation of the selected CAD model, in radians clockwise on
+    /// screen since the last call, and its end. Set by the renderer.
+    var onTwistCAD: ((Float) -> Void)?
+    var onTwistCADEnd: (() -> Void)?
+
+    func setLoadingCAD(_ loading: Bool) {
+        isLoadingCAD = loading
+        if loading { cadLoadError = nil }
+    }
+
+    func setCADLoadError(_ message: String) {
+        cadLoadError = message
+    }
+
+    var cadPlacement: SplatViewerCADPlacement {
+        SplatViewerCADPlacement(offset: cadOffset, rotation: cadRotation)
+    }
+
+    /// CAD file coordinates to world.
+    var cadTransform: simd_float4x4 {
+        func shift(_ v: SIMD3<Float>) -> simd_float4x4 {
+            simd_float4x4(SIMD4(1, 0, 0, 0), SIMD4(0, 1, 0, 0), SIMD4(0, 0, 1, 0), SIMD4(v, 1))
+        }
+        return shift(cadOffset + cadPivot) * simd_float4x4(cadRotation) * shift(-cadPivot)
+    }
+
+    /// The model's bounding box as a Crop box, so it is handled the same way.
+    var cadRegion: SplatViewerCropRegion {
+        SplatViewerCropRegion(
+            shape: .box, center: cadPivot + cadOffset, halfExtent: cadHalfExtent, rotation: cadRotation, radius: 1)
+    }
+
+    /// Places the model where a dragged `cadRegion` now is.
+    func setCADRegion(_ region: SplatViewerCropRegion) {
+        cadOffset = region.center - cadPivot
+        cadRotation = region.rotation
+    }
+
+    /// Takes the CAD model out of the scene (the renderer drops its layer).
+    func clearCAD() {
+        isCADSelected = false
+        hasCAD = false
+        cadLoadError = nil
+        cadOffset = .zero
+        cadRotation = simd_quatf(ix: 0, iy: 0, iz: 0, r: 1)
+    }
+
+    /// Sets up the CAD layer from its bounding box, starting from a saved placement or else shifted
+    /// by `offset` and unturned.
+    func setCAD(
+        pivot: SIMD3<Float>, halfExtent: SIMD3<Float>, offset: SIMD3<Float>, saved: SplatViewerCADPlacement? = nil
+    ) {
+        hasCAD = true
+        cadPivot = pivot
+        cadHalfExtent = pointwiseMax(halfExtent, SIMD3(repeating: SplatViewerCropRegion.minimumSize))
+        cadOffset = saved?.offset ?? offset
+        cadRotation = saved.map { simd_quatf(vector: $0.rotation) } ?? simd_quatf(ix: 0, iy: 0, iz: 0, r: 1)
+    }
+
     // MARK: Measurement
 
     /// Measure mode. While on, taps place measurement points and the placed segments are shown
@@ -155,7 +258,7 @@ final class SplatViewerModel: ObservableObject {
     /// next time it is turned on.
     @Published var isMeasuring = false {
         didSet {
-            if isMeasuring { isCropping = false; isRemovingFloaters = false }
+            if isMeasuring { isCropping = false; isColoring = false; isRemovingFloaters = false; isCADSelected = false }
             onNeedsRedraw?()
         }
     }
@@ -203,7 +306,7 @@ final class SplatViewerModel: ObservableObject {
     /// orbits. Turning it on turns measure mode off.
     @Published var isCropping = false {
         didSet {
-            if isCropping { isMeasuring = false; isColoring = false; isRemovingFloaters = false }
+            if isCropping { isMeasuring = false; isColoring = false; isRemovingFloaters = false; isCADSelected = false }
             if !isCropping { cropProjection.setLasso([]) }
             onCropSelectionRefresh?()
             onNeedsRedraw?()
@@ -213,10 +316,11 @@ final class SplatViewerModel: ObservableObject {
     @Published private(set) var cropShape: SplatViewerCropShape = .box
     /// true keeps the splats inside the region; false removes them.
     @Published var cropKeepsInside = true
-    /// Colour panel open. It, Crop and Floaters are never on together: opening one closes the others.
+    /// Colour panel open. Measure, Color, Crop and Floaters are never on together: opening one
+    /// closes the others, so only one panel sits over the view.
     @Published var isColoring = false {
         didSet {
-            if isColoring { isCropping = false; isRemovingFloaters = false }
+            if isColoring { isMeasuring = false; isCropping = false; isRemovingFloaters = false; isCADSelected = false }
             onNeedsRedraw?()
         }
     }
@@ -280,7 +384,7 @@ final class SplatViewerModel: ObservableObject {
     @Published var isRemovingFloaters = false {
         didSet {
             guard isRemovingFloaters != oldValue else { return }
-            if isRemovingFloaters { isMeasuring = false; isCropping = false; isColoring = false }
+            if isRemovingFloaters { isMeasuring = false; isCropping = false; isColoring = false; isCADSelected = false }
             onFloaterModeChange?(isRemovingFloaters)
             onNeedsRedraw?()
         }
@@ -402,3 +506,16 @@ final class SplatViewerModel: ObservableObject {
 }
 
 #endif // os(iOS) || os(macOS)
+
+/// Where a CAD model sits in the scene, relative to its file coordinates (metres, Y up): a turn
+/// about its center, then a shift. Saved by the app beside the model.
+public struct SplatViewerCADPlacement: Codable, Equatable, Sendable {
+    public var offset: SIMD3<Float>
+    /// Quaternion (ix, iy, iz, r).
+    public var rotation: SIMD4<Float>
+
+    public init(offset: SIMD3<Float>, rotation: simd_quatf) {
+        self.offset = offset
+        self.rotation = rotation.vector
+    }
+}

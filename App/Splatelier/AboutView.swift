@@ -4,6 +4,7 @@
 // About sheet: version, links and the open source licenses the app ships with.
 
 import SwiftUI
+import UIKit
 import Trainer
 
 /// The version the app shows, read from Info.plist (the release version). The build number
@@ -37,7 +38,18 @@ private let licenseEntries: [LicenseEntry] = [
     LicenseEntry(name: "Swift Numerics", license: "Apache-2.0", file: "swift-numerics"),
     LicenseEntry(name: "spz-swift", license: "MIT", file: "spz-swift"),
     LicenseEntry(name: "MetalSplatter", license: "MIT", file: "MetalSplatter"),
+    LicenseEntry(name: "cadmpeg", license: "Apache-2.0", file: "cadmpeg"),
+    // The experimental wide-angle loop closure: its matcher is built in.
+    LicenseEntry(name: "FlexGlue", license: "MIT", file: "FlexGlue"),
 ]
+
+/// The licenses to list: the DINOv3 License covers the descriptor's weights, which only a build with
+/// the FlexGlue models bundled carries (never the App Store version).
+@MainActor private var shownLicenseEntries: [LicenseEntry] {
+    licenseEntries + (TrainingViewModel.bundledWideLoopModels != nil
+        ? [LicenseEntry(name: "DINOv3 (FlexGlue's descriptor)", license: "DINOv3 License", file: "DINOv3")]
+        : [])
+}
 
 struct AboutView: View {
     @Environment(\.dismiss) private var dismiss
@@ -50,16 +62,18 @@ struct AboutView: View {
             List {
                 header
                     .listRowBackground(Color.clear)
-                Section {
-                    Link(destination: repoURL) {
-                        Label("Source code on GitHub", systemImage: "chevron.left.forwardslash.chevron.right")
-                    }
-                    Link(destination: issuesURL) {
-                        Label("Report a problem", systemImage: "exclamationmark.bubble")
+                if AppFeatures.projectLinks {
+                    Section {
+                        Link(destination: repoURL) {
+                            Label("Source code on GitHub", systemImage: "chevron.left.forwardslash.chevron.right")
+                        }
+                        Link(destination: issuesURL) {
+                            Label("Report a problem", systemImage: "exclamationmark.bubble")
+                        }
                     }
                 }
-                Section("Open source licenses") {
-                    ForEach(licenseEntries) { entry in
+                Section {
+                    ForEach(shownLicenseEntries) { entry in
                         NavigationLink {
                             LicenseTextView(entry: entry)
                         } label: {
@@ -69,6 +83,13 @@ struct AboutView: View {
                                 Text(entry.license).foregroundStyle(.secondary)
                             }
                         }
+                    }
+                } header: {
+                    Text("Open source licenses")
+                } footer: {
+                    if TrainingViewModel.bundledWideLoopModels != nil {
+                        Text("The wide-angle loop closure's models include DINOv3, used under the DINOv3 License. "
+                             + "Extracting, decompiling or reverse-engineering the bundled models is not permitted.")
                     }
                 }
             }
@@ -91,7 +112,7 @@ struct AboutView: View {
             Text(AppVersion.full)
                 .font(.subheadline.monospacedDigit())
                 .foregroundStyle(.secondary)
-            Text("Capture, train and view 3D Gaussian splats on your iPhone.")
+            Text("Capture, train and view 3D Gaussian splats on your \(UIDevice.current.model).")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

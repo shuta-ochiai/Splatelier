@@ -18,6 +18,7 @@ struct SplatLibraryView: View {
         let mainURL: URL        // GS / imported PLY (the subject of thumbnail and sharing)
         let seedURL: URL?       // seed point cloud + camera marker PLY
         let meshURL: URL?       // Mesh OBJ (`_mesh.obj`, if a mesh was generated)
+        let cadURL: URL?        // CAD model added by hand (`<base>.cad.step`), shown in the scene
         let name: String?       // Display name (<base>.name.json)
         let settings: TrainingSettingsRecord?  // <base>.settings.json
         let metrics: CaptureMetricsRecord?     // <base>.metrics.json
@@ -39,7 +40,12 @@ struct SplatLibraryView: View {
     }
 
     @State private var items: [CaptureItem] = []
+    /// Width of the list, to center its column in a wide window.
+    @State private var listWidth: CGFloat = 0
     @State private var importing = false
+    /// The capture a CAD model is being picked for ("Add CAD model").
+    @State private var cadTarget: CaptureItem?
+    @State private var importingCAD = false
     @State private var errorMessage: String?
     @State private var selectMode = false
     @State private var selection = Set<String>()
@@ -93,6 +99,11 @@ struct SplatLibraryView: View {
                     }
                 }
                 .listStyle(.plain)
+                // In a wide iPad window the cards keep a readable width, centered.
+                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { listWidth = $0 }
+                .contentMargins(
+                    .horizontal, max(0, (listWidth - DesignSystem.readableWidth) / 2),
+                    for: .scrollContent)
             }
         }
         .navigationTitle("Library")
@@ -104,6 +115,27 @@ struct SplatLibraryView: View {
         .refreshable { reload() }
         .sheet(item: $shareRequest) { request in
             ShareOptionsSheet(entries: request.entries)
+        }
+        // A second importer can't sit on the same view, so the CAD picker hangs off a background.
+        .background {
+            Color.clear.fileImporter(
+                isPresented: $importingCAD,
+                allowedContentTypes: [CADModelFiles.stepType],
+                allowsMultipleSelection: false
+            ) { result in
+                defer { cadTarget = nil }
+                switch result {
+                case .success(let urls):
+                    guard let src = urls.first, let item = cadTarget else { return }
+                    do {
+                        try CADModelFiles.attach(src, to: item.mainURL)
+                        reload()
+                    } catch {
+                        errorMessage = error.localizedDescription
+                    }
+                case .failure(let err): errorMessage = err.localizedDescription
+                }
+            }
         }
         .fileImporter(
             isPresented: $importing,
@@ -177,6 +209,7 @@ struct SplatLibraryView: View {
             items.append(SplatViewerShareItem(title: "Mesh (OBJ)", systemImage: "triangle", url: mesh))
         }
         // The training log and the mesh log go out together as "Log".
+        guard AppFeatures.developerInfo else { return items }
         let base = item.mainURL.deletingPathExtension()
         let logs = [base.appendingPathExtension("log"), URL(fileURLWithPath: base.path + "_mesh.log")]
             .filter { FileManager.default.fileExists(atPath: $0.path) }
@@ -205,8 +238,19 @@ struct SplatLibraryView: View {
                 NavigationLink {
                     SplatViewerScreen(
                         url: item.mainURL,
-                        seedURL: item.seedURL,
+                        // The seed points and capture cameras are for development.
+                        seedURL: AppFeatures.developerInfo ? item.seedURL : nil,
                         meshURL: item.meshURL,
+                        // Without these the viewer has no CAD layer and no Import button.
+                        cadURL: item.cadURL,
+                        cadPlacement: AppFeatures.cadModels
+                            ? CADModelFiles.loadPlacement(for: item.mainURL) : nil,
+                        onCADPlacementChange: AppFeatures.cadModels
+                            ? { CADModelFiles.savePlacement($0, for: item.mainURL) } : nil,
+                        onImportCAD: AppFeatures.cadModels
+                            ? { try CADModelFiles.attach($0, to: item.mainURL) } : nil,
+                        onRemoveCAD: AppFeatures.cadModels
+                            ? { CADModelFiles.remove(for: item.mainURL) } : nil,
                         name: item.name,
                         shareItems: shareItems(for: item),
                         cropExport: SplatExportShare.cropExport,
@@ -253,7 +297,24 @@ struct SplatLibraryView: View {
         } label: {
             Label("Share", systemImage: "square.and.arrow.up")
         }
-        if let record = item.settings {
+        // A CAD model (STEP) shown in the scene, to be moved into place in the viewer.
+        if AppFeatures.cadModels {
+            Button {
+                cadTarget = item
+                importingCAD = true
+            } label: {
+                Label(item.cadURL == nil ? "Add CAD model" : "Replace CAD model", systemImage: "cube.transparent")
+            }
+            if item.cadURL != nil {
+                Button(role: .destructive) {
+                    CADModelFiles.remove(for: item.mainURL)
+                    reload()
+                } label: {
+                    Label("Remove CAD model", systemImage: "cube.transparent")
+                }
+            }
+        }
+        if AppFeatures.developerInfo, let record = item.settings {
             Button {
                 settingsSheet = SettingsSheetData(
                     id: item.id, title: item.displayName, record: record)
@@ -318,7 +379,7 @@ struct SplatLibraryView: View {
         }
     }
 
-    /// Show the sibling `.png` as a thumbnail (saved in sensor orientation, so rotate clockwise).
+    /// Show the sibling `.png` as a thumbnail (saved in sensor orientation, so turned upright).
     /// If none (imported PLY etc.), a cube placeholder.
     @ViewBuilder
     private func previewImage(for url: URL) -> some View {
@@ -382,12 +443,15 @@ struct SplatLibraryView: View {
                     }
                     Button("Cancel", role: .cancel) { deletingItem = nil }
                 } message: { item in
-                    Text("\(item.displayName) and all its files (PLY, mesh, logs, etc.) will be deleted. This can't be undone.")
+                    Text("\(item.displayName) and all its files (\(Self.relatedFiles)) will be deleted. This can't be undone.")
                 }
                 .position(x: deleteAnchorFrame.midX - origin.x, y: deleteAnchorFrame.midY - origin.y)
         }
         .allowsHitTesting(false)
     }
+
+    /// What deleting a capture removes, as the delete confirmations list it.
+    private static let relatedFiles = AppFeatures.meshGeneration ? "PLY, mesh, logs, etc." : "PLY, logs, etc."
 
     // MARK: - Selection bar
 
@@ -420,7 +484,7 @@ struct SplatLibraryView: View {
                     Button("Delete", role: .destructive) { batchDelete() }
                     Button("Cancel", role: .cancel) {}
                 } message: {
-                    Text("All related files (PLY, mesh, logs, etc.) will also be deleted. This can't be undone.")
+                    Text("All related files (\(Self.relatedFiles)) will also be deleted. This can't be undone.")
                 }
             }
             .padding(.horizontal)
@@ -517,7 +581,8 @@ struct SplatLibraryView: View {
             id: folder.lastPathComponent,
             mainURL: primary,
             seedURL: mainURL != nil ? seedURL : nil,
-            meshURL: meshURL,
+            meshURL: AppFeatures.meshGeneration ? meshURL : nil,
+            cadURL: AppFeatures.cadModels ? CADModelFiles.model(for: primary) : nil,
             name: CaptureMetadataName.load(for: primary),
             settings: TrainingSettingsStore.load(for: primary),
             metrics: CaptureMetricsStore.load(for: primary),
@@ -530,6 +595,7 @@ struct SplatLibraryView: View {
             mainURL: url,
             seedURL: nil,
             meshURL: nil,
+            cadURL: AppFeatures.cadModels ? CADModelFiles.model(for: url) : nil,
             name: CaptureMetadataName.load(for: url),
             settings: TrainingSettingsStore.load(for: url),
             metrics: CaptureMetricsStore.load(for: url),
@@ -663,16 +729,18 @@ private struct TrainingSettingsSheet: View {
 }
 
 private extension UIImage {
-    func rotatedClockwise() -> UIImage {
+    func rotatedClockwise(quarterTurns: Int) -> UIImage {
+        let turns = ((quarterTurns % 4) + 4) % 4
+        guard turns != 0 else { return self }
         let format = UIGraphicsImageRendererFormat()
         format.scale = scale
         format.opaque = false
-        let rotatedSize = CGSize(width: size.height, height: size.width)
+        let rotatedSize = turns == 2 ? size : CGSize(width: size.height, height: size.width)
         return UIGraphicsImageRenderer(size: rotatedSize, format: format).image { context in
             let cgContext = context.cgContext
-            cgContext.translateBy(x: rotatedSize.width, y: 0)
-            cgContext.rotate(by: .pi / 2)
-            draw(in: CGRect(origin: .zero, size: size))
+            cgContext.translateBy(x: rotatedSize.width / 2, y: rotatedSize.height / 2)
+            cgContext.rotate(by: CGFloat(turns) * .pi / 2)
+            draw(in: CGRect(x: -size.width / 2, y: -size.height / 2, width: size.width, height: size.height))
         }
     }
 }
@@ -687,8 +755,59 @@ private enum LibraryThumbnailCache {
             .contentModificationDate else { return nil }
         let key = "\(pngURL.path)#\(modified.timeIntervalSince1970)" as NSString
         if let hit = cache.object(forKey: key) { return hit }
-        guard let image = UIImage(contentsOfFile: pngURL.path)?.rotatedClockwise() else { return nil }
+        // Turned by the source view's pose so world up is at the top (a portrait capture lies on
+        // its side in sensor orientation, a landscape one does not). Without the pose, the
+        // portrait default.
+        let turns = SplatViewerThumbnailOrientation.clockwiseQuarterTurns(siblingOf: pngURL) ?? 1
+        guard let image = UIImage(contentsOfFile: pngURL.path)?.rotatedClockwise(quarterTurns: turns)
+        else { return nil }
         cache.setObject(image, forKey: key)
         return image
+    }
+}
+
+/// A CAD model added to a capture, kept beside its splats as `<base>.cad.step` (or `.stp`), and
+/// where it was placed in the viewer as `<base>.cadplacement.json`. Both start with `<base>.`, so
+/// deleting the capture removes them too.
+private enum CADModelFiles {
+    static let stepType = UTType(importedAs: "org.iso.step", conformingTo: .data)
+
+    private static func base(_ main: URL) -> URL { main.deletingPathExtension() }
+
+    static func model(for main: URL) -> URL? {
+        ["step", "stp"].lazy
+            .map { base(main).appendingPathExtension("cad.\($0)") }
+            .first { FileManager.default.fileExists(atPath: $0.path) }
+    }
+
+    /// Copies the picked file in, replacing any earlier model and its placement, and returns the copy.
+    @discardableResult
+    static func attach(_ src: URL, to main: URL) throws -> URL {
+        let scoped = src.startAccessingSecurityScopedResource()
+        defer { if scoped { src.stopAccessingSecurityScopedResource() } }
+        remove(for: main)
+        let ext = src.pathExtension.lowercased() == "stp" ? "stp" : "step"
+        let dest = base(main).appendingPathExtension("cad.\(ext)")
+        try FileManager.default.copyItem(at: src, to: dest)
+        return dest
+    }
+
+    static func remove(for main: URL) {
+        if let model = model(for: main) { try? FileManager.default.removeItem(at: model) }
+        try? FileManager.default.removeItem(at: placementURL(for: main))
+    }
+
+    private static func placementURL(for main: URL) -> URL {
+        base(main).appendingPathExtension("cadplacement.json")
+    }
+
+    static func loadPlacement(for main: URL) -> SplatViewerCADPlacement? {
+        guard let data = try? Data(contentsOf: placementURL(for: main)) else { return nil }
+        return try? JSONDecoder().decode(SplatViewerCADPlacement.self, from: data)
+    }
+
+    static func savePlacement(_ placement: SplatViewerCADPlacement, for main: URL) {
+        guard let data = try? JSONEncoder().encode(placement) else { return }
+        try? data.write(to: placementURL(for: main), options: .atomic)
     }
 }

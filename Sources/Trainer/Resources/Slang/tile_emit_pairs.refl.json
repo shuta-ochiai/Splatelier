@@ -293,6 +293,212 @@
                     "scalarType": "int32"
                 }
             }
+        },
+        {
+            "name": "sc_flatten",
+            "binding": {"kind": "constantBuffer", "index": 24},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "int32"
+                }
+            }
+        },
+        {
+            "name": "sc_offsets",
+            "binding": {"kind": "constantBuffer", "index": 25},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "int32"
+                }
+            }
+        },
+        {
+            "name": "sc_means2d",
+            "binding": {"kind": "constantBuffer", "index": 26},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float32"
+                }
+            }
+        },
+        {
+            "name": "sc_radii",
+            "binding": {"kind": "constantBuffer", "index": 27},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "int32"
+                }
+            }
+        },
+        {
+            "name": "sc_conics",
+            "binding": {"kind": "constantBuffer", "index": 28},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float32"
+                }
+            }
+        },
+        {
+            "name": "sc_opacities",
+            "binding": {"kind": "constantBuffer", "index": 29},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float32"
+                }
+            }
+        },
+        {
+            "name": "sc_dims",
+            "binding": {"kind": "constantBuffer", "index": 30},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "int32"
+                }
+            }
+        },
+        {
+            "name": "sc_counts",
+            "binding": {"kind": "constantBuffer", "index": 31},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "access": "readWrite",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "int32"
+                }
+            }
+        },
+        {
+            "name": "sw_flatten",
+            "binding": {"kind": "constantBuffer", "index": 32},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "int32"
+                }
+            }
+        },
+        {
+            "name": "sw_offsets",
+            "binding": {"kind": "constantBuffer", "index": 33},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "int32"
+                }
+            }
+        },
+        {
+            "name": "sw_means2d",
+            "binding": {"kind": "constantBuffer", "index": 34},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float32"
+                }
+            }
+        },
+        {
+            "name": "sw_radii",
+            "binding": {"kind": "constantBuffer", "index": 35},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "int32"
+                }
+            }
+        },
+        {
+            "name": "sw_conics",
+            "binding": {"kind": "constantBuffer", "index": 36},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float32"
+                }
+            }
+        },
+        {
+            "name": "sw_opacities",
+            "binding": {"kind": "constantBuffer", "index": 37},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "float32"
+                }
+            }
+        },
+        {
+            "name": "sw_offsets8",
+            "binding": {"kind": "constantBuffer", "index": 38},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "int32"
+                }
+            }
+        },
+        {
+            "name": "sw_dims",
+            "binding": {"kind": "constantBuffer", "index": 39},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "int32"
+                }
+            }
+        },
+        {
+            "name": "sw_flatten8",
+            "binding": {"kind": "constantBuffer", "index": 40},
+            "type": {
+                "kind": "resource",
+                "baseShape": "structuredBuffer",
+                "access": "readWrite",
+                "resultType": {
+                    "kind": "scalar",
+                    "scalarType": "int32"
+                }
+            }
         }
     ],
     "entryPoints": [
@@ -410,6 +616,74 @@
                 {
                     "name": "tile_offsets",
                     "binding": {"kind": "constantBuffer", "index": 23, "used": 0}
+                },
+                {
+                    "name": "sc_flatten",
+                    "binding": {"kind": "constantBuffer", "index": 24, "used": 0}
+                },
+                {
+                    "name": "sc_offsets",
+                    "binding": {"kind": "constantBuffer", "index": 25, "used": 0}
+                },
+                {
+                    "name": "sc_means2d",
+                    "binding": {"kind": "constantBuffer", "index": 26, "used": 0}
+                },
+                {
+                    "name": "sc_radii",
+                    "binding": {"kind": "constantBuffer", "index": 27, "used": 0}
+                },
+                {
+                    "name": "sc_conics",
+                    "binding": {"kind": "constantBuffer", "index": 28, "used": 0}
+                },
+                {
+                    "name": "sc_opacities",
+                    "binding": {"kind": "constantBuffer", "index": 29, "used": 0}
+                },
+                {
+                    "name": "sc_dims",
+                    "binding": {"kind": "constantBuffer", "index": 30, "used": 0}
+                },
+                {
+                    "name": "sc_counts",
+                    "binding": {"kind": "constantBuffer", "index": 31, "used": 0}
+                },
+                {
+                    "name": "sw_flatten",
+                    "binding": {"kind": "constantBuffer", "index": 32, "used": 0}
+                },
+                {
+                    "name": "sw_offsets",
+                    "binding": {"kind": "constantBuffer", "index": 33, "used": 0}
+                },
+                {
+                    "name": "sw_means2d",
+                    "binding": {"kind": "constantBuffer", "index": 34, "used": 0}
+                },
+                {
+                    "name": "sw_radii",
+                    "binding": {"kind": "constantBuffer", "index": 35, "used": 0}
+                },
+                {
+                    "name": "sw_conics",
+                    "binding": {"kind": "constantBuffer", "index": 36, "used": 0}
+                },
+                {
+                    "name": "sw_opacities",
+                    "binding": {"kind": "constantBuffer", "index": 37, "used": 0}
+                },
+                {
+                    "name": "sw_offsets8",
+                    "binding": {"kind": "constantBuffer", "index": 38, "used": 0}
+                },
+                {
+                    "name": "sw_dims",
+                    "binding": {"kind": "constantBuffer", "index": 39, "used": 0}
+                },
+                {
+                    "name": "sw_flatten8",
+                    "binding": {"kind": "constantBuffer", "index": 40, "used": 0}
                 }
             ]
         }

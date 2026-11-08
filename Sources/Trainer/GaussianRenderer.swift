@@ -153,6 +153,30 @@ public final class GaussianRenderer {
         return k
     }
 
+    /// The projection alone (activations and project_to_screen), for benchmarks.
+    public func projectOnly(model: GaussianModel, camera: Camera) -> [MLXArray] {
+        let n = model.count
+        let scales = model.scales()
+        let opacities = model.opacities()
+        let imageDims = MLXArray([Float(camera.width), Float(camera.height)], [2])
+        return projectFwd(
+            [model.means, model.quats, scales, camera.viewmat, camera.intrinsics,
+             imageDims, opacities, MLXArray([Int32(n)], [1])],
+            grid: (((n + 63) / 64) * 64, 1, 1), threadGroup: (64, 1, 1),
+            outputShapes: [[n * 2], [n * 3], [n], [n * 2]],
+            outputDTypes: [.float32, .float32, .float32, .int32])
+    }
+
+    /// The projection and tile binning, for benchmarks.
+    public func projectAndBin(model: GaussianModel, camera: Camera) -> TileBinningResult {
+        let n = model.count
+        let p = projectOnly(model: model, camera: camera)
+        return TileBinning.bin(
+            means2d: p[0].reshaped([n, 2]), radii: p[3].reshaped([n, 2]), depths: p[2],
+            conics: p[1].reshaped([n, 3]), opacities: model.opacities(),
+            imageWidth: camera.width, imageHeight: camera.height, tileSize: camera.tileSize)
+    }
+
     /// Renders `model` from `camera` and returns color, alpha, and the cache for backward.
     public func forward(
         model: GaussianModel, camera: Camera, shDegree: Int = 3

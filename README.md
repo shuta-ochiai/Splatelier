@@ -9,6 +9,14 @@
   <img alt="Swift 6.0" src="https://img.shields.io/badge/Swift-6.0-orange?logo=swift&logoColor=white">
 </p>
 
+<div align="center">
+  <video src="https://github.com/user-attachments/assets/2d5c3b19-049a-4d50-9703-6053165e7e94" width="100%"></video>
+</div>
+
+<p align="center">
+  <a href="https://shuta-ochiai.github.io/Splatelier/"><b>Project page</b></a>: scenes trained on an iPhone that you can orbit in the browser, and short clips of capture and editing.
+</p>
+
 **Capture, train and view 3D Gaussian Splats entirely on your iPhone.**
 
 Splatelier (from *splat* + *atelier*) turns a short walk around an object or a room into a 3D
@@ -33,6 +41,8 @@ and compiled to Metal.
 - **Built-in viewer**: orbit the result, choose the layers to show, measure distances, grade the
   colours, crop the splats with a box, sphere or lasso, and select and delete floaters. The Library
   lists your captures and opens `.ply`, `.splat` and `.spz` files you import.
+- **CAD models**: import a STEP model into a capture and place it by hand: drag it (it settles on
+  floors and tables), turn it with its rings, a two-finger twist or quarter-turn buttons.
 - **Export**: share the splats as a standard 3DGS PLY, compressed PLY, SPZ, `.splat`, glTF (GLB), SOG
   or OpenUSD (`.usda`), and the mesh (OBJ) generated from the trained scene.
 - **Mac tools**: retrain a capture from the app on a Mac, train and evaluate on COLMAP scenes, and
@@ -40,9 +50,11 @@ and compiled to Metal.
 
 ## Requirements
 
-- An iPhone or iPad with iOS 18 or later. ARKit capture and training need a real device. LiDAR
-  is not required; on devices that have it, an experimental switch on the Capture screen records
-  LiDAR depth as well and uses it for the seed points (off by default).
+- An iPhone or iPad with iOS 18 or later. ARKit capture and training need a real device, and
+  training needs an A14 chip or newer (iPhone 12, iPad Air 4th generation and later), whose GPU has
+  the SIMD group operations the training kernels use. LiDAR is not required; on devices that have
+  it, an experimental switch on the Capture screen records LiDAR depth as well and uses it for the
+  seed points (off by default).
 - An Apple Silicon Mac with macOS 15 or later and Xcode 16 (iOS 18 SDK) to build the app.
 - An Apple account added to Xcode as a development team, to sign the app.
 
@@ -63,6 +75,17 @@ and compiled to Metal.
 3. Turn on Developer Mode on the device (*Settings → Privacy & Security → Developer Mode*).
 4. Select the **Splatelier** scheme and your device, and run. The scheme builds in Release, because
    training in Debug is much slower.
+
+The **Splatelier** scheme builds the app with every feature. The **Splatelier App Store** scheme
+builds the version for the App Store (the `AppStore` configuration, with the `APP_STORE` flag): it
+stops at the trained splats, with no mesh after training and no CAD models in the viewer, and
+leaves out the experimental LiDAR depth and wide-angle loop closure (its models are not bundled),
+validation datasets and the information that is there for development, and trains with the default
+iterations and Gaussian cap (`App/Splatelier/AppFeatures.swift`). Archive with that scheme for an App
+Store upload.
+
+On iPhone the app is portrait only. On iPad it takes every orientation and any window size, as
+iPadOS requires; columns of cards and buttons stay at a readable width in a wide window.
 
 ## Using the app
 
@@ -95,6 +118,7 @@ eval | compare | render                                   evaluate on a COLMAP s
 train-capture <dataset.valset> <output.ply> [iterations]  retrain an app capture with the app's
                                                           settings (MESH_OBJ=<path> also writes a mesh)
 view | capture | stats | cull                             viewer and PLY tools
+view-cad <model.step> [splats.ply]                        place a STEP model over splats in a window
 convert <in.ply> <out.ext> [shDegree]                     convert a PLY to compressed PLY, SPZ, .splat,
                                                           GLB, SOG or OpenUSD (.usda)
 ```
@@ -105,8 +129,12 @@ convert <in.ply> <out.ext> [shDegree]                     convert a PLY to compr
   metallib and runs the tool.
 - GPU tests and training need Xcode's toolchain (`xcodebuild`), not plain `swift test`, because of
   MLX's Metal shaders.
-- The viewer commands (`view`, `capture`) need `scripts/build-metalsplatter-metallib.sh [debug|release]`
-  first.
+- The viewer commands (`view`, `capture`, `view-cad`) need
+  `scripts/build-metalsplatter-metallib.sh [debug|release]` first.
+- STEP import links a Rust static library, `native/stepmesh` (built on
+  [cadmpeg](https://github.com/cadmpeg/cadmpeg), Apache-2.0). Build its `StepMesh.xcframework` once
+  with `scripts/build-stepmesh.sh` before building the package or the app; it needs Rust 1.97.1 with
+  the `aarch64-apple-ios` and `aarch64-apple-ios-sim` targets.
 - The COLMAP integration tests take a local scene:
   `TEST_RUNNER_MST_COLMAP_DIR=$PWD/data/bear make test`.
 
@@ -136,6 +164,24 @@ The launch animation and the capture-guide clips are rendered by `scripts/media/
 (`scripts/media/build_media.sh`; see its [README](scripts/media/README.md)). The videos are checked
 in, so this is only needed to change them.
 
+### Wide-angle loop closure models
+
+The experimental wide-angle loop closure runs FlexGlue's descriptor and transformer as Core ML models
+and its correspondence head in MLX. The models are not in the repository (about 230 MB, and the
+descriptor is a DINOv3 backbone under the [DINOv3 License](App/Splatelier/Licenses/DINOv3.txt)).
+Export them once with `python scripts/flexglue/export_models.py` (needs torch, coremltools,
+safetensors and `pip install git+https://github.com/cvg/FlexGlue`); they go to `App/FlexGlueModels/`,
+which the app build compiles and bundles when present. The app then offers the "Wide-angle loop
+closure (experimental)" switch on the capture screen; without the models it builds and runs as
+before. For `train-capture`, pass the folder as `WIDE_LOOP_MODELS=App/FlexGlueModels`.
+
+For a build that is distributed, put a Core ML model key as `App/FlexGlueModels/flexglue.mlmodelkey`
+(create it in Xcode: open one of the models, Utilities → Encryption Key → Create, with the app's
+team): the models are then bundled encrypted, as the DINOv3 License asks not to invite reverse
+engineering. An encrypted model fetches its key from Apple the first time it loads, so the first
+run with the switch on needs a network connection. Keep the key out of the repository (the folder
+is ignored).
+
 ### Continuous integration
 
 CI builds the package and the iOS app, and checks that the generated Metal kernels match their Slang
@@ -148,8 +194,12 @@ sources. It does not run the tests, because most of them need a Metal GPU: run `
   frames are left out too.
 - **Poses and seed points**: bundle adjustment over ORB and ARKit feature tracks, with loop closures
   between frames that see the same ARKit feature points (the points are eliminated by per-point QR
-  and the reduced system is solved with Accelerate), and dense seed
-  points from multi-view stereo (plane sweep + SGM). With the experimental LiDAR switch, LiDAR depth,
+  and the reduced system is solved with Accelerate); the cameras are held to ARKit's frame-to-frame
+  motion more than to its absolute poses, which its own loop closure can bend; and dense seed
+  points from multi-view stereo (plane sweep + SGM). With the experimental wide-angle loop closure,
+  frames that see the same place from directions 45° or more apart (the two faces of a sign, the
+  start and end of an orbit) are matched with [FlexGlue](https://github.com/cvg/FlexGlue) on the
+  Neural Engine, and a pose graph closes those loops before bundle adjustment. With the experimental LiDAR switch, LiDAR depth,
   reprojected with the refined poses, joins the seed points.
 - **Training**: PocketGS disc-like initialization; a hybrid of MCMC and ImprovedGS+
   long-axis split for densification, whose prune takes faint Gaussians larger than the median; a
@@ -170,6 +220,7 @@ Sources/Trainer/           renderer, trainer, densification, BA and MVS, PLY I/O
 Sources/Capture/           ARKit capture, training from captures, .valset storage
 Sources/SplatViewerKit/    SwiftUI + MetalKit viewer
 Sources/CLI/               command-line tool
+native/stepmesh/           Rust library that converts STEP to USDZ (cadmpeg) for STEP import
 scripts/                   build, release and animation scripts (scripts/media/ renders the animations)
 slang/                     Slang kernel sources
 Vendor/MetalSplatter/      vendored MetalSplatter with local patches
@@ -182,6 +233,11 @@ Splatelier is built on [mlx-swift](https://github.com/ml-explore/mlx-swift) (MIT
 [Slang](https://github.com/shader-slang/slang), and its viewer is a modified copy of
 [MetalSplatter](https://github.com/scier/MetalSplatter) (MIT, see
 [VENDORED.md](Vendor/MetalSplatter/VENDORED.md)).
+
+The experimental wide-angle loop closure runs the models of [FlexGlue](https://github.com/cvg/FlexGlue)
+(MIT; its descriptor backbone is [DINOv3](https://github.com/facebookresearch/dinov3) ConvNeXt-B under
+the DINOv3 License): its transformer is exported in a layout for the Neural Engine and its
+correspondence head is ported to MLX, both from FlexGlue's code.
 
 We referred to the code of these projects while writing our own:
 
@@ -200,6 +256,8 @@ We referred to the code of these projects while writing our own:
 - [splat-transform](https://github.com/playcanvas/splat-transform) (MIT): the compressed PLY, SOG
   and glTF (KHR_gaussian_splatting) export layouts, and the codebook quantization and Morton order
   used by them
+- [ml-ane-transformers](https://github.com/apple/ml-ane-transformers): the channels-first layout and
+  per-head attention of transformers for the Neural Engine
 
 The animations in the app (`scripts/media/`) are drawn with these fonts, all under the SIL Open Font
 License 1.1: [Instrument Serif](https://github.com/Instrument/instrument-serif),
@@ -219,6 +277,8 @@ Main papers:
 - [Semi-Global Matching](https://doi.org/10.1109/TPAMI.2007.1166) and Mobile3DRecon (ISMAR 2020):
   multi-view stereo
 - [Bundle Adjustment — A Modern Synthesis](https://doi.org/10.1007/3-540-44480-7_21)
+- [FlexGlue: Sparse-to-Dense Feature Matching and Visual Disambiguation](https://arxiv.org/abs/2610.32976):
+  wide-angle loop closure (experimental)
 
 <details>
 <summary>All papers whose methods Splatelier implements</summary>
@@ -244,6 +304,13 @@ Main papers:
 | FAST, BRIEF, ORB | Rosten & Drummond 2006; Calonder et al. 2010; Rublee et al. 2011 |
 | Ratio test | Lowe 2004 |
 | Similarity transform alignment | Umeyama 1991 |
+| FlexGlue (wide-angle loop closure) | Lindenberger et al. 2026, arXiv 2610.32976 |
+| DINOv3 (FlexGlue's descriptor backbone) | Siméoni et al. 2025, arXiv 2508.10104 |
+| 1.5-entmax (FlexGlue's correspondence readout) | Peters et al. 2019, ACL |
+| Transformers on the Apple Neural Engine | Apple Machine Learning Research 2022 |
+| Pose graph optimization | Grisetti et al. 2010, IEEE ITS Magazine |
+| RANSAC | Fischler & Bolles 1981 |
+| Sampson error | Sampson 1982 |
 | TSDF fusion | Curless & Levoy 1996 |
 | Surfel fusion | Keller et al. 2013, 3DV |
 | Marching Cubes | Lorensen & Cline 1987 |

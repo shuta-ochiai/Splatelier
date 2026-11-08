@@ -112,6 +112,75 @@ func sphereCenterFollowsTheFinger() {
 }
 
 @Test
+func boxCenterFollowsTheFinger() {
+    let cam = camera()
+    let region = SplatViewerCropRegion(
+        shape: .box, center: .zero, halfExtent: SIMD3(1, 2, 3), radius: 1)
+    let right = cam.axis(0), up = cam.axis(1)
+    let d = pixels(moving: .zero, by: right * 0.2 + up * 0.1, cam)
+    let moved = region.dragged(.center, byPixels: d, camera: cam, viewSize: viewSize)
+    #expect(simd_distance(moved.center, right * 0.2 + up * 0.1) < 0.005)
+    #expect(moved.halfExtent == region.halfExtent)
+    #expect(moved.rotation == region.rotation)
+}
+
+/// A box turns by the CAD model's rings: small full rings beside it at the top right. Dragging one
+/// turns the box about that axis of its own, keeping its center and size, and any point round the
+/// ring can be grabbed.
+@Test
+func boxTurnsByTheModelRingsBesideIt() {
+    let cam = camera()
+    let region = SplatViewerCropRegion(
+        shape: .box, center: SIMD3(1, 0, 0), halfExtent: SIMD3(1, 1, 1), radius: 1)
+    let rings = SplatViewerCADGizmo(box: region, camera: cam)
+    #expect(!region.contains(rings.anchor))
+    for axis in 0..<3 {
+        let touch = screen(rings.ringPoint(axis: axis, angle: 3.5), cam) / viewSize
+        guard let ring = rings.ring(at: touch, camera: cam, viewSize: viewSize, ringReach: 15),
+              case .ring(axis: axis, _) = ring else {
+            Issue.record("expected the ring round axis \(axis)"); continue
+        }
+        let turned = rings.dragged(ring, byPixels: SIMD2(40, 25), camera: cam, viewSize: viewSize)
+        #expect(turned.center == region.center)
+        #expect(turned.halfExtent == region.halfExtent)
+        var e = SIMD3<Float>.zero
+        e[axis] = 1
+        // Turned about that axis, which stays where it was.
+        #expect(abs(turned.rotation.angle) > 1e-3)
+        #expect(simd_distance(turned.rotation.act(e), e) < 1e-4)
+    }
+}
+
+/// A turned box contains what lies inside it, not inside the axis-aligned box around the same
+/// center, and its face handles follow it.
+@Test
+func turnedBoxContainsAlongItsOwnAxes() {
+    var region = SplatViewerCropRegion(
+        shape: .box, center: SIMD3(1, 0, 0), halfExtent: SIMD3(2, 0.5, 0.5), radius: 1)
+    region.rotation = simd_quatf(angle: .pi / 2, axis: SIMD3(0, 0, 1))
+    // The long side now runs along world Y.
+    #expect(region.contains(SIMD3(1, 1.8, 0)))
+    #expect(!region.contains(SIMD3(2.8, 0, 0)))
+    let face = region.handles(camera: camera()).first { $0.handle == .face(axis: 0, side: 1) }!.position
+    #expect(simd_distance(face, SIMD3(1, 2, 0)) < 1e-4)
+}
+
+/// A face of a turned box moves along the box's own axis.
+@Test
+func turnedBoxFaceMovesAlongItsAxis() {
+    let cam = camera()
+    var region = SplatViewerCropRegion(
+        shape: .box, center: .zero, halfExtent: SIMD3(repeating: 1), radius: 1)
+    region.rotation = simd_quatf(angle: .pi / 2, axis: SIMD3(0, 0, 1))
+    let face = SIMD3<Float>(0, 1, 0)
+    let d = pixels(moving: face, by: SIMD3(0, 0.2, 0), cam)
+    let moved = region.dragged(.face(axis: 0, side: 1), byPixels: d, camera: cam, viewSize: viewSize)
+    #expect(abs(moved.halfExtent.x - 1.1) < 0.01)
+    #expect(abs(moved.center.y - 0.1) < 0.01)
+    #expect(abs(moved.center.x) < 1e-4)
+}
+
+@Test
 func initialRegionIgnoresStrayPoints() {
     var positions = (0..<100).map { SIMD3<Float>(Float($0) * 0.01, 0, 0) }
     positions.append(SIMD3(1000, 0, 0))

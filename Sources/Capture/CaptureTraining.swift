@@ -219,7 +219,7 @@ public enum CaptureTraining {
     public static func train(
         geometry: CaptureGeometry,
         iterations: Int = 500,
-        tileSize: Int = 16,
+        tileSize: Int = AppPreset.tileSize,
         meansLR: Float = 1.6e-4,
         logEvery: Int = 50,
         seed: UInt64 = 0,
@@ -283,6 +283,8 @@ public enum CaptureTraining {
         // Resolution scale num/den of the fine phase ((1,1) = full). For reducing heat in the fine
         // phase.
         fineResample: (num: Int, den: Int) = AppPreset.fineResample,
+        // The last fraction of the iterations at num/den instead of `fineResample` (nil: none).
+        finalResample: (fraction: Float, num: Int, den: Int)? = AppPreset.finalResample,
         outputPLY: URL? = nil,
         thumbnailPNG: URL? = nil,
         // Write the pre-training seed point cloud + camera poses to a PLY for inspection. nil is a
@@ -419,6 +421,7 @@ public enum CaptureTraining {
             coarseToFineFactor: coarseToFineFactor,
             coarseToFineFraction: coarseToFineFraction,
             fineResample: fineResample,
+            finalResample: finalResample,
             // Bring the SH degree warm-up forward so degree 1 takes effect from about 25% of
             // training.
             useEarlySH: true,

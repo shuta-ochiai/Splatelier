@@ -166,6 +166,32 @@ func datasetStoreRoundTripsCameraMotion() throws {
     #expect(CameraMotion.summary(of: [base]) == nil)
 }
 
+/// The streamed capture-time pose round-trips through the dataset and survives a pose change;
+/// frames without one load without it.
+@Test
+func datasetStoreRoundTripsCaptureViewmat() throws {
+    let base = datasetFrame(index: 0, width: 4, height: 4)
+    var stream = base.viewmat
+    stream[3] += 0.1   // the anchor moved 10 cm after the frame was taken
+    let frame = CapturedFrame(
+        image: base.image, viewmat: base.viewmat, intrinsics: base.intrinsics,
+        width: base.width, height: base.height, timestamp: base.timestamp,
+        anchorIdentifier: base.anchorIdentifier, captureViewmat: stream
+    )
+    let scene = CapturedScene(frames: [frame, datasetFrame(index: 1, width: 4, height: 4)], sparsePoints: [])
+    let root = FileManager.default.temporaryDirectory
+        .appendingPathComponent("dataset_stream_\(UUID().uuidString)")
+    let dir = root.appendingPathComponent("capture_test.dataset")
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    try CaptureDatasetStore.save(scene, to: dir)
+    let loaded = try CaptureDatasetStore.load(from: dir)
+    #expect(loaded.frames[0].captureViewmat == stream)
+    #expect(loaded.frames[0].viewmat == base.viewmat)
+    #expect(loaded.frames[1].captureViewmat == nil)
+    #expect(loaded.frames[0].withViewmat(stream).captureViewmat == stream)
+}
+
 @Test
 func datasetStoreRoundTripsFeatureObservations() throws {
     // ARKit feature point observation IDs (including UInt64 beyond JSON number precision) and

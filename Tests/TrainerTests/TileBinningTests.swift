@@ -218,3 +218,23 @@ func tileBinningKeepsOrderOfCloseDepths() {
     )
     #expect(result.flattenIds.asArray(Int32.self) == [1, 2, 0])
 }
+
+@Test
+func tileBinningFallbackArgSortsOrderKeys() {
+    // The fallbacks used where MLX's argSort is wrong (as on an A14): MPSGraph's (with its padding to
+    // a multiple of `sizeQuantum`) and the CPU's give a permutation that sorts the keys, ties and
+    // keys equal to the padding included.
+    var rng = SystemRandomNumberGenerator()
+    for n in [1, 7, 1000, 5000, 70_000, MPSArgSort.sizeQuantum] {
+        var keys = (0..<n).map { _ in Int32(truncatingIfNeeded: rng.next() % 5000) }
+        keys[n / 2] = Int32.max
+        let arr = MLXArray(keys, [n])
+        #expect(ArgSortCheck.sorts(keys, by: MPSArgSort.cpuArgSort(arr).asArray(Int32.self)))
+        if let mps = MPSArgSort.shared {
+            #expect(ArgSortCheck.sorts(keys, by: mps.argSort(arr).asArray(Int32.self)))
+        }
+        if TileBinning.gpuArgSortWorks {
+            #expect(ArgSortCheck.sorts(keys, by: TileBinning.argSortKeys(arr).asArray(Int32.self)))
+        }
+    }
+}

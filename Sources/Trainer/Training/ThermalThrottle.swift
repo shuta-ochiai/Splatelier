@@ -32,6 +32,7 @@ public enum ReplayCacheMode: String, Sendable {
             renderer.useReplayCache = true
             log("rasterizer: PocketGS Operator T replay cache enabled (K_max=\(replayKMax))")
         }
+        log("binning: pairs sorted by \(TileBinning.sortMethod)")
     }
 }
 
@@ -52,6 +53,9 @@ struct ThermalGovernor {
     private var thermalState: ProcessInfo.ThermalState {
         TrainingDriver.simulatedThermalState ?? ProcessInfo.processInfo.thermalState
     }
+
+    /// serious or critical: the device is shedding heat, so expensive work should wait.
+    var isHot: Bool { thermalState == .serious || thermalState == .critical }
 
     private mutating func notify(_ s: ThermalThrottleState) {
         guard s != notified else { return }

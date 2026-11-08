@@ -73,6 +73,8 @@ let package = Package(
                 .product(name: "MLX", package: "mlx-swift"),
                 .product(name: "MetalSplatter", package: "MetalSplatter"),
                 .product(name: "SplatIO", package: "MetalSplatter"),
+                // view-cad: the unified viewer (CAD model layer, STEP import) in a Mac window.
+                "SplatViewerKit",
             ]
         ),
         // ARKit-based on-device capture (iOS-only). The real code is guarded by `#if
@@ -94,7 +96,14 @@ let package = Package(
             dependencies: [
                 .product(name: "MetalSplatter", package: "MetalSplatter"),
                 .product(name: "SplatIO", package: "MetalSplatter"),
+                "StepMesh",
             ]
+        ),
+        // STEP import: native/stepmesh (Rust, cadmpeg, Apache-2.0) converts STEP to USDZ.
+        // Build the xcframework with scripts/build-stepmesh.sh.
+        .binaryTarget(
+            name: "StepMesh",
+            path: "native/stepmesh/StepMesh.xcframework"
         ),
         .testTarget(
             name: "TrainerTests",
