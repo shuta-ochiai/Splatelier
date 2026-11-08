@@ -164,6 +164,13 @@ which the app build compiles and bundles when present. The app then offers the "
 closure (experimental)" switch on the capture screen; without the models it builds and runs as
 before. For `train-capture`, pass the folder as `WIDE_LOOP_MODELS=App/FlexGlueModels`.
 
+For a build that is distributed, put a Core ML model key as `App/FlexGlueModels/flexglue.mlmodelkey`
+(create it in Xcode: open one of the models, Utilities → Encryption Key → Create, with the app's
+team): the models are then bundled encrypted, as the DINOv3 License asks not to invite reverse
+engineering. An encrypted model fetches its key from Apple the first time it loads, so the first
+run with the switch on needs a network connection. Keep the key out of the repository (the folder
+is ignored).
+
 ### Continuous integration
 
 CI builds the package and the iOS app, and checks that the generated Metal kernels match their Slang
