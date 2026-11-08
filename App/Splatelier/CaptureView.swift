@@ -134,7 +134,7 @@ struct CaptureView: View {
     private var setupView: some View {
         if let trainer {
             TrainingView(
-                vm: trainer, header: trainingHeader, onClose: endTraining,
+                vm: trainer, header: trainingHeader(trainer), onClose: endTraining,
                 closeDiscards: trainerIsFreshCapture)
         } else if vm.capturedScene != nil {
             // The capture just finished; the training panel appears on the next update.
@@ -178,15 +178,15 @@ struct CaptureView: View {
     }
 
     /// What is being trained, above the settings.
-    private var trainingHeader: AnyView {
+    private func trainingHeader(_ trainer: TrainingViewModel) -> AnyView {
         if trainerIsFreshCapture, let scene = vm.capturedScene {
-            return AnyView(resultCard(scene))
+            return AnyView(resultCard(scene, trainer: trainer))
         }
         return AnyView(
             VStack(alignment: .leading, spacing: 8) {
                 Label(storedName.isEmpty ? "Saved capture" : storedName, systemImage: "flask")
                     .font(.headline)
-                row("Frames", "\(storedFrameCount)")
+                FrameQualityLine(trainer: trainer, frameCount: storedFrameCount)
             }
             .padding()
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -294,14 +294,17 @@ struct CaptureView: View {
 
     // MARK: - subviews
 
-    private func resultCard(_ scene: CapturedScene) -> some View {
+    private func resultCard(_ scene: CapturedScene, trainer: TrainingViewModel) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Label("Capture complete", systemImage: "checkmark.circle.fill")
                 .font(.headline)
                 .foregroundStyle(.green)
-            Text("\(scene.frames.count) frames · \(scene.sparsePoints.count) points")
-                .font(.subheadline.monospacedDigit())
-                .foregroundStyle(.secondary)
+            FrameQualityLine(trainer: trainer, frameCount: scene.frames.count)
+            if AppFeatures.developerInfo {
+                Text("\(scene.sparsePoints.count) ARKit points")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
             // Only what needs attention. The detailed ARKit counters are in the processing log.
             if AppFeatures.developerInfo && vm.diagnostics.relocalizationOccurred {
                 Label("Relocalization observed", systemImage: "exclamationmark.triangle.fill")
@@ -313,18 +316,22 @@ struct CaptureView: View {
                     .font(.caption)
                     .foregroundStyle(.orange)
             }
-            HStack(spacing: 8) {
-                Button { showFrameReview = true } label: {
-                    Label("Review frames", systemImage: "photo.stack")
-                        .font(.subheadline)
-                        .lineLimit(1).minimumScaleFactor(0.8)
-                        .frame(maxWidth: .infinity)
+            if AppFeatures.frameReview || AppFeatures.validationDatasets {
+                HStack(spacing: 8) {
+                    if AppFeatures.frameReview {
+                        Button { showFrameReview = true } label: {
+                            Label("Review frames", systemImage: "photo.stack")
+                                .font(.subheadline)
+                                .lineLimit(1).minimumScaleFactor(0.8)
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.regular)
+                    }
+                    if AppFeatures.validationDatasets { validationSaveButton }
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.regular)
-                if AppFeatures.validationDatasets { validationSaveButton }
+                .padding(.top, 2)
             }
-            .padding(.top, 2)
             if case .failed(let msg) = vm.validationSaveState {
                 Text("Couldn't save: \(msg)").font(.caption).foregroundStyle(.red)
             }
@@ -581,14 +588,6 @@ struct CaptureView: View {
             .cardBackground()
     }
 
-    private func row(_ label: String, _ value: String) -> some View {
-        HStack {
-            Text(label).foregroundStyle(.secondary)
-            Spacer()
-            Text(value).font(.body.monospacedDigit())
-        }
-    }
-
     // MARK: - crash recovery
 
     /// Once after launch, look for an unfinished preserved dataset and offer to resume it.
@@ -817,6 +816,51 @@ private struct ShareSheet: UIViewControllerRepresentable {
         UIActivityViewController(activityItems: items, applicationActivities: nil)
     }
     func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
+}
+
+/// The capture card's line of how many frames pass the quality check that training applies, with
+/// why the others are left out under it. A view of its own so that it follows the training model
+/// (the card is handed to TrainingView as a fixed AnyView).
+private struct FrameQualityLine: View {
+    @ObservedObject var trainer: TrainingViewModel
+    let frameCount: Int
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(Self.headline(trainer.frameQuality, frameCount: frameCount))
+                .font(.subheadline.monospacedDigit())
+                .foregroundStyle(.secondary)
+            if let detail = Self.detail(trainer.frameQuality) {
+                Text(detail)
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .animation(.easeInOut(duration: 0.25), value: trainer.frameQuality)
+        .task {
+            // The check runs on the main actor; let the screen appear first.
+            try? await Task.sleep(for: .milliseconds(150))
+            trainer.reviewFrameQuality()
+        }
+    }
+
+    static func headline(_ quality: TrainingViewModel.FrameQualitySummary?, frameCount: Int) -> String {
+        guard let quality else { return "\(frameCount.formatted()) frames · checking them…" }
+        guard quality.checked else { return "\(quality.total.formatted()) frames" }
+        if quality.kept == quality.total {
+            return "All \(quality.total.formatted()) frames are sharp and well exposed"
+        }
+        return "\(quality.kept.formatted()) of \(quality.total.formatted()) frames are sharp and well exposed"
+    }
+
+    /// Why frames are left out, or nil when none are. A frame can count under both reasons.
+    static func detail(_ quality: TrainingViewModel.FrameQualitySummary?) -> String? {
+        guard let quality, quality.checked, quality.kept < quality.total else { return nil }
+        var reasons: [String] = []
+        if quality.blurred > 0 { reasons.append("\(quality.blurred.formatted()) blurred") }
+        if quality.badlyExposed > 0 { reasons.append("\(quality.badlyExposed.formatted()) too dark or bright") }
+        return reasons.isEmpty ? nil : "Left out of training: " + reasons.joined(separator: " · ")
+    }
 }
 
 #Preview {

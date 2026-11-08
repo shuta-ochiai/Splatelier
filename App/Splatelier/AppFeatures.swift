@@ -18,6 +18,9 @@ enum AppFeatures {
     static let lidarDepth = false
     /// Saving a capture as a validation dataset, and the list of them to train again from.
     static let validationDatasets = false
+    /// Review frames after a capture: every frame with the quality check's verdict. The capture
+    /// card's line of how many frames pass the check stays.
+    static let frameReview = false
     /// What is there for development: GPU memory and loss while training, the training settings
     /// of a capture, the seed points and capture cameras in the viewer, the relocalization notice
     /// after a capture, and sharing the training logs. Off, the files behind them aren't written
@@ -36,6 +39,7 @@ enum AppFeatures {
     static let cadModels = true
     static let lidarDepth = true
     static let validationDatasets = true
+    static let frameReview = true
     static let developerInfo = true
     static let trainingSettings = true
     static let projectLinks = true

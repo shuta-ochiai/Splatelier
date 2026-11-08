@@ -143,7 +143,7 @@ struct TrainingView: View {
         Group {
             // Without type erasure via AnyView the generic metadata gets deep, and on device the
             // SubstGenericParametersFromMetadata recursion overflows the stack.
-            if isIdle {
+            if isIdle && AppFeatures.trainingSettings {
                 ScrollView {
                     VStack(spacing: 16) {
                         header
@@ -161,18 +161,28 @@ struct TrainingView: View {
                 .scrollIndicators(.hidden)
             } else {
                 // What the model looks like now (it sharpens as it trains), then the progress and
-                // the measurements.
+                // the measurements. Without the training settings the card is there before training
+                // too, showing the captured frames, with what is being trained and Start training
+                // under it; it stays in place when training starts, so the screen does not jump.
                 VStack(spacing: 16) {
                     AnyView(previewCard).frame(maxHeight: .infinity)
-                    if lowPowerMode && vm.isBusy { AnyView(lowPowerNotice) }
-                    AnyView(phaseCard)
-                    AnyView(metricsCard)
+                    if isIdle {
+                        header
+                        if lowPowerMode { AnyView(lowPowerNotice) }
+                        if !DeviceSupport.canTrain { AnyView(unsupportedDeviceNotice) }
+                        AnyView(startButton)
+                    } else {
+                        if lowPowerMode && vm.isBusy { AnyView(lowPowerNotice) }
+                        AnyView(phaseCard)
+                        AnyView(metricsCard)
+                    }
                 }
                 .frame(maxWidth: DesignSystem.readableWidth)
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal)
                 .padding(.top, 12)
                 .padding(.bottom, 12)
+                .onAppear { vm.prepareFrameSlides() }
             }
         }
         .overlay(alignment: .top) { thermalPausedBanner }
@@ -270,7 +280,8 @@ struct TrainingView: View {
                     .id(vm.previewCount)
                     .transition(.opacity)
             } else if !vm.frameSlides.isEmpty {
-                // The frames are being prepared: show them, so the card is not empty.
+                // Before training, or while the frames are prepared: show them, so the card is
+                // not empty.
                 FrameSlideshow(images: vm.frameSlides)
             } else {
                 VStack(spacing: 10) {
