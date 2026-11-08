@@ -39,6 +39,9 @@ private let licenseEntries: [LicenseEntry] = [
     LicenseEntry(name: "spz-swift", license: "MIT", file: "spz-swift"),
     LicenseEntry(name: "MetalSplatter", license: "MIT", file: "MetalSplatter"),
     LicenseEntry(name: "cadmpeg", license: "Apache-2.0", file: "cadmpeg"),
+    // The experimental wide-angle loop closure's models, when bundled
+    LicenseEntry(name: "FlexGlue", license: "MIT", file: "FlexGlue"),
+    LicenseEntry(name: "DINOv3 (FlexGlue's descriptor)", license: "DINOv3 License", file: "DINOv3"),
 ]
 
 struct AboutView: View {

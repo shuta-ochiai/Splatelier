@@ -114,6 +114,7 @@ extension CaptureTraining {
         _ scene: CapturedScene, preBaScale: Float,
         orbFastThreshold: Float, orbMaxKeypointsPerFrame: Int, useARKitTracks: Bool,
         lensDistortion: LensDistortionEstimation.Parameters = .disabled,
+        wideLoopModels: URL? = nil,
         log: (String) -> Void
     ) -> CapturedScene {
         let refined = CaptureBA.refine(
@@ -122,6 +123,7 @@ extension CaptureTraining {
             maxKeypointsPerFrame: orbMaxKeypointsPerFrame,
             useARKitTracks: useARKitTracks,
             lensDistortion: lensDistortion,
+            wideLoopModels: wideLoopModels,
             log: log
         )
         let postBaScale = sceneScale(refined.frames)

@@ -15,6 +15,8 @@ struct CaptureView: View {
     @State private var showFrameReview = false
     /// LiDAR depth during capture (LiDAR devices only). Still experimental, so off by default.
     @AppStorage("capture.useLiDAR") private var useLiDAR = false
+    /// Experimental wide-angle loop closure with FlexGlue (offered when the app has its models).
+    @AppStorage(TrainingViewModel.wideLoopClosureKey) private var wideLoopClosure = false
 
     // MARK: training (in this screen)
     /// Set once there is something to train: a fresh capture, a resumed dataset or a validation
@@ -157,6 +159,10 @@ struct CaptureView: View {
                 if !DeviceSupport.canTrain { unsupportedDeviceNotice }
                 if AppFeatures.lidarDepth && ARKitCaptureSession.isLiDARAvailable {
                     Toggle("LiDAR depth (experimental)", isOn: $useLiDAR)
+                        .padding(.horizontal)
+                }
+                if TrainingViewModel.bundledWideLoopModels != nil {
+                    Toggle("Wide-angle loop closure (experimental)", isOn: $wideLoopClosure)
                         .padding(.horizontal)
                 }
                 controlRow

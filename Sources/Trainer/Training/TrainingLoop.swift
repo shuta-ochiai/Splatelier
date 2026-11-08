@@ -493,20 +493,24 @@ extension TrainingDriver {
             var bestPSNR = -Float.infinity
             var bestCoverage: Float = 0
             for view in views {
-                let out = renderer.forward(model: exportModel, camera: view.camera, shDegree: 3)
-                let diff = out.renderColor - view.imageFloat
-                let mse = (diff * diff).mean()
-                let cov = out.renderAlpha.mean()
-                eval(mse, cov)
-                let mseHost = mse.item(Float.self)
-                guard mseHost.isFinite else { continue }
-                let psnr: Float = mseHost > 1e-12 ? -10 * Foundation.log10(mseHost) : 200
-                if psnr > bestPSNR {
-                    eval(out.renderColor)
-                    bestPSNR = psnr
-                    bestCoverage = cov.item(Float.self)
-                    bestColor = out.renderColor
-                    bestView = view
+                // A pool per view, as the training steps drain one per step: nothing autoreleased
+                // while rendering a view outlives it.
+                autoreleasepool {
+                    let out = renderer.forward(model: exportModel, camera: view.camera, shDegree: 3)
+                    let diff = out.renderColor - view.imageFloat
+                    let mse = (diff * diff).mean()
+                    let cov = out.renderAlpha.mean()
+                    eval(mse, cov)
+                    let mseHost = mse.item(Float.self)
+                    guard mseHost.isFinite else { return }
+                    let psnr: Float = mseHost > 1e-12 ? -10 * Foundation.log10(mseHost) : 200
+                    if psnr > bestPSNR {
+                        eval(out.renderColor)
+                        bestPSNR = psnr
+                        bestCoverage = cov.item(Float.self)
+                        bestColor = out.renderColor
+                        bestView = view
+                    }
                 }
             }
             if let bestColor {

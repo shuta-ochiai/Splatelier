@@ -41,6 +41,8 @@ struct TrainingSettingsRecord: Codable {
     let enableAnchorReg: Bool
     let enableMVS: Bool?
     let opticalFlowWeighting: Bool?
+    /// Experimental wide-angle loop closure with FlexGlue. nil in records from before it was added.
+    let wideLoopClosure: Bool?
     let maxShDegree: Int?
     /// App version that trained it, e.g. "0.1.0" ("0.1.0 (1)" in older records, with the build
     /// number). nil in records from before it was added.
@@ -76,6 +78,7 @@ struct TrainingSettingsRecord: Codable {
                 ("Exclude sparse", onOff(!includeSparse)),
                 ("Frame quality filter", onOff(frameQualityFilter)),
                 ("Optical flow weighting", opticalFlowWeighting.map(onOff) ?? "-"),
+                ("Wide-angle loop closure (experimental)", wideLoopClosure.map(onOff) ?? "-"),
             ]),
             ("Advanced", [
                 ("MCMC densification", onOff(mcmcDensification)),
@@ -272,6 +275,19 @@ final class TrainingViewModel: ObservableObject {
         CaptureMetadataName.save(captureName, for: url)
     }
 
+    /// UserDefaults key of the experimental wide-angle loop closure switch (CaptureView).
+    static let wideLoopClosureKey = "training.wideLoopClosure"
+    /// The FlexGlue models bundled with the app (built in only when they were there at build time).
+    static var bundledWideLoopModels: URL? {
+        guard let dir = Bundle.main.resourceURL?.appendingPathComponent("FlexGlue"),
+              FlexGlueMatcher.modelsPresent(in: dir) else { return nil }
+        return dir
+    }
+    /// The model folder when the experimental wide-angle loop closure is switched on.
+    static var wideLoopModels: URL? {
+        UserDefaults.standard.bool(forKey: wideLoopClosureKey) ? bundledWideLoopModels : nil
+    }
+
     /// Launched for an unattended run (`SPLATELIER_AUTOTRAIN`): no naming popup; the capture is
     /// named after its resolution plan instead.
     private let unattended = AppFeatures.developerEnvironment["SPLATELIER_AUTOTRAIN"] != nil
@@ -305,6 +321,7 @@ final class TrainingViewModel: ObservableObject {
         startMetricsTimer(since: startTime)
 
         let captured = scene
+        let wideLoopModels = Self.wideLoopModels
         let cap = gaussianCap
         let totalIter = iterations
         let effectiveIterations = totalIter
@@ -344,6 +361,7 @@ final class TrainingViewModel: ObservableObject {
                 enableAnchorReg: false,
                 enableMVS: true,
                 opticalFlowWeighting: true,
+                wideLoopClosure: wideLoopModels != nil,
                 maxShDegree: GaussianModel.maxShDegree,
                 appVersion: AppVersion.plain
             ),
@@ -424,7 +442,8 @@ final class TrainingViewModel: ObservableObject {
                 logHandler("[MVS mode] MVS dense seed (cost mode m=5, 3-view consistency "
                     + "+ depth averaging, voxel 3mm, window 1), "
                     + "disc-init uncapped, coarse 1/\(CaptureTraining.AppPreset.coarseToFineFactor), strategy Hybrid")
-                let geometry = CaptureTraining.prepareGeometry(scene: captured, log: logHandler)
+                if wideLoopModels != nil { logHandler("[wide-angle loop closure] FlexGlue (experimental): on") }
+                let geometry = CaptureTraining.prepareGeometry(scene: captured, wideLoopModels: wideLoopModels, log: logHandler)
                 geometryCache.geometry = geometry
                 // Unattended A/B runs launched with devicectl can override the resolution plan:
                 // SPLATELIER_FINAL_FRAC=<fraction> of the iterations at the captured resolution

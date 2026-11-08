@@ -51,6 +51,8 @@ func usage() {
     print("         POSE_SOURCE=arkit trains on the ARKit poses instead of the BA poses (BA still runs);")
     print("           POSE_SOURCE=capture starts BA from ARKit's streamed capture-time poses instead of the anchors'")
     print("           final ones (datasets saved since they were recorded)")
+    print("         WIDE_LOOP_MODELS=<folder> turns on the experimental wide-angle loop closure (FlexGlue models")
+    print("           made by scripts/flexglue/export_models.py), as the app's switch does")
     print("         SEED_ALLOC=confidence keeps MVS or LiDAR per cell by confidence and caps per cell")
     print("           (cells SEED_CELL_PX=<pixels across at the seen depth>, default 16; SEED_LIDAR_WEIGHT=<w>, default 1)")
     print("         LIDAR_COLOR=0 leaves the LiDAR seed points mid-grey instead of colored from the images")
@@ -375,6 +377,8 @@ case "train-capture":
             // UNDISTORT_MIN_TRACK=2 also uses points seen in only 2 views for distortion estimation
             // (default 3; for checking when it is rejected for lack of edge observations).
             lensDistortion: .init(minTrackLength: env["UNDISTORT_MIN_TRACK"].flatMap { Int($0) } ?? 3),
+            // WIDE_LOOP_MODELS=<folder> turns on the experimental wide-angle loop closure
+            wideLoopModels: env["WIDE_LOOP_MODELS"].map { URL(fileURLWithPath: $0) },
             // MOTION_BLUR_MAX=<px> overrides the motion blur gate (0 = image-based gates only);
             // FQ_LOG_ALL=1 lists every dropped frame.
             frameQualityFilter: {

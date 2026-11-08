@@ -163,6 +163,9 @@ extension CaptureTraining {
         // Estimate radial lens distortion (k1, k2) in BA; if significant, run MVS and training on
         // undistorted images.
         lensDistortion: LensDistortionEstimation.Parameters = .init(),
+        // Experimental wide-angle loop closure with FlexGlue (CaptureBA+FlexGlueLoop): the folder
+        // holding its models (FlexGlueMatcher), nil = off.
+        wideLoopModels: URL? = nil,
         frameQualityFilter: CaptureFrameQualityFilter.Parameters = .init(),
         opticalFlowDiagnostics: CaptureOpticalFlow.Parameters = .init(),
         flowSoftWeight: CaptureOpticalFlow.WeightParameters = .init(),
@@ -206,7 +209,7 @@ extension CaptureTraining {
             orbFastThreshold: orbFastThreshold, orbMaxKeypointsPerFrame: orbMaxKeypointsPerFrame,
             // Add multi-view tracks from ARKit feature-point IDs to the BA observations
             // (CaptureBA.buildARKitTracks).
-            useARKitTracks: true, lensDistortion: lensDistortion, log: log)
+            useARKitTracks: true, lensDistortion: lensDistortion, wideLoopModels: wideLoopModels, log: log)
         phaseMs("BA+geomrefine(ORB/match/loop/triangulate/BA/undistort)")
         if let poseDumpURL {
             writePoseDump(before: intake.scene, after: workingScene, to: poseDumpURL, log: log)

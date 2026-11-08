@@ -258,7 +258,7 @@ final class SplatViewerModel: ObservableObject {
     /// next time it is turned on.
     @Published var isMeasuring = false {
         didSet {
-            if isMeasuring { isCropping = false; isRemovingFloaters = false; isCADSelected = false }
+            if isMeasuring { isCropping = false; isColoring = false; isRemovingFloaters = false; isCADSelected = false }
             onNeedsRedraw?()
         }
     }
@@ -316,10 +316,11 @@ final class SplatViewerModel: ObservableObject {
     @Published private(set) var cropShape: SplatViewerCropShape = .box
     /// true keeps the splats inside the region; false removes them.
     @Published var cropKeepsInside = true
-    /// Colour panel open. It, Crop and Floaters are never on together: opening one closes the others.
+    /// Colour panel open. Measure, Color, Crop and Floaters are never on together: opening one
+    /// closes the others, so only one panel sits over the view.
     @Published var isColoring = false {
         didSet {
-            if isColoring { isCropping = false; isRemovingFloaters = false; isCADSelected = false }
+            if isColoring { isMeasuring = false; isCropping = false; isRemovingFloaters = false; isCADSelected = false }
             onNeedsRedraw?()
         }
     }

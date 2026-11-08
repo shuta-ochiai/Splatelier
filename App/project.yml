@@ -138,10 +138,31 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: io.github.shuta-ochiai.splatelier
         CODE_SIGN_STYLE: Automatic
         SWIFT_STRICT_CONCURRENCY: minimal
+        # The "Bundle FlexGlue models" script writes a folder of compiled models whose contents are
+        # not known ahead, which the user script sandbox would refuse.
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
       configs:
         # Read by `AppFeatures` (App/Splatelier/AppFeatures.swift).
         AppStore:
           SWIFT_ACTIVE_COMPILATION_CONDITIONS: APP_STORE
+    # Experimental wide-angle loop closure: bundle the FlexGlue models when App/FlexGlueModels holds
+    # them (made by scripts/flexglue/export_models.py). They are not in the repository (about 230 MB,
+    # and the descriptor's weights are under the DINOv3 License); without them the app builds as
+    # usual and does not offer the switch. The packages are compiled here so the app loads them
+    # directly.
+    postCompileScripts:
+      - name: Bundle FlexGlue models
+        basedOnDependencyAnalysis: false
+        script: |
+          SRC="$SRCROOT/FlexGlueModels"
+          DST="$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/FlexGlue"
+          rm -rf "$DST"
+          [ -d "$SRC" ] || exit 0
+          mkdir -p "$DST"
+          for m in "$SRC"/*.mlpackage; do
+            xcrun coremlcompiler compile "$m" "$DST" > /dev/null || exit 1
+          done
+          cp "$SRC"/*.safetensors "$DST"/
     dependencies:
       - package: splatelier
         product: Trainer

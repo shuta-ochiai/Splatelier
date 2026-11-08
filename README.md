@@ -9,6 +9,14 @@
   <img alt="Swift 6.0" src="https://img.shields.io/badge/Swift-6.0-orange?logo=swift&logoColor=white">
 </p>
 
+<p align="center">
+  <a href="https://shuta-ochiai.github.io/Splatelier/"><img alt="Capturing a painted wall with the iPhone: the app shows tracking, frames, time and splat count and a Stop button while the camera view fills in with splats where the phone has been. Then the trained 3D Gaussian splats as the camera swings around the blue paint in the middle of the wall, and on the way back the mesh made from the same capture, first with its colors, then plain gray" src=".github/assets/wall-painting.gif" width="480"></a>
+</p>
+
+<p align="center">
+  <a href="https://shuta-ochiai.github.io/Splatelier/"><b>Project page</b></a>: scenes trained on an iPhone that you can orbit in the browser, and short clips of capture and editing.
+</p>
+
 **Capture, train and view 3D Gaussian Splats entirely on your iPhone.**
 
 Splatelier (from *splat* + *atelier*) turns a short walk around an object or a room into a 3D
@@ -152,6 +160,17 @@ The launch animation and the capture-guide clips are rendered by `scripts/media/
 (`scripts/media/build_media.sh`; see its [README](scripts/media/README.md)). The videos are checked
 in, so this is only needed to change them.
 
+### Wide-angle loop closure models
+
+The experimental wide-angle loop closure runs FlexGlue's descriptor and transformer as Core ML models
+and its correspondence head in MLX. The models are not in the repository (about 230 MB, and the
+descriptor is a DINOv3 backbone under the [DINOv3 License](App/Splatelier/Licenses/DINOv3.txt)).
+Export them once with `python scripts/flexglue/export_models.py` (needs torch, coremltools,
+safetensors and `pip install git+https://github.com/cvg/FlexGlue`); they go to `App/FlexGlueModels/`,
+which the app build compiles and bundles when present. The app then offers the "Wide-angle loop
+closure (experimental)" switch on the capture screen; without the models it builds and runs as
+before. For `train-capture`, pass the folder as `WIDE_LOOP_MODELS=App/FlexGlueModels`.
+
 ### Continuous integration
 
 CI builds the package and the iOS app, and checks that the generated Metal kernels match their Slang
@@ -166,7 +185,10 @@ sources. It does not run the tests, because most of them need a Metal GPU: run `
   between frames that see the same ARKit feature points (the points are eliminated by per-point QR
   and the reduced system is solved with Accelerate); the cameras are held to ARKit's frame-to-frame
   motion more than to its absolute poses, which its own loop closure can bend; and dense seed
-  points from multi-view stereo (plane sweep + SGM). With the experimental LiDAR switch, LiDAR depth,
+  points from multi-view stereo (plane sweep + SGM). With the experimental wide-angle loop closure,
+  frames that see the same place from directions 45° or more apart (the two faces of a sign, the
+  start and end of an orbit) are matched with [FlexGlue](https://github.com/cvg/FlexGlue) on the
+  Neural Engine, and a pose graph closes those loops before bundle adjustment. With the experimental LiDAR switch, LiDAR depth,
   reprojected with the refined poses, joins the seed points.
 - **Training**: PocketGS disc-like initialization; a hybrid of MCMC and ImprovedGS+
   long-axis split for densification, whose prune takes faint Gaussians larger than the median; a
@@ -201,6 +223,11 @@ Splatelier is built on [mlx-swift](https://github.com/ml-explore/mlx-swift) (MIT
 [MetalSplatter](https://github.com/scier/MetalSplatter) (MIT, see
 [VENDORED.md](Vendor/MetalSplatter/VENDORED.md)).
 
+The experimental wide-angle loop closure runs the models of [FlexGlue](https://github.com/cvg/FlexGlue)
+(MIT; its descriptor backbone is [DINOv3](https://github.com/facebookresearch/dinov3) ConvNeXt-B under
+the DINOv3 License): its transformer is exported in a layout for the Neural Engine and its
+correspondence head is ported to MLX, both from FlexGlue's code.
+
 We referred to the code of these projects while writing our own:
 
 - [gsplat](https://github.com/nerfstudio-project/gsplat) (Apache-2.0): the numerical reference for
@@ -218,6 +245,8 @@ We referred to the code of these projects while writing our own:
 - [splat-transform](https://github.com/playcanvas/splat-transform) (MIT): the compressed PLY, SOG
   and glTF (KHR_gaussian_splatting) export layouts, and the codebook quantization and Morton order
   used by them
+- [ml-ane-transformers](https://github.com/apple/ml-ane-transformers): the channels-first layout and
+  per-head attention of transformers for the Neural Engine
 
 The animations in the app (`scripts/media/`) are drawn with these fonts, all under the SIL Open Font
 License 1.1: [Instrument Serif](https://github.com/Instrument/instrument-serif),
@@ -237,6 +266,8 @@ Main papers:
 - [Semi-Global Matching](https://doi.org/10.1109/TPAMI.2007.1166) and Mobile3DRecon (ISMAR 2020):
   multi-view stereo
 - [Bundle Adjustment — A Modern Synthesis](https://doi.org/10.1007/3-540-44480-7_21)
+- [FlexGlue: Sparse-to-Dense Feature Matching and Visual Disambiguation](https://arxiv.org/abs/2610.32976):
+  wide-angle loop closure (experimental)
 
 <details>
 <summary>All papers whose methods Splatelier implements</summary>
@@ -262,6 +293,13 @@ Main papers:
 | FAST, BRIEF, ORB | Rosten & Drummond 2006; Calonder et al. 2010; Rublee et al. 2011 |
 | Ratio test | Lowe 2004 |
 | Similarity transform alignment | Umeyama 1991 |
+| FlexGlue (wide-angle loop closure) | Lindenberger et al. 2026, arXiv 2610.32976 |
+| DINOv3 (FlexGlue's descriptor backbone) | Siméoni et al. 2025, arXiv 2508.10104 |
+| 1.5-entmax (FlexGlue's correspondence readout) | Peters et al. 2019, ACL |
+| Transformers on the Apple Neural Engine | Apple Machine Learning Research 2022 |
+| Pose graph optimization | Grisetti et al. 2010, IEEE ITS Magazine |
+| RANSAC | Fischler & Bolles 1981 |
+| Sampson error | Sampson 1982 |
 | TSDF fusion | Curless & Levoy 1996 |
 | Surfel fusion | Keller et al. 2013, 3DV |
 | Marching Cubes | Lorensen & Cline 1987 |
