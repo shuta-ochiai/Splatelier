@@ -122,6 +122,14 @@ h1 { font: 400 clamp(44px, 7vw, 84px)/1.02 "Instrument Serif", Georgia, serif; l
 section { padding: 72px 0 8px; }
 .showcase { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
 .tool.wide { grid-column: 1 / -1; display: grid; grid-template-columns: 1.5fr 1fr; gap: 8px 24px; align-items: center; }
+.capture-card { display: grid; grid-template-columns: minmax(0, 340px) 1fr; gap: 28px; align-items: center; }
+.capture-card h3 { margin-top: 0; }
+.capture-card p + p { margin-top: 12px; }
+.media.capture-media { aspect-ratio: 3 / 4; }
+@media (max-width: 760px) {
+  .capture-card { grid-template-columns: 1fr; }
+  .media.capture-media { width: min(100%, 340px); margin: 0 auto; }
+}
 .tool.wide h3 { margin-top: 0; align-self: end; }
 .tool.wide .media { grid-row: span 2; }
 .tool.wide p { align-self: start; }
@@ -239,6 +247,17 @@ footer a { color: var(--ink-2); }
     </div>
     <p class="caption">Each scene was captured and trained on an iPhone 16 Pro, and is shown here as exported, in a small WebGL viewer (base colors only). Until you take over, the camera circles the subject close to where the phone was during the capture, where the scene looks its best. Switch to Mesh or Shape to see the surface the app builds from the same capture.</p>
   </div>
+
+  <section id="capture">
+    <div class="eyebrow">Guided capture</div>
+    <h2>See what you have covered while you capture.</h2>
+    <article class="tool capture-card">
+      <div class="media capture-media"><video src="media/capture.mp4" poster="media/capture.jpg" muted loop playsinline preload="none" aria-label="Capture replay: the white camera view fills in with colored splats as the phone circles the pay phone"></video></div>
+      <div>
+        <h3>Color fills in where you have been</h3>
+        <p>As you walk around, the camera view turns white and fills in with splats wherever the phone has seen the surface, finer the closer you get. A gap is easy to spot and go back for. Frames that would come out motion-blurred are left out of training, and short animated tips on the start screen show how to move.</p>      </div>
+    </article>
+  </section>
 
   <section id="edit">
     <div class="eyebrow">Mesh and editing</div>
@@ -359,8 +378,8 @@ open App/Splatelier.xcodeproj
 <script type="module">
 // Bump VERSION (here and in the import) whenever the viewer or the scene files change, so browsers
 // don't keep showing cached copies.
-import { SplatViewer, parseMesh } from './viewer.js?v=20261108e';
-const VERSION = '20261108e';
+import { SplatViewer, parseMesh } from './viewer.js?v=20261108h';
+const VERSION = '20261108h';
 const versioned = (url) => `${url}?v=${VERSION}`;
 
 const SCENES = {
