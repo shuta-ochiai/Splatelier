@@ -10,6 +10,10 @@
 </p>
 
 <p align="center">
+  <a href="https://shuta-ochiai.github.io/Splatelier/"><img alt="A painted wall captured and trained on an iPhone, seen as 3D Gaussian splats from a moving camera" src=".github/assets/wall-painting.gif" width="560"></a>
+</p>
+
+<p align="center">
   <a href="https://shuta-ochiai.github.io/Splatelier/"><b>Project page</b></a>: scenes trained on an iPhone that you can orbit in the browser, and short clips of capture and editing.
 </p>
 
