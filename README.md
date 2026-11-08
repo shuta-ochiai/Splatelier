@@ -50,9 +50,11 @@ and compiled to Metal.
 
 ## Requirements
 
-- An iPhone or iPad with iOS 18 or later. ARKit capture and training need a real device. LiDAR
-  is not required; on devices that have it, an experimental switch on the Capture screen records
-  LiDAR depth as well and uses it for the seed points (off by default).
+- An iPhone or iPad with iOS 18 or later. ARKit capture and training need a real device, and
+  training needs an A14 chip or newer (iPhone 12, iPad Air 4th generation and later), whose GPU has
+  the SIMD group operations the training kernels use. LiDAR is not required; on devices that have
+  it, an experimental switch on the Capture screen records LiDAR depth as well and uses it for the
+  seed points (off by default).
 - An Apple Silicon Mac with macOS 15 or later and Xcode 16 (iOS 18 SDK) to build the app.
 - An Apple account added to Xcode as a development team, to sign the app.
 
@@ -116,6 +118,7 @@ eval | compare | render                                   evaluate on a COLMAP s
 train-capture <dataset.valset> <output.ply> [iterations]  retrain an app capture with the app's
                                                           settings (MESH_OBJ=<path> also writes a mesh)
 view | capture | stats | cull                             viewer and PLY tools
+view-cad <model.step> [splats.ply]                        place a STEP model over splats in a window
 convert <in.ply> <out.ext> [shDegree]                     convert a PLY to compressed PLY, SPZ, .splat,
                                                           GLB, SOG or OpenUSD (.usda)
 ```
