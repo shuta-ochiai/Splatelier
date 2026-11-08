@@ -1,0 +1,9 @@
+// Copy this file to App/Config/Local.xcconfig (ignored by git) and put your own team and bundle
+// identifier in it. Signing.xcconfig reads it for every configuration, so it survives
+// `xcodegen generate`.
+//
+// The team ID is the 10 characters shown in Xcode → Settings → Accounts (or under Membership
+// details on developer.apple.com). The bundle identifier must be one your team can register.
+
+DEVELOPMENT_TEAM = ABCDE12345
+PRODUCT_BUNDLE_IDENTIFIER = com.example.splatelier

@@ -1,0 +1,11 @@
+// Signing of the Splatelier app target (project.yml's configFiles, for every configuration).
+//
+// The team and bundle identifier are not in the repository. Copy Local.xcconfig.example to
+// Local.xcconfig (ignored by git) next to this file and put your own in it. Without it the app
+// still builds without signing (CI passes CODE_SIGNING_ALLOWED=NO), but can't be signed for a
+// device.
+
+DEVELOPMENT_TEAM =
+PRODUCT_BUNDLE_IDENTIFIER = com.example.splatelier
+
+#include? "Local.xcconfig"
