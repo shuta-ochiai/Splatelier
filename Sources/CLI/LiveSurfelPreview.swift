@@ -276,7 +276,7 @@ func runSurfelPreviewReplay(
                      levelHist.map(String.init).joined(separator: "/") as NSString,
                      map.cellCounts.reduce(0, +)))
         if k == frames.count - 1, let model {
-            try PLYWriter.writeGaussianPLY(model: model, to: outDir.appendingPathComponent("surfel.ply"))
+            try PLYWriter.writeGaussianPLY(model: model, to: outDir.appendingPathComponent("surfel.ply"), yUpWorld: true)
         }
     }
     try ImagePNG.write(MLX.concatenated(rows, axis: 0), to: outDir.appendingPathComponent("surfel_sheet.png"))

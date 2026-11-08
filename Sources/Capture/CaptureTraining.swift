@@ -414,6 +414,8 @@ public enum CaptureTraining {
             opacityReg: opacityReg, scaleReg: scaleReg, lambdaSSIM: lambdaSSIM,
             replayCache: AppPreset.replayCache, replayKMax: replayKMax,
             outputPLY: outputPLY, thumbnailPNG: thumbnailPNG,
+            // ARKit's world is gravity-aligned, Y up.
+            yUpWorld: true,
             enableBackgroundSH: true,
             backgroundSHDegree: backgroundSHDegree,
             alphaLossWeight: alphaLossWeight,

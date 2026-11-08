@@ -31,10 +31,13 @@ struct SplatViewerPreviewCamera {
         let intrinsics: [Float]
     }
 
+    /// `sceneFromWorld` brings the source view from the capture's world into the splats'
+    /// coordinates (they may be turned from it, see `SplatViewerFileAxes`); `center` is in the latter.
     static func load(
         siblingOf url: URL,
         center: SIMD3<Float>,
-        defaultDistance: Float
+        defaultDistance: Float,
+        sceneFromWorld: simd_quatf = simd_quatf(ix: 0, iy: 0, iz: 0, r: 1)
     ) -> SplatViewerPreviewCamera? {
         let metadataURL = url.deletingPathExtension().appendingPathExtension("preview.json")
         guard let data = try? Data(contentsOf: metadataURL),
@@ -50,9 +53,10 @@ struct SplatViewerPreviewCamera {
         let fovy = 2 * atan(Float(metadata.height) / (2 * metadata.intrinsics[1]))
         guard fovy.isFinite, fovy > 0 else { return nil }
 
-        let forward = Self.cameraForwardWorld(fromTrainingViewmat: metadata.viewmat)
-        let eye = Self.cameraCenterWorld(fromTrainingViewmat: metadata.viewmat)
-        guard let forward, let eye else { return nil }
+        let forwardWorld = Self.cameraForwardWorld(fromTrainingViewmat: metadata.viewmat)
+        let eyeWorld = Self.cameraCenterWorld(fromTrainingViewmat: metadata.viewmat)
+        guard let forwardWorld, let eyeWorld else { return nil }
+        let forward = sceneFromWorld.act(forwardWorld), eye = sceneFromWorld.act(eyeWorld)
 
         let projectedDistance = simd_dot(center - eye, forward)
         let distance = projectedDistance.isFinite && projectedDistance > 0.05
@@ -206,8 +210,8 @@ final class SplatViewerModel: ObservableObject {
     var onTwistCADEnd: (() -> Void)?
 
     /// The CAD model's rotation when it stands as in its file (Y up) in the viewer: undoing the
-    /// scene's turn.
-    var cadUprightRotation: simd_quatf { sceneRotation.inverse }
+    /// view's turn.
+    var cadUprightRotation: simd_quatf { viewRotation.inverse }
 
     private func updateCADTurned() {
         let turned = abs(abs(simd_dot(cadRotation.vector, cadUprightRotation.vector)) - 1) > 1e-6
@@ -270,8 +274,21 @@ final class SplatViewerModel: ObservableObject {
 
     // MARK: Orient
 
-    /// Turn from the scene's coordinates to the viewer's (see `SplatViewerCamera.sceneRotation`).
-    /// Changed by Orient's buttons, which animate it.
+    /// The turn that stands the splats' file upright (`SplatViewerFileAxes`): a half turn about Z for
+    /// the usual 3DGS axes, none for a capture written Y-up. Set on loading.
+    private(set) var fileRotation = simd_quatf(ix: 0, iy: 0, iz: 0, r: 1)
+
+    /// Turn from the scene's coordinates to the viewer's (`SplatViewerCamera.sceneRotation`): the
+    /// file's, then Orient's.
+    var viewRotation: simd_quatf { sceneRotation * fileRotation }
+
+    func setFileRotation(_ rotation: simd_quatf) {
+        fileRotation = rotation
+        updateCADTurned()
+        onNeedsRedraw?()
+    }
+
+    /// Orient's turn, on top of the file's. Changed by Orient's buttons, which animate it.
     private(set) var sceneRotation = simd_quatf(ix: 0, iy: 0, iz: 0, r: 1) {
         didSet {
             let turned = abs(abs(sceneRotation.real) - 1) > 1e-6
@@ -563,7 +580,7 @@ final class SplatViewerModel: ObservableObject {
         self.previewCamera = previewCamera
         self.framedCenter = previewCamera?.center ?? center
         if let previewCamera {
-            let angles = previewCamera.orbitAngles(sceneRotation: sceneRotation)
+            let angles = previewCamera.orbitAngles(sceneRotation: viewRotation)
             self.azimuth = angles.azimuth
             self.elevation = angles.elevation
             self.distance = previewCamera.distance
@@ -585,7 +602,7 @@ final class SplatViewerModel: ObservableObject {
     /// Resets the camera to the initial auto-framing pose.
     func resetCamera() {
         if let previewCamera {
-            let angles = previewCamera.orbitAngles(sceneRotation: sceneRotation)
+            let angles = previewCamera.orbitAngles(sceneRotation: viewRotation)
             azimuth = angles.azimuth
             elevation = angles.elevation
         } else {

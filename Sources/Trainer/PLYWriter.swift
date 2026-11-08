@@ -61,26 +61,35 @@ public enum PLYWriter {
         public var keptEnvironment: Int
     }
 
+    /// `yUpWorld`: the model is in a Y-up world (a capture, trained in ARKit's), so it is written
+    /// turned 180° about Z to the usual 3DGS axes, with `PLYAxes.turnedComment` in the header
+    /// (`PLYReader` turns it back).
     @discardableResult
     public static func writeGaussianPLY(
         model: GaussianModel,
         to url: URL,
-        cull: CullOptions = CullOptions()
+        cull: CullOptions = CullOptions(),
+        yUpWorld: Bool = false
     ) throws -> CullStats {
         // The breakdown is returned; logging is up to the caller.
         let (table, stats) = SplatTable.fromModel(model, cull: cull)
-        try write(table, to: url)
+        if yUpWorld {
+            try write(table.turnedAboutZ(), to: url, comments: [PLYAxes.turnedComment])
+        } else {
+            try write(table, to: url)
+        }
         return stats
     }
 
     /// Writes `table` as a standard 3DGS PLY. f_rest is zero-padded to degree 3 whatever the
-    /// table's degree, for MetalSplatter.
-    public static func write(_ table: SplatTable, to url: URL) throws {
+    /// table's degree, for MetalSplatter. `comments` are whole header lines (`comment …`).
+    public static func write(_ table: SplatTable, to url: URL, comments: [String] = []) throws {
         let n = table.count
         let tableRest = table.restCoeffs
 
         var header = "ply\n"
         header += "format binary_little_endian 1.0\n"
+        for comment in comments { header += comment + "\n" }
         header += "element vertex \(n)\n"
         for p in properties { header += "property float \(p)\n" }
         header += "end_header\n"
