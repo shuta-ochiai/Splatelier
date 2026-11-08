@@ -279,7 +279,8 @@ final class TrainingViewModel: ObservableObject {
     static let wideLoopClosureKey = "training.wideLoopClosure"
     /// The FlexGlue models bundled with the app (built in only when they were there at build time).
     static var bundledWideLoopModels: URL? {
-        guard let dir = Bundle.main.resourceURL?.appendingPathComponent("FlexGlue"),
+        guard AppFeatures.wideLoopClosure,
+              let dir = Bundle.main.resourceURL?.appendingPathComponent("FlexGlue"),
               FlexGlueMatcher.modelsPresent(in: dir) else { return nil }
         return dir
     }

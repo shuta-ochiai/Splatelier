@@ -28,6 +28,9 @@ enum AppFeatures {
     static let trainingSettings = false
     /// The links to the GitHub repository and its issues in About. The licenses stay.
     static let projectLinks = false
+    /// The experimental wide-angle loop closure with FlexGlue. The AppStore configuration doesn't
+    /// bundle its models either (App/project.yml), so the switch never shows there.
+    static let wideLoopClosure = false
     #else
     static let meshGeneration = true
     static let cadModels = true
@@ -36,6 +39,7 @@ enum AppFeatures {
     static let developerInfo = true
     static let trainingSettings = true
     static let projectLinks = true
+    static let wideLoopClosure = true
     #endif
 
     /// The environment variables unattended A/B runs are launched with (`devicectl …

@@ -149,7 +149,7 @@ targets:
     # them (made by scripts/flexglue/export_models.py). They are not in the repository (about 230 MB,
     # and the descriptor's weights are under the DINOv3 License); without them the app builds as
     # usual and does not offer the switch. The packages are compiled here so the app loads them
-    # directly.
+    # directly. The AppStore configuration never bundles them (see `AppFeatures.wideLoopClosure`).
     postCompileScripts:
       - name: Bundle FlexGlue models
         basedOnDependencyAnalysis: false
@@ -157,6 +157,8 @@ targets:
           SRC="$SRCROOT/FlexGlueModels"
           DST="$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/FlexGlue"
           rm -rf "$DST"
+          # The App Store version (AppStore configuration) leaves the experimental feature out.
+          [ "$CONFIGURATION" = "AppStore" ] && exit 0
           [ -d "$SRC" ] || exit 0
           mkdir -p "$DST"
           for m in "$SRC"/*.mlpackage; do
