@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://shuta-ochiai.github.io/Splatelier/"><img alt="Capturing a painted wall with the iPhone: the camera view fills in with splats where the phone has been. Then the trained 3D Gaussian splats as the camera passes the wall, and on the way back the mesh made from the same capture, first with its colors, then plain gray" src=".github/assets/wall-painting.gif" width="480"></a>
+  <a href="https://shuta-ochiai.github.io/Splatelier/"><img alt="Capturing a painted wall with the iPhone: the camera view fills in with splats where the phone has been. Then the trained 3D Gaussian splats as the camera swings around the blue paint in the middle of the wall, and on the way back the mesh made from the same capture, first with its colors, then plain gray" src=".github/assets/wall-painting.gif" width="480"></a>
 </p>
 
 <p align="center">
