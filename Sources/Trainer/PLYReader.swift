@@ -6,7 +6,8 @@ import MLX
 
 /// Reads a binary little-endian 3DGS `.ply` into a `GaussianModel` (the inverse of ``PLYWriter``).
 /// Properties are looked up by name, so standard 3DGS PLYs load too. f_dc → sh0, f_rest (optional)
-/// → shN.
+/// → shN. A PLY written turned from its Y-up world (`PLYAxes.turnedComment`) is turned back, so the
+/// model is in the world it was trained in.
 public enum PLYReader {
 
     enum Error: Swift.Error, CustomStringConvertible {
@@ -116,6 +117,19 @@ public enum PLYReader {
             quats[i * 4 + 1] = floats[b + ir1]
             quats[i * 4 + 2] = floats[b + ir2]
             quats[i * 4 + 3] = floats[b + ir3]
+        }
+
+        if PLYAxes.isTurned(header: header) {
+            let signs = (0..<restBands).map(PLYAxes.restSign)
+            for i in 0..<n {
+                means[i * 3] = -means[i * 3]
+                means[i * 3 + 1] = -means[i * 3 + 1]
+                let q = PLYAxes.turnedQuat(quats[i * 4], quats[i * 4 + 1], quats[i * 4 + 2], quats[i * 4 + 3])
+                quats[i * 4] = q.0; quats[i * 4 + 1] = q.1; quats[i * 4 + 2] = q.2; quats[i * 4 + 3] = q.3
+                for band in 0..<restBands where signs[band] < 0 {
+                    for ch in 0..<3 { shN[i * restBands * 3 + band * 3 + ch] *= -1 }
+                }
+            }
         }
 
         return GaussianModel(

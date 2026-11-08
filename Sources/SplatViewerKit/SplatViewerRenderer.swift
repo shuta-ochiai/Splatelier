@@ -299,8 +299,12 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
                     ?? self.meshLayer.map { ($0.center, framingDistance(radius: $0.radius)) }
                     ?? self.cadLayer.map { ($0.center, framingDistance(radius: $0.radius)) }
                     ?? (SIMD3<Float>(0, 0, 0), 4)
+                // Before framing and the CAD model, which stand upright in the viewer.
+                self.model.setFileRotation(scene.fileUpright)
                 let previewCamera = url.flatMap {
-                    SplatViewerPreviewCamera.load(siblingOf: $0, center: center, defaultDistance: distance)
+                    SplatViewerPreviewCamera.load(
+                        siblingOf: $0, center: center, defaultDistance: distance,
+                        sceneFromWorld: scene.fileUpright.inverse)
                 }
                 self.model.frame(center: center, distance: distance, previewCamera: previewCamera)
                 // A CAD model starts at the middle of the scene, to be moved into place by hand.
@@ -392,6 +396,9 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
         /// Half sizes of the CAD model's bounding box.
         let cadHalfExtent: SIMD3<Float>
         let cadError: Error?
+        /// The turn that stands the splats upright in the viewer (`SplatViewerFileAxes`); the mesh
+        /// has been brought into their coordinates.
+        let fileUpright: simd_quatf
     }
 
     nonisolated private static func prepare(
@@ -419,11 +426,15 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
 
         let main = try await read(url)
         let seed = try await read(seedURL)
+        // The seed is written like the main PLY, so the main one decides for both.
+        let fileUpright = SplatViewerFileAxes.uprightRotation(forSplatsAt: url)
         var mesh: LoadedMesh?
         var meshError: Error?
         if let meshURL {
             do {
-                mesh = try OBJMeshLoader.load(meshURL)
+                // The mesh is in the capture's Y-up world: into the splats' coordinates.
+                let loaded = try OBJMeshLoader.load(meshURL)
+                mesh = fileUpright.real == 1 ? loaded : loaded.rotated(by: fileUpright.inverse)
             } catch {
                 meshError = error
             }
@@ -456,7 +467,8 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
             meshError: meshError,
             cad: cad,
             cadHalfExtent: cad.map { boxHalfExtent($0.positions) } ?? .zero,
-            cadError: cadError)
+            cadError: cadError,
+            fileUpright: fileUpright)
     }
 
     private enum TrailingSplatKey: String {
@@ -483,7 +495,8 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
         SplatViewerCamera(
             azimuth: model.azimuth, elevation: model.elevation, distance: model.distance,
             center: model.center, fovyRadians: model.fovyRadians,
-            aspect: Float(drawableSize.width / max(1, drawableSize.height)))
+            aspect: Float(drawableSize.width / max(1, drawableSize.height)),
+            sceneRotation: model.viewRotation)
     }
 
     private func viewportDescriptor(_ camera: SplatViewerCamera) -> SplatRenderer.ViewportDescriptor {
@@ -693,22 +706,25 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
         }
         isFindingFloor = true
         let reach = cadSnapReach
-        let foot = SplatViewerCADSurface.foot(of: free)
+        // Floors are found in the viewer's coordinates, where up is +Y however the scene is turned.
+        let scene = model.viewRotation
+        let foot = SplatViewerCADSurface.foot(of: free.rotated(by: scene))
         // The slope is read across at least 15 cm, so splat bumps don't make the model wobble.
         let probes = SplatViewerCADSurface.probes(under: foot, reach: reach, spread: max(4 * reach, 0.15))
         let down = SIMD3<Float>(0, -1, 0)
         Task { [weak self] in
             let hits = await Task.detached(priority: .userInitiated) {
                 probes.map { origin in
-                    caster.cast(origin: origin, direction: down, pixelAngle: 0.002)
+                    caster.cast(origin: scene.inverse.act(origin), direction: scene.inverse.act(down), pixelAngle: 0.002)
                         .flatMap { $0 <= 2 * reach ? origin + down * $0 : nil }
                 }
             }.value
             guard let self else { return }
             self.isFindingFloor = false
-            self.cadFloor = SplatViewerCADSurface.floor(hits: hits, foot: foot, reach: reach)
+            // The scene may have turned meanwhile: the floor goes with it.
+            self.cadFloor = SplatViewerCADSurface.floor(hits: hits, foot: foot, reach: reach)?.rotated(by: scene.inverse)
             if let free = self.cadFreeRegion {
-                self.model.setCADRegion(SplatViewerCADSurface.settled(free, on: self.cadFloor, reach: reach))
+                self.model.setCADRegion(self.settledCAD(free, reach: reach))
             }
             if self.floorSearchPending, self.cadFreeRegion != nil {
                 self.floorSearchPending = false
@@ -719,6 +735,14 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
                 if self.activeCADHandle == nil { self.model.onCADPlacementChange?(self.model.cadPlacement) }
             }
         }
+    }
+
+    /// `box` settled on the last floor found, worked out in the viewer's coordinates (+Y up).
+    private func settledCAD(_ box: SplatViewerCropRegion, reach: Float) -> SplatViewerCropRegion {
+        let scene = model.viewRotation
+        return SplatViewerCADSurface.settled(
+            box.rotated(by: scene), on: cadFloor?.rotated(by: scene), reach: reach
+        ).rotated(by: scene.inverse)
     }
 
     /// Two-finger twist (or trackpad rotation) of the selected CAD model about the vertical.
@@ -812,7 +836,7 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
                 // The model moves freely in the screen plane, and settles on a floor within reach.
                 let moved = free.dragged(.center, byPixels: delta * pixelSize, camera: camera(), viewSize: pixelSize)
                 cadFreeRegion = moved
-                model.setCADRegion(SplatViewerCADSurface.settled(moved, on: cadFloor, reach: cadSnapReach))
+                model.setCADRegion(settledCAD(moved, reach: cadSnapReach))
                 findFloor()
             } else {
                 model.setCADRegion(cadGizmo(camera()).dragged(

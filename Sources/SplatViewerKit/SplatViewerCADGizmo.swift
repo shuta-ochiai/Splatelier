@@ -98,7 +98,7 @@ struct SplatViewerCADGizmo {
     /// The model after a two-finger twist (or a trackpad rotation) of `radians`, clockwise on screen
     /// positive: it turns about the vertical, the way the fingers turn as seen from the camera.
     func twisted(by radians: Float, camera: SplatViewerCamera) -> SplatViewerCropRegion {
-        let up = SIMD3<Float>(0, 1, 0)
+        let up = camera.up
         // Seen from above, clockwise is a negative turn about +Y; from below it is the other way.
         let sense: Float = simd_dot(camera.forward, up) <= 0 ? -1 : 1
         var turned = box
@@ -279,6 +279,11 @@ enum SplatViewerCADSurface {
         func height(atX x: Float, z: Float) -> Float {
             point.y - (normal.x * (x - point.x) + normal.z * (z - point.z)) / normal.y
         }
+
+        /// The floor turned about the origin.
+        func rotated(by q: simd_quatf) -> Floor {
+            Floor(point: q.act(point), normal: q.act(normal))
+        }
     }
 
     /// The floor-like surface the probes found (hits from straight down, the first at the foot), or
@@ -324,6 +329,17 @@ enum SplatViewerCADSurface {
     }
 }
 
+extension SplatViewerCropRegion {
+    /// The region turned about the origin: into the viewer's coordinates by the scene's rotation, or
+    /// back by its inverse.
+    func rotated(by q: simd_quatf) -> SplatViewerCropRegion {
+        var turned = self
+        turned.center = q.act(center)
+        turned.rotation = simd_normalize(q * rotation)
+        return turned
+    }
+}
+
 /// The turns offered while a CAD model is selected, as buttons: a quarter turn about the vertical
 /// either way, laid on its side, and back to the way it was imported.
 public enum SplatViewerCADTurn: CaseIterable, Sendable {
@@ -336,9 +352,10 @@ public enum SplatViewerCADTurn: CaseIterable, Sendable {
     /// Back to the way it was imported: upright and facing as in the CAD file.
     case resetRotation
 
-    /// The box after this turn, about its center. `camera` gives the side `layDown` falls to.
+    /// The box after this turn, about its center. `camera` gives the viewer's up (turned with the
+    /// scene) and the side `layDown` falls to.
     func applied(to box: SplatViewerCropRegion, camera: SplatViewerCamera) -> SplatViewerCropRegion {
-        let up = SIMD3<Float>(0, 1, 0)
+        let up = camera.up
         let turn: simd_quatf
         switch self {
         case .left:
@@ -347,13 +364,14 @@ public enum SplatViewerCADTurn: CaseIterable, Sendable {
             turn = simd_quatf(angle: -.pi / 2, axis: up)
         case .layDown:
             var right = camera.axis(0)
-            right.y = 0
+            right -= up * simd_dot(right, up)
             guard simd_length(right) > 1e-4 else { return box }
             // Up turns onto the level right, about the level direction the camera looks along.
             turn = simd_quatf(from: up, to: simd_normalize(right))
         case .resetRotation:
+            // Standing as in the CAD file, in the viewer.
             var reset = box
-            reset.rotation = simd_quatf(ix: 0, iy: 0, iz: 0, r: 1)
+            reset.rotation = camera.sceneRotation.inverse
             return reset
         }
         var turned = box

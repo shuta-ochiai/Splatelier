@@ -17,6 +17,9 @@ extension TrainingDriver {
         replayCache: ReplayCacheMode, replayKMax: Int,
         outputPLY: URL?,
         thumbnailPNG: URL? = nil,
+        // The views' world is Y-up (a capture in ARKit's world): the PLY is written turned 180°
+        // about Z to the usual 3DGS axes (see `PLYAxes`).
+        yUpWorld: Bool = false,
         maxScaleFraction: Float = 0.5,
         // When thermal=serious, sleep for step time × factor between steps (1.0 = 50% duty). 0
         // disables it.
@@ -399,13 +402,13 @@ extension TrainingDriver {
         try exportTrained(
             model: model, renderer: renderer, trainer: trainer, sceneScale: sceneScale,
             enableBackgroundSH: enableBackgroundSH, backgroundSHDegree: backgroundSHDegree,
-            outputPLY: outputPLY, thumbnailPNG: thumbnailPNG, views: views, log: log)
+            outputPLY: outputPLY, thumbnailPNG: thumbnailPNG, views: views, yUpWorld: yUpWorld, log: log)
 
         // Keep the trainer (model + Adam momentum) and views for continue training.
         let session = ResumableTrainingSession(
             trainer: trainer, views: views, viewSampler: viewSampler,
             sceneScale: sceneScale, maxShDegree: maxShDegree, geometryRegularization: geometryRegularization,
-            totalIterations: iterations)
+            totalIterations: iterations, yUpWorld: yUpWorld)
 
         return Result(
             gaussianCount: model.count, viewCount: views.count,
@@ -446,6 +449,7 @@ extension TrainingDriver {
         sceneScale: Float, enableBackgroundSH: Bool, backgroundSHDegree: Int,
         outputPLY: URL?, thumbnailPNG: URL?, views: [TrainView],
         cull: PLYWriter.CullOptions = PLYWriter.CullOptions(),
+        yUpWorld: Bool = false,
         log: (String) -> Void
     ) throws {
         // bg-SH is baked into environment-sphere Gaussians for viewers. Appending to the training
@@ -471,7 +475,7 @@ extension TrainingDriver {
         }
 
         if let outputPLY {
-            let stats = try PLYWriter.writeGaussianPLY(model: exportModel, to: outputPLY, cull: cull)
+            let stats = try PLYWriter.writeGaussianPLY(model: exportModel, to: outputPLY, cull: cull, yUpWorld: yUpWorld)
             log("wrote \(stats.kept) gaussians to \(outputPLY.path)")
             do {
                 try PLYWriter.writeBackgroundSidecar(splatCount: stats.keptEnvironment, siblingOf: outputPLY)
@@ -619,7 +623,7 @@ extension TrainingDriver {
             enableBackgroundSH: trainer.enableBackgroundSH,
             backgroundSHDegree: trainer.backgroundSHDegree,
             outputPLY: outputPLY, thumbnailPNG: thumbnailPNG, views: views,
-            cull: PLYWriter.CullOptions(minOpacity: 0), log: log)
+            cull: PLYWriter.CullOptions(minOpacity: 0), yUpWorld: session.yUpWorld, log: log)
 
         return Result(
             gaussianCount: trainer.model.count, viewCount: views.count,

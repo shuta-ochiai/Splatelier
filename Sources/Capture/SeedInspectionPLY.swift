@@ -133,7 +133,8 @@ extension CaptureTraining {
         eval(inspect.means, inspect.quats, inspect.logScales,
              inspect.logitOpacities, inspect.sh0, inspect.shN)
         // Cull disabled: keep distant seed/camera points out of the outlier cull.
-        try PLYWriter.writeGaussianPLY(model: inspect, to: url, cull: .init(enabled: false))
+        // In ARKit's world, so turned like the trained PLY it is shown with.
+        try PLYWriter.writeGaussianPLY(model: inspect, to: url, cull: .init(enabled: false), yUpWorld: true)
         // sidecar: camera markers are the last camCount entries of the PLY. The viewer toggles
         // scene/camera display separately.
         let metaURL = url.deletingPathExtension().appendingPathExtension("seedmeta.json")

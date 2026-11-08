@@ -224,6 +224,8 @@ struct TrainingView: View {
             // The seed points and capture cameras are for development.
             seedURL: AppFeatures.developerInfo ? vm.seedPLYURL : nil,
             meshURL: vm.meshOBJURL,
+            sceneRotation: SceneRotationFile.load(for: target.plyURL),
+            onSceneRotationChange: { SceneRotationFile.save($0, for: target.plyURL) },
             name: CaptureMetadataName.load(for: target.plyURL),
             shareItems: shareItems,
             cropExport: SplatExportShare.cropExport,

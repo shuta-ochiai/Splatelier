@@ -625,7 +625,8 @@ case "dump-sparse":
         // No color information, so uniform gray.
         let colors = MLXArray([Float](repeating: 0.7, count: pts.count * 3), [pts.count, 3])
         let model = GaussianModel.fromPointCloud(positions: positions, colors: colors)
-        let stats = try PLYWriter.writeGaussianPLY(model: model, to: outputPLY)
+        // The capture's world is Y-up; written turned to the usual 3DGS axes like a trained PLY.
+        let stats = try PLYWriter.writeGaussianPLY(model: model, to: outputPLY, yUpWorld: true)
         print("dump-sparse: wrote \(stats.kept) sparse points (BA-refined "
             + "\(refined.baRefinedPoints?.count ?? 0), raw \(scene.sparsePoints.count)) to \(outputPLY.path)")
     } catch {
@@ -909,7 +910,7 @@ case "convert":
     do {
         let start = Date()
         let joulesStart = gpuEnergyMeter?.joules()
-        var table = try SplatTable.readPLY(url: inURL)
+        var table = try SplatTable.readPLYInUsualAxes(url: inURL)
         if args.count > 4, let degree = Int(args[4]), (0...3).contains(degree) {
             table = table.reducingSH(to: degree)
         }
@@ -943,9 +944,12 @@ case "cull":
     let maxAbsCoord = args.count > 6 ? (Float(args[6]) ?? 50.0) : 50.0
     do {
         let model = try PLYReader.readGaussianPLY(url: inURL)
+        // A turned PLY is read back into its Y-up world, so it is written turned again.
+        let turned = PLYAxes.header(of: inURL).map(PLYAxes.isTurned) ?? false
         let stats = try PLYWriter.writeGaussianPLY(
             model: model, to: outURL,
-            cull: .init(minOpacity: minOpacity, maxScale: maxScale, maxAbsCoord: maxAbsCoord)
+            cull: .init(minOpacity: minOpacity, maxScale: maxScale, maxAbsCoord: maxAbsCoord),
+            yUpWorld: turned
         )
         print("cull: \(stats.total) → \(stats.kept) (dropped \(stats.total - stats.kept))")
         print(String(format: "  NaN/Inf:        %d", stats.droppedNonFinite))

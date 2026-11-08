@@ -247,6 +247,8 @@ struct SplatLibraryView: View {
                             ? CADModelFiles.loadPlacement(for: item.mainURL) : nil,
                         onCADPlacementChange: AppFeatures.cadModels
                             ? { CADModelFiles.savePlacement($0, for: item.mainURL) } : nil,
+                        sceneRotation: SceneRotationFile.load(for: item.mainURL),
+                        onSceneRotationChange: { SceneRotationFile.save($0, for: item.mainURL) },
                         onImportCAD: AppFeatures.cadModels
                             ? { try CADModelFiles.attach($0, to: item.mainURL) } : nil,
                         onRemoveCAD: AppFeatures.cadModels
@@ -639,6 +641,8 @@ struct SplatLibraryView: View {
         do {
             if FileManager.default.fileExists(atPath: dest.path) {
                 try FileManager.default.removeItem(at: dest)
+                // The turn kept for the file it replaces may not suit this one.
+                try? FileManager.default.removeItem(at: SceneRotationFile.url(for: dest))
             }
             try FileManager.default.copyItem(at: src, to: dest)
             reload()
