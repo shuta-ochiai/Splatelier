@@ -1,0 +1,8 @@
+// The release version of the app (CFBundleShortVersionString). `scripts/version.sh set X.Y.Z`
+// writes it together with Splatelier.version (Sources/Trainer/Splatelier.swift); CI checks that
+// the two and the release tag agree.
+MARKETING_VERSION = 0.6.0
+
+// The build number (CFBundleVersion). A placeholder: the target's "Stamp the build" script
+// replaces it in the built Info.plist with the number of commits up to HEAD.
+CURRENT_PROJECT_VERSION = 1

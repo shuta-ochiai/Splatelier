@@ -61,9 +61,15 @@ public enum PLYWriter {
         public var keptEnvironment: Int
     }
 
+    /// Header comment naming the version (and in the app, the build) that wrote a trained model, so
+    /// a PLY tells which training made it. Readers skip comments.
+    public static var versionComment: String {
+        "comment splatelier: written by Splatelier \(Splatelier.versionDescription)"
+    }
+
     /// `yUpWorld`: the model is in a Y-up world (a capture, trained in ARKit's), so it is written
     /// turned 180° about Z to the usual 3DGS axes, with `PLYAxes.turnedComment` in the header
-    /// (`PLYReader` turns it back).
+    /// (`PLYReader` turns it back). The header always carries `versionComment`.
     @discardableResult
     public static func writeGaussianPLY(
         model: GaussianModel,
@@ -74,9 +80,9 @@ public enum PLYWriter {
         // The breakdown is returned; logging is up to the caller.
         let (table, stats) = SplatTable.fromModel(model, cull: cull)
         if yUpWorld {
-            try write(table.turnedAboutZ(), to: url, comments: [PLYAxes.turnedComment])
+            try write(table.turnedAboutZ(), to: url, comments: [versionComment, PLYAxes.turnedComment])
         } else {
-            try write(table, to: url)
+            try write(table, to: url, comments: [versionComment])
         }
         return stats
     }

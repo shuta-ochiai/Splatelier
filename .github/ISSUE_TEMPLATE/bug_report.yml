@@ -37,7 +37,8 @@ body:
     id: version
     attributes:
       label: Splatelier version or commit
-      placeholder: v0.6.0 or a commit hash
+      description: The version and build number under the name in About, or a commit hash.
+      placeholder: v1.2.0 (345)
     validations:
       required: true
   - type: textarea

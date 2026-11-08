@@ -184,10 +184,20 @@ engineering. An encrypted model fetches its key from Apple the first time it loa
 run with the switch on needs a network connection. Keep the key out of the repository (the folder
 is ignored).
 
+### Versions
+
+The release version is `Splatelier.version` (`Sources/Trainer/Splatelier.swift`) and
+`MARKETING_VERSION` in `App/Config/Version.xcconfig`; `scripts/version.sh set 0.7.0` writes both. The
+app's build number is the number of commits up to the commit built, so every upload to App Store
+Connect has a higher one; the app build writes it and the commit into the Info.plist. A trained PLY
+names the version that wrote it in a header comment, and in the app the build and commit too:
+`comment splatelier: written by Splatelier 0.6.0 (build 412, 1a2b3c4d5e6f)`.
+
 ### Continuous integration
 
 CI builds the package and the iOS app, and checks that the generated Metal kernels match their Slang
-sources. It does not run the tests, because most of them need a Metal GPU: run `make test` locally.
+sources and that the version is the same in the package, the app and the release tag. It does not
+run the tests, because most of them need a Metal GPU: run `make test` locally.
 
 ### How it works
 

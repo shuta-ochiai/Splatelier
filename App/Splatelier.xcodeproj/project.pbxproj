@@ -72,6 +72,7 @@
 		3BA325DF38EBD374278A114E /* AppFeatures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppFeatures.swift; sourceTree = "<group>"; };
 		42B4AB2B48F6A57C61E0CAE0 /* FlexGlue.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = FlexGlue.txt; sourceTree = "<group>"; };
 		44D60E52950B5F46D58C659D /* Splatelier.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Splatelier.entitlements; sourceTree = "<group>"; };
+		4B1B15579BF98B3E55B07C6D /* App.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = App.xcconfig; sourceTree = "<group>"; };
 		4F5BA88DADD619751FBB57AD /* guide_pivot.mp4 */ = {isa = PBXFileReference; path = guide_pivot.mp4; sourceTree = "<group>"; };
 		6415796D99C0BA08F2A7C122 /* CaptureViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureViewModel.swift; sourceTree = "<group>"; };
 		69CEB026472D66F4CCE4E52B /* guide_loop.mp4 */ = {isa = PBXFileReference; path = guide_loop.mp4; sourceTree = "<group>"; };
@@ -87,6 +88,7 @@
 		A635EA42807AABF63B5C7812 /* swift-numerics.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "swift-numerics.txt"; sourceTree = "<group>"; };
 		AC4C22862D2E266D030C936C /* ARCaptureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ARCaptureView.swift; sourceTree = "<group>"; };
 		AE1374C4B556E184452A79D5 /* GuideClipView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuideClipView.swift; sourceTree = "<group>"; };
+		B0BC9B968E12014331EEBF3D /* Version.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Version.xcconfig; sourceTree = "<group>"; };
 		B17198F83EB1972856C242D7 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
 		B8797B29940BF5CBEF3B92DC /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		CC9ECD3EFACEFC22C2C11415 /* guide_subjects.mp4 */ = {isa = PBXFileReference; path = guide_subjects.mp4; sourceTree = "<group>"; };
@@ -120,8 +122,10 @@
 		097970B114C456A7FF5A165C /* Config */ = {
 			isa = PBXGroup;
 			children = (
+				4B1B15579BF98B3E55B07C6D /* App.xcconfig */,
 				D77DDAA5A03DC15E6204E877 /* Local.xcconfig.example */,
 				9E2C0FB35E1C7BAB3356746A /* Signing.xcconfig */,
+				B0BC9B968E12014331EEBF3D /* Version.xcconfig */,
 			);
 			path = Config;
 			sourceTree = "<group>";
@@ -229,6 +233,7 @@
 				81E9173258F03A07DD8A34D7 /* Bundle FlexGlue models */,
 				72DD51996850DF29D23C5346 /* Resources */,
 				CCEF06FB555777D1455A0AE2 /* Frameworks */,
+				FD7842C71FF1D57E36CEB9BB /* Stamp the build */,
 			);
 			buildRules = (
 			);
@@ -334,6 +339,25 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "SRC=\"$SRCROOT/FlexGlueModels\"\nDST=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/FlexGlue\"\nrm -rf \"$DST\"\n# The App Store version (AppStore configuration) leaves the experimental feature out.\n[ \"$CONFIGURATION\" = \"AppStore\" ] && exit 0\n[ -d \"$SRC\" ] || exit 0\nmkdir -p \"$DST\"\nKEY=\"$SRC/flexglue.mlmodelkey\"\nfor m in \"$SRC\"/*.mlpackage; do\n  if [ -f \"$KEY\" ]; then\n    xcrun coremlcompiler compile \"$m\" \"$DST\" --encrypt \"$KEY\" > /dev/null || exit 1\n  else\n    xcrun coremlcompiler compile \"$m\" \"$DST\" > /dev/null || exit 1\n  fi\ndone\ncp \"$SRC\"/*.safetensors \"$DST\"/\n";
+		};
+		FD7842C71FF1D57E36CEB9BB /* Stamp the build */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Stamp the build";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "cd \"$SRCROOT\"\nCOUNT=$(git rev-list --count HEAD 2>/dev/null) || exit 0\nCOMMIT=$(git rev-parse --short=12 HEAD)\ngit diff --quiet HEAD -- || COMMIT=\"$COMMIT+dirty\"\nPLIST=\"$TARGET_BUILD_DIR/$INFOPLIST_PATH\"\n/usr/libexec/PlistBuddy -c \"Set :CFBundleVersion $COUNT\" \"$PLIST\"\n/usr/libexec/PlistBuddy -c \"Delete :SplatelierCommit\" \"$PLIST\" 2>/dev/null || true\n/usr/libexec/PlistBuddy -c \"Add :SplatelierCommit string $COMMIT\" \"$PLIST\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -486,7 +510,7 @@
 		};
 		21BCDB4F11DDED343D1C9756 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 9E2C0FB35E1C7BAB3356746A /* Signing.xcconfig */;
+			baseConfigurationReference = 4B1B15579BF98B3E55B07C6D /* App.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -509,7 +533,7 @@
 		};
 		3636E1912340E4A4CAEF8760 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 9E2C0FB35E1C7BAB3356746A /* Signing.xcconfig */;
+			baseConfigurationReference = 4B1B15579BF98B3E55B07C6D /* App.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -532,7 +556,7 @@
 		};
 		C5F7F7F5F8927E1DAE5CBD19 /* AppStore */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 9E2C0FB35E1C7BAB3356746A /* Signing.xcconfig */;
+			baseConfigurationReference = 4B1B15579BF98B3E55B07C6D /* App.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;

@@ -1,0 +1,4 @@
+// Build settings of the Splatelier app target, for every configuration (project.yml's configFiles).
+
+#include "Version.xcconfig"
+#include "Signing.xcconfig"
