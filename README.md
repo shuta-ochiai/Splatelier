@@ -9,6 +9,10 @@
   <img alt="Swift 6.0" src="https://img.shields.io/badge/Swift-6.0-orange?logo=swift&logoColor=white">
 </p>
 
+<p align="center">
+  <a href="https://shuta-ochiai.github.io/Splatelier/"><b>Project page</b></a>: scenes trained on an iPhone that you can orbit in the browser, and short clips of capture and editing.
+</p>
+
 **Capture, train and view 3D Gaussian Splats entirely on your iPhone.**
 
 Splatelier (from *splat* + *atelier*) turns a short walk around an object or a room into a 3D
