@@ -55,26 +55,29 @@ else
     fail "$XCODEPROJ not found"
 fi
 
-# 4. Bundle ID state (collides if still the placeholder)
+# 4-5. Team and bundle ID, from App/Config/Local.xcconfig (ignored by git; see the .example)
+LOCAL_XCCONFIG="$PROJECT_DIR/App/Config/Local.xcconfig"
+local_setting() {
+    grep -E "^[[:space:]]*$1[[:space:]]*=" "$LOCAL_XCCONFIG" 2>/dev/null | tail -1 \
+        | sed -E 's/^[^=]*=[[:space:]]*//; s/[[:space:]]*$//'
+}
 echo "[4/8] Bundle ID"
-bid=$(grep -m 1 "PRODUCT_BUNDLE_IDENTIFIER" "$XCODEPROJ/project.pbxproj" 2>/dev/null \
-    | head -1 | sed -E 's/.*= "?([^"]+)"?;.*/\1/' | tr -d ' \t')
-if [[ -z "$bid" ]]; then
-    fail "PRODUCT_BUNDLE_IDENTIFIER not set"
-elif [[ "$bid" == "io.github.shuta-ochiai.splatelier" ]]; then
-    warn "Bundle ID = $bid (the repository's default; use your own unless you are the maintainer)"
-    info "Recommended: in Xcode, Signing & Capabilities → set Bundle ID to a unique value"
+bid=$(local_setting PRODUCT_BUNDLE_IDENTIFIER)
+if [[ ! -f "$LOCAL_XCCONFIG" ]]; then
+    fail "App/Config/Local.xcconfig not found"
+    info "cp App/Config/Local.xcconfig.example App/Config/Local.xcconfig, then set your team and bundle ID in it"
+elif [[ -z "$bid" || "$bid" == "com.example.splatelier" ]]; then
+    fail "PRODUCT_BUNDLE_IDENTIFIER is not set to your own in App/Config/Local.xcconfig"
 else
     ok "Bundle ID = $bid"
 fi
 
 # 5. DEVELOPMENT_TEAM (automatic signing fails if empty)
 echo "[5/8] Signing team"
-team=$(grep -m 1 "DEVELOPMENT_TEAM" "$XCODEPROJ/project.pbxproj" 2>/dev/null \
-    | head -1 | sed -E 's/.*= "?([^"]*)"?;.*/\1/' | tr -d ' \t')
-if [[ -z "$team" ]]; then
-    warn "DEVELOPMENT_TEAM is empty — select an Apple ID team in the Xcode UI"
-    info "(setting it from the CLI works, but doing it by hand is safer: DEVELOPMENT_TEAM = ABC1234567; in project.pbxproj)"
+team=$(local_setting DEVELOPMENT_TEAM)
+if [[ -z "$team" || "$team" == "ABCDE12345" ]]; then
+    warn "DEVELOPMENT_TEAM is not set in App/Config/Local.xcconfig"
+    info "The 10-character team ID is shown in Xcode → Settings → Accounts"
 else
     ok "DEVELOPMENT_TEAM = $team"
 fi

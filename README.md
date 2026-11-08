@@ -60,18 +60,18 @@ and compiled to Metal.
 
 ## Install the app
 
-1. Clone the repository and open the Xcode project:
+1. Clone the repository and make your signing settings file:
 
    ```sh
    git clone https://github.com/shuta-ochiai/Splatelier.git
    cd Splatelier
-   open App/Splatelier.xcodeproj
+   cp App/Config/Local.xcconfig.example App/Config/Local.xcconfig
    ```
 
-2. In the **Splatelier** target's *Signing & Capabilities*, choose your team and change the bundle
-   identifier to one your account can use. To keep these settings when the project is regenerated,
-   set `DEVELOPMENT_TEAM` and `PRODUCT_BUNDLE_IDENTIFIER` in `App/project.yml` as well (see
-   [Editing the Xcode project](#editing-the-xcode-project)).
+2. In `App/Config/Local.xcconfig`, set `DEVELOPMENT_TEAM` to your team ID (shown in *Xcode →
+   Settings → Accounts*) and `PRODUCT_BUNDLE_IDENTIFIER` to a bundle identifier your account can
+   use. The file is ignored by git and survives regenerating the project, so the team and bundle
+   identifier stay out of the repository. Then open `App/Splatelier.xcodeproj`.
 3. Turn on Developer Mode on the device (*Settings → Privacy & Security → Developer Mode*).
 4. Select the **Splatelier** scheme and your device, and run. The scheme builds in Release, because
    training in Debug is much slower.

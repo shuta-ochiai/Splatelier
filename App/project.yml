@@ -1,6 +1,5 @@
 name: Splatelier
 options:
-  bundleIdPrefix: io.github.shuta-ochiai
   developmentLanguage: ja
   createIntermediateGroups: true
   deploymentTarget:
@@ -13,6 +12,11 @@ configs:
   Debug: debug
   Release: release
   AppStore: release
+
+# The signing xcconfigs (see the target's configFiles). Listed as a folder so that they sit in the
+# project navigator; a config file directly in App/ alone ends up in a group outside the tree.
+fileGroups:
+  - Config
 
 # xcodegen spec. `xcodegen generate` regenerates Splatelier.xcodeproj.
 # References the Swift Package itself (../Package.swift) as a local package and
@@ -122,6 +126,13 @@ targets:
       path: Splatelier/Splatelier.entitlements
       properties:
         com.apple.developer.kernel.increased-memory-limit: true
+    # The team and bundle identifier come from Config/Signing.xcconfig, which includes the
+    # git-ignored Config/Local.xcconfig (copy Config/Local.xcconfig.example). They are not set under
+    # `settings`, which would override the xcconfig.
+    configFiles:
+      Debug: Config/Signing.xcconfig
+      Release: Config/Signing.xcconfig
+      AppStore: Config/Signing.xcconfig
     settings:
       base:
         TARGETED_DEVICE_FAMILY: "1,2"     # iPhone + iPad
@@ -131,11 +142,6 @@ targets:
         # standard iOS blue to Splatelier's cyan.
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         SWIFT_VERSION: "6.0"
-        # Also state in project.yml the team baked into the committed .xcodeproj.
-        # If left empty, `xcodegen generate` resets the team to "" (the omission trap) and
-        # Automatic signing fails. People on a different team replace it with their own ID.
-        DEVELOPMENT_TEAM: 434V3FTL9C
-        PRODUCT_BUNDLE_IDENTIFIER: io.github.shuta-ochiai.splatelier
         CODE_SIGN_STYLE: Automatic
         SWIFT_STRICT_CONCURRENCY: minimal
         # The "Bundle FlexGlue models" script writes a folder of compiled models whose contents are

@@ -49,3 +49,6 @@ output/
 
 # FlexGlue models for the app's experimental wide-angle loop closure (scripts/flexglue/export_models.py)
 /App/FlexGlueModels/
+
+# Signing team and bundle ID of this machine (copy App/Config/Local.xcconfig.example)
+/App/Config/Local.xcconfig
