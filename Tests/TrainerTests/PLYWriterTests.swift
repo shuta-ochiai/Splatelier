@@ -95,7 +95,7 @@ func plyWriterRoundTrips() throws {
     let quats = model.quats.asArray(Float.self)
 
     // The PLY uses the degree-3 layout for viewer compatibility (45 f_rest, channel stride 15). The
-    // model's degree-1 coefficients (band < modelRestBands) are real values; the rest is 0 padding.
+    // model's coefficients (band < modelRestBands) are real values; the rest is 0 padding.
     let modelRestBands = GaussianModel.shRestBands
     let exportRestBands = PLYWriter.exportRestBands   // 15
     let restOff = 9

@@ -299,7 +299,7 @@ extension SplatTable {
             positions: pos, logScales: scl, quats: quat, logitOpacities: opac,
             sh0: dc, shRest: rest, shDegree: fileDegree, backgroundCount: background
         )
-        // PLYWriter zero-pads degree 1 to degree 3; drop bands that are zero in every row.
+        // PLYWriter zero-pads the model's degree to degree 3; drop bands that are zero in every row.
         return table.reducingSH(to: table.effectiveSHDegree)
     }
 

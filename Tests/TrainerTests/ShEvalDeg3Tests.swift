@@ -7,33 +7,38 @@ import MLXRandom
 import Testing
 @testable import Trainer
 
-// Foreground SH is degree-1 (shN = bands 1-3, 9 floats), so the kernel only does degree 0/1. The
-// reference (referenceShEvalDeg3) takes 16 bands but ignores bands 4-15 for degree≤1, so only bands
-// 0-3 are compared.
+// shN holds R rest bands per Gaussian (R = 3, 8 or 15 for degree 1, 2 or 3); the kernel gets
+// (degree, R) in degree_buf. The reference (referenceShEvalDeg3) takes all 16 bands and ignores
+// the ones above `degree`, so bands past R never matter as long as degree ≤ the degree R holds.
 
-// Split coeffs [n,16,3] into the kernel's sh0 [n*3] (band 0) + shN [n*9] (bands 1-3).
-private func splitSH(_ coeffs: MLXArray, n: Int) -> (sh0: MLXArray, shN: MLXArray) {
+/// Rest bands for each foreground SH degree the model can carry.
+private let restBandsByDegree = [1: 3, 2: 8, 3: 15]
+
+// Split coeffs [n,16,3] into the kernel's sh0 [n*3] (band 0) + shN [n*R*3] (bands 1...R).
+private func splitSH(_ coeffs: MLXArray, n: Int, rest: Int) -> (sh0: MLXArray, shN: MLXArray) {
     let flat = coeffs.reshaped([n, 48])
-    return (flat[0..., 0..<3].reshaped([n * 3]), flat[0..., 3..<12].reshaped([n * 9]))
+    return (flat[0..., 0..<3].reshaped([n * 3]),
+            flat[0..., 3..<(3 + rest * 3)].reshaped([n * rest * 3]))
 }
 
-// Put the kernel's grad_sh0 [n,3] + grad_shN [n,9] back into [n,16,3] for comparison with the
-// reference (bands 4-15 are 0).
-private func padGradTo16Bands(gradSh0: MLXArray, gradShN: MLXArray, n: Int) -> MLXArray {
-    let zerosHigh = MLXArray.zeros([n, 36])   // band 4-15 (12 band × 3)
-    return MLX.concatenated(
-        [gradSh0.reshaped([n, 3]), gradShN.reshaped([n, 9]), zerosHigh], axis: 1
-    ).reshaped([n, 16, 3])
+// Put the kernel's grad_sh0 [n,3] + grad_shN [n,R*3] back into [n,16,3] for comparison with the
+// reference (bands past R are 0).
+private func padGradTo16Bands(gradSh0: MLXArray, gradShN: MLXArray, n: Int, rest: Int) -> MLXArray {
+    var parts = [gradSh0.reshaped([n, 3]), gradShN.reshaped([n, rest * 3])]
+    if rest < 15 { parts.append(MLXArray.zeros([n, (15 - rest) * 3])) }
+    return MLX.concatenated(parts, axis: 1).reshaped([n, 16, 3])
 }
 
-private func slangShEvalFwd(degree: Int, dirs: MLXArray, coeffs: MLXArray) throws -> MLXArray {
+private func slangShEvalFwd(
+    degree: Int, dirs: MLXArray, coeffs: MLXArray, rest: Int = 3
+) throws -> MLXArray {
     let n = dirs.shape[0]
     let kernel = try SlangCompiledKernel.load(name: "sh_eval_deg3_fwd")
-    let degreeBuf = MLXArray([Int32(degree)], [1])
+    let degreeBuf = MLXArray([Int32(degree), Int32(rest)], [2])
     let nBuf = MLXArray([Int32(n)], [1])
     // All Gaussians visible (radii > 0), no cull.
     let radii = MLXArray([Int32](repeating: 1, count: n * 2), [n * 2])
-    let (sh0, shN) = splitSH(coeffs, n: n)
+    let (sh0, shN) = splitSH(coeffs, n: n, rest: rest)
     let outputs = kernel(
         [dirs, sh0, shN, degreeBuf, nBuf, radii],
         grid: (((n + 63) / 64) * 64, 1, 1),
@@ -45,23 +50,23 @@ private func slangShEvalFwd(degree: Int, dirs: MLXArray, coeffs: MLXArray) throw
 }
 
 private func slangShEvalBwd(
-    degree: Int, dirs: MLXArray, coeffs: MLXArray, cotColor: MLXArray
+    degree: Int, dirs: MLXArray, coeffs: MLXArray, cotColor: MLXArray, rest: Int = 3
 ) throws -> (gradDirs: MLXArray, gradCoeffs: MLXArray) {
     let n = dirs.shape[0]
     let kernel = try SlangCompiledKernel.load(name: "sh_eval_deg3_bwd")
-    let degreeBuf = MLXArray([Int32(degree)], [1])
+    let degreeBuf = MLXArray([Int32(degree), Int32(rest)], [2])
     let nBuf = MLXArray([Int32(n)], [1])
     // All Gaussians visible (radii > 0), no cull.
     let radii = MLXArray([Int32](repeating: 1, count: n * 2), [n * 2])
-    let (sh0, shN) = splitSH(coeffs, n: n)
+    let (sh0, shN) = splitSH(coeffs, n: n, rest: rest)
     let outputs = kernel(
         [dirs, sh0, shN, degreeBuf, nBuf, cotColor, radii],
         grid: (((n + 63) / 64) * 64, 1, 1),
         threadGroup: (64, 1, 1),
-        outputShapes: [[n * 3], [n * 3], [n * 9]],
+        outputShapes: [[n * 3], [n * 3], [n * rest * 3]],
         outputDTypes: [.float32, .float32, .float32]
     )
-    let gradCoeffs = padGradTo16Bands(gradSh0: outputs[1], gradShN: outputs[2], n: n)
+    let gradCoeffs = padGradTo16Bands(gradSh0: outputs[1], gradShN: outputs[2], n: n, rest: rest)
     return (outputs[0].reshaped([n, 3]), gradCoeffs)
 }
 
@@ -70,23 +75,18 @@ private func sampleShInputs(seed: UInt64, n: Int) -> (dirs: MLXArray, coeffs: ML
     // Keep directions away from the origin so rsqrt is stable.
     let dirs = MLXRandom.normal([n, 3]) * 1.5 + 0.4
     // Small coefficients so finite differences keep the post-+0.5 color above the clamp threshold.
-    // Bands 4-15 are unused, so 0.
-    var c = MLXRandom.normal([n, 16, 3]) * 0.05
-    let mask = MLX.concatenated(
-        [MLXArray.ones([n, 4, 3]), MLXArray.zeros([n, 12, 3])], axis: 1
-    )
-    c = c * mask
+    let c = MLXRandom.normal([n, 16, 3]) * 0.05
     eval(dirs, c)
     return (dirs, c)
 }
 
-@Test
-func shEvalDeg1ForwardMatchesMLXReference() throws {
+@Test(arguments: [1, 2, 3])
+func shEvalForwardMatchesMLXReference(degree: Int) throws {
     let n = 6
-    let degree = 1
     let inputs = sampleShInputs(seed: 0, n: n)
 
-    let slangColor = try slangShEvalFwd(degree: degree, dirs: inputs.dirs, coeffs: inputs.coeffs)
+    let slangColor = try slangShEvalFwd(
+        degree: degree, dirs: inputs.dirs, coeffs: inputs.coeffs, rest: restBandsByDegree[degree]!)
     // The kernel evaluates in fp32 and stores in half, so round the reference to fp16 before
     // comparing (tol 1e-3 tolerates rounding boundaries yet catches SH formula bugs (>>1e-2)).
     let refColor = referenceShEvalDeg3(degree: degree, dirs: inputs.dirs, coeffs: inputs.coeffs)
@@ -94,35 +94,38 @@ func shEvalDeg1ForwardMatchesMLXReference() throws {
     eval(slangColor, refColor)
 
     let diff = MLX.abs(slangColor - refColor).max().item(Float.self)
-    #expect(diff < 1e-3, "sh_eval forward diverged by \(diff)")
+    #expect(diff < 1e-3, "sh_eval forward diverged at degree \(degree) by \(diff)")
 }
 
-@Test
-func shEvalDeg1ForwardRespectsLowerDegrees() throws {
+/// The active degree can be below what shN holds (the warm-up raises it during training).
+@Test(arguments: [3, 8, 15])
+func shEvalForwardRespectsLowerDegrees(rest: Int) throws {
     let n = 5
     let inputs = sampleShInputs(seed: 5, n: n)
+    let held = rest == 15 ? 3 : rest == 8 ? 2 : 1
 
-    for degree in [0, 1] {
-        let slangColor = try slangShEvalFwd(degree: degree, dirs: inputs.dirs, coeffs: inputs.coeffs)
+    for degree in 0...held {
+        let slangColor = try slangShEvalFwd(
+            degree: degree, dirs: inputs.dirs, coeffs: inputs.coeffs, rest: rest)
         let refColor = referenceShEvalDeg3(degree: degree, dirs: inputs.dirs, coeffs: inputs.coeffs)
             .asType(.float16).asType(.float32)
         eval(slangColor, refColor)
         let diff = MLX.abs(slangColor - refColor).max().item(Float.self)
-        #expect(diff < 1e-3, "sh_eval forward diverged for degree \(degree) by \(diff)")
+        #expect(diff < 1e-3, "sh_eval forward diverged for degree \(degree), R \(rest) by \(diff)")
     }
 }
 
-@Test
-func shEvalDeg1BackwardMatchesFiniteDifferences() throws {
+@Test(arguments: [1, 2, 3])
+func shEvalBackwardMatchesFiniteDifferences(degree: Int) throws {
     let n = 3
-    let degree = 1
+    let rest = restBandsByDegree[degree]!
     let inputs = sampleShInputs(seed: 7, n: n)
     MLXRandom.seed(17)
     let cotColor = MLXRandom.normal([n, 3]) * 0.5
     eval(cotColor)
 
     let (gDirs, gCoeffs) = try slangShEvalBwd(
-        degree: degree, dirs: inputs.dirs, coeffs: inputs.coeffs, cotColor: cotColor
+        degree: degree, dirs: inputs.dirs, coeffs: inputs.coeffs, cotColor: cotColor, rest: rest
     )
     eval(gDirs, gCoeffs)
     let gD = gDirs.asArray(Float.self)
@@ -167,11 +170,11 @@ func shEvalDeg1BackwardMatchesFiniteDifferences() throws {
         "sh_eval grad w.r.t. dirs off: maxAbs=\(maxAbsD) maxRel=\(maxRelD)"
     )
 
-    // FD-check only bands 0-3 (= the first 12 coeffs), which contribute at degree 1.
+    // FD-check bands 0...R (= the first (R+1)*3 coeffs), which contribute at this degree.
     var perturbedC = cHost
     var maxAbsC: Float = 0, maxRelC: Float = 0
     for i in 0..<n {
-        for k in 0..<12 {
+        for k in 0..<((rest + 1) * 3) {
             perturbedC[i * 48 + k] = cHost[i * 48 + k] + eps
             let lp = loss(dirs: dHost, coeffs: perturbedC)
             perturbedC[i * 48 + k] = cHost[i * 48 + k] - eps
@@ -191,26 +194,23 @@ func shEvalDeg1BackwardMatchesFiniteDifferences() throws {
     )
 }
 
-@Test
-func shEvalDeg1SkipsCulledGaussians() throws {
+@Test(arguments: [1, 3])
+func shEvalSkipsCulledGaussians(degree: Int) throws {
     // #0 visible, #1 culled (radii 0). #1's color and gradient are 0; #0 matches the no-cull
     // result.
     let n = 2
-    let degree = 1
+    let rest = restBandsByDegree[degree]!
+    let per = (rest + 1) * 3   // coefficients per Gaussian
     let dirs = MLXArray([Float(0.3), 0.5, 1.2, -0.4, 0.8, 0.9], [n, 3])
-    var coeffs = MLXRandom.normal([n, 16, 3]) * 0.1
-    let mask = MLX.concatenated(
-        [MLXArray.ones([n, 4, 3]), MLXArray.zeros([n, 12, 3])], axis: 1
-    )
-    coeffs = coeffs * mask
+    let coeffs = MLXRandom.normal([n, 16, 3]) * 0.1
     eval(dirs, coeffs)
     let radii = MLXArray([Int32(1), 1, 0, 0], [n * 2])   // #0 visible, #1 culled
     let cot = MLXArray([Float](repeating: 0.5, count: n * 3), [n * 3])
 
-    let (sh0, shN) = splitSH(coeffs, n: n)
+    let (sh0, shN) = splitSH(coeffs, n: n, rest: rest)
     let fwdKernel = try SlangCompiledKernel.load(name: "sh_eval_deg3_fwd")
     let fwd = fwdKernel(
-        [dirs, sh0, shN, MLXArray([Int32(degree)], [1]),
+        [dirs, sh0, shN, MLXArray([Int32(degree), Int32(rest)], [2]),
          MLXArray([Int32(n)], [1]), radii],
         grid: (64, 1, 1), threadGroup: (64, 1, 1),
         outputShapes: [[n * 3]], outputDTypes: [.float32]
@@ -219,7 +219,7 @@ func shEvalDeg1SkipsCulledGaussians() throws {
     eval(color)
     let cHost = color.asArray(Float.self)
     // Matches #0's color computed without cull.
-    let refColor = try slangShEvalFwd(degree: degree, dirs: dirs, coeffs: coeffs)
+    let refColor = try slangShEvalFwd(degree: degree, dirs: dirs, coeffs: coeffs, rest: rest)
     eval(refColor)
     let refHost = refColor.asArray(Float.self)
     #expect(abs(cHost[0] - refHost[0]) < 1e-5 && abs(cHost[1] - refHost[1]) < 1e-5
@@ -228,40 +228,41 @@ func shEvalDeg1SkipsCulledGaussians() throws {
 
     let bwdKernel = try SlangCompiledKernel.load(name: "sh_eval_deg3_bwd")
     let bwd = bwdKernel(
-        [dirs, sh0, shN, MLXArray([Int32(degree)], [1]),
+        [dirs, sh0, shN, MLXArray([Int32(degree), Int32(rest)], [2]),
          MLXArray([Int32(n)], [1]), cot, radii],
         grid: (64, 1, 1), threadGroup: (64, 1, 1),
-        outputShapes: [[n * 3], [n * 3], [n * 9]], outputDTypes: [.float32, .float32, .float32]
+        outputShapes: [[n * 3], [n * 3], [n * rest * 3]], outputDTypes: [.float32, .float32, .float32]
     )
     let gradDirs = bwd[0].reshaped([n, 3])
-    // Concatenate grad_sh0 [n,3] + grad_shN [n,9] into [n,12] (bands 0-3 only).
+    // Concatenate grad_sh0 [n,3] + grad_shN [n,R*3] into [n,(R+1)*3].
     let gradCoeffs = MLX.concatenated(
-        [bwd[1].reshaped([n, 3]), bwd[2].reshaped([n, 9])], axis: 1
+        [bwd[1].reshaped([n, 3]), bwd[2].reshaped([n, rest * 3])], axis: 1
     )
     eval(gradDirs, gradCoeffs)
     let gd = gradDirs.asArray(Float.self)
     let gc = gradCoeffs.asArray(Float.self)
-    // #1 (culled) gradients are all 0 (12 elements per Gaussian: bands 0-3).
+    // #1 (culled) gradients are all 0.
     for k in 0..<3 { #expect(gd[3 + k] == 0, "culled gaussian #1 gradDirs must be 0") }
-    for k in 0..<12 { #expect(gc[12 + k] == 0, "culled gaussian #1 gradCoeffs must be 0") }
-    // #0 (visible) has at least some non-zero values (evidence it was actually computed).
-    let g0nonzero = (0..<12).contains { abs(gc[$0]) > 1e-7 }
+    for k in 0..<per { #expect(gc[per + k] == 0, "culled gaussian #1 gradCoeffs must be 0") }
+    // #0 (visible) has non-zero values up to its last band (evidence it was actually computed).
+    let g0nonzero = (0..<3).contains { abs(gc[per - 3 + $0]) > 1e-7 }
     #expect(g0nonzero, "visible gaussian #0 gradCoeffs should be computed (nonzero)")
 }
 
-/// At degree 0 the backward writes exact zeros (+0) for shN even with nonzero bands 1-3, which lets
-/// GaussianTrainer skip shN's Adam step while SH is at degree 0 (zero grad and zero moments leave
-/// shN unchanged; see fusedAdamZeroGradLeavesParamExactlyUnchanged).
-@Test func shEvalBwdDegree0WritesExactZeroForShN() throws {
+/// At degree 0 the backward writes exact zeros (+0) for shN even with nonzero rest bands, which
+/// lets GaussianTrainer skip shN's Adam step while SH is at degree 0 (zero grad and zero moments
+/// leave shN unchanged; see fusedAdamZeroGradLeavesParamExactlyUnchanged).
+@Test(arguments: [3, 8, 15])
+func shEvalBwdDegree0WritesExactZeroForShN(rest: Int) throws {
     let n = 257
     let inputs = sampleShInputs(seed: 11, n: n)
     MLXRandom.seed(12)
     let cotColor = MLXRandom.normal([n, 3])
     let (_, gradCoeffs) = try slangShEvalBwd(
-        degree: 0, dirs: inputs.dirs, coeffs: inputs.coeffs, cotColor: cotColor)
-    let gradShN = gradCoeffs[0..., 1..<4, 0...]
+        degree: 0, dirs: inputs.dirs, coeffs: inputs.coeffs, cotColor: cotColor, rest: rest)
+    let gradShN = gradCoeffs[0..., 1..<(1 + rest), 0...]
     eval(gradShN)
     let values = gradShN.asArray(Float.self)
-    #expect(values.count == n * 9)
+    #expect(values.count == n * rest * 3)
     #expect(values.allSatisfy { $0.bitPattern == 0 }, "degree-0 shN gradient must be +0")
 }

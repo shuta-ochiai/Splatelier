@@ -210,8 +210,11 @@ func rendererBackwardShNMatchFD() throws {
     let f = try makeBwdFixture()
     let analytical = f.grads.dShN.asArray(Float.self)
     let n = f.model.count
+    // The forward stores SH colours in fp16, so a step of 1e-3 moves a colour by about one fp16
+    // step near 0.5 for the smaller degree-2 basis values and the central difference rounds off.
+    // 4e-3 keeps it above the quantization (the SH kernel's own FD test runs in fp32).
     checkFiniteDiff(
-        label: "dShN", host: f.shNH, analytical: analytical, f: f, eps: 1e-3,
+        label: "dShN", host: f.shNH, analytical: analytical, f: f, eps: 4e-3,
         perturbAndRebuild: { snap, idx, d in
             var arr = f.shNH; arr[idx] += d
             snap.shN = MLXArray(arr, [n, GaussianModel.shRestBands, 3])

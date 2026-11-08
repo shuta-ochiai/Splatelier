@@ -715,26 +715,26 @@ ShEvalGrad_0 sh_eval_deg3_grad_0(int degree_0, float3 dir_1, const SHBands16_0 t
 struct KernelContext_0
 {
     int device* n_bwd_0;
+    int device* degree_bwd_0;
     int device* radii_bwd_0;
     float device* grad_dirs_0;
     float device* grad_sh0_0;
     float device* grad_shN_0;
-    int device* degree_bwd_0;
     float device* dirs_bwd_0;
     float device* sh0_bwd_0;
     float device* shN_bwd_0;
     float device* cot_color_0;
 };
 
-[[kernel]] void sh_eval_deg3_bwd(uint3 tid_0 [[thread_position_in_grid]], int device* n_bwd_1 [[buffer(11)]], int device* radii_bwd_1 [[buffer(13)]], float device* grad_dirs_1 [[buffer(14)]], float device* grad_sh0_1 [[buffer(15)]], float device* grad_shN_1 [[buffer(16)]], int device* degree_bwd_1 [[buffer(10)]], float device* dirs_bwd_1 [[buffer(7)]], float device* sh0_bwd_1 [[buffer(8)]], float device* shN_bwd_1 [[buffer(9)]], float device* cot_color_1 [[buffer(12)]])
+[[kernel]] void sh_eval_deg3_bwd(uint3 tid_0 [[thread_position_in_grid]], int device* n_bwd_1 [[buffer(11)]], int device* degree_bwd_1 [[buffer(10)]], int device* radii_bwd_1 [[buffer(13)]], float device* grad_dirs_1 [[buffer(14)]], float device* grad_sh0_1 [[buffer(15)]], float device* grad_shN_1 [[buffer(16)]], float device* dirs_bwd_1 [[buffer(7)]], float device* sh0_bwd_1 [[buffer(8)]], float device* shN_bwd_1 [[buffer(9)]], float device* cot_color_1 [[buffer(12)]])
 {
     thread KernelContext_0 kernelContext_0;
     (&kernelContext_0)->n_bwd_0 = n_bwd_1;
+    (&kernelContext_0)->degree_bwd_0 = degree_bwd_1;
     (&kernelContext_0)->radii_bwd_0 = radii_bwd_1;
     (&kernelContext_0)->grad_dirs_0 = grad_dirs_1;
     (&kernelContext_0)->grad_sh0_0 = grad_sh0_1;
     (&kernelContext_0)->grad_shN_0 = grad_shN_1;
-    (&kernelContext_0)->degree_bwd_0 = degree_bwd_1;
     (&kernelContext_0)->dirs_bwd_0 = dirs_bwd_1;
     (&kernelContext_0)->sh0_bwd_0 = sh0_bwd_1;
     (&kernelContext_0)->shN_bwd_0 = shN_bwd_1;
@@ -745,7 +745,8 @@ struct KernelContext_0
         return;
     }
     uint dBase_0 = i_0 * 3U;
-    uint sN_0 = i_0 * 9U;
+    uint rest_0 = uint((&kernelContext_0)->degree_bwd_0[int(1)]);
+    uint sN_0 = i_0 * rest_0 * 3U;
     uint _S226 = i_0 * 2U;
     bool _S227;
     if((&kernelContext_0)->radii_bwd_0[_S226] <= int(0))
@@ -769,7 +770,7 @@ struct KernelContext_0
         uint k_0 = 0U;
         for(;;)
         {
-            if(k_0 < 9U)
+            if(k_0 < (rest_0 * 3U))
             {
             }
             else
@@ -809,6 +810,24 @@ struct KernelContext_0
         (&sh_2)->b2_0 = float3((&kernelContext_0)->shN_bwd_0[sN_0 + 3U], (&kernelContext_0)->shN_bwd_0[sN_0 + 4U], (&kernelContext_0)->shN_bwd_0[sN_0 + 5U]);
         (&sh_2)->b3_0 = float3((&kernelContext_0)->shN_bwd_0[sN_0 + 6U], (&kernelContext_0)->shN_bwd_0[sN_0 + 7U], (&kernelContext_0)->shN_bwd_0[sN_0 + 8U]);
     }
+    if(deg_0 >= int(2))
+    {
+        (&sh_2)->b4_0 = float3((&kernelContext_0)->shN_bwd_0[sN_0 + 9U], (&kernelContext_0)->shN_bwd_0[sN_0 + 10U], (&kernelContext_0)->shN_bwd_0[sN_0 + 11U]);
+        (&sh_2)->b5_0 = float3((&kernelContext_0)->shN_bwd_0[sN_0 + 12U], (&kernelContext_0)->shN_bwd_0[sN_0 + 13U], (&kernelContext_0)->shN_bwd_0[sN_0 + 14U]);
+        (&sh_2)->b6_0 = float3((&kernelContext_0)->shN_bwd_0[sN_0 + 15U], (&kernelContext_0)->shN_bwd_0[sN_0 + 16U], (&kernelContext_0)->shN_bwd_0[sN_0 + 17U]);
+        (&sh_2)->b7_0 = float3((&kernelContext_0)->shN_bwd_0[sN_0 + 18U], (&kernelContext_0)->shN_bwd_0[sN_0 + 19U], (&kernelContext_0)->shN_bwd_0[sN_0 + 20U]);
+        (&sh_2)->b8_0 = float3((&kernelContext_0)->shN_bwd_0[sN_0 + 21U], (&kernelContext_0)->shN_bwd_0[sN_0 + 22U], (&kernelContext_0)->shN_bwd_0[sN_0 + 23U]);
+    }
+    if(deg_0 >= int(3))
+    {
+        (&sh_2)->b9_0 = float3((&kernelContext_0)->shN_bwd_0[sN_0 + 24U], (&kernelContext_0)->shN_bwd_0[sN_0 + 25U], (&kernelContext_0)->shN_bwd_0[sN_0 + 26U]);
+        (&sh_2)->b10_0 = float3((&kernelContext_0)->shN_bwd_0[sN_0 + 27U], (&kernelContext_0)->shN_bwd_0[sN_0 + 28U], (&kernelContext_0)->shN_bwd_0[sN_0 + 29U]);
+        (&sh_2)->b11_0 = float3((&kernelContext_0)->shN_bwd_0[sN_0 + 30U], (&kernelContext_0)->shN_bwd_0[sN_0 + 31U], (&kernelContext_0)->shN_bwd_0[sN_0 + 32U]);
+        (&sh_2)->b12_0 = float3((&kernelContext_0)->shN_bwd_0[sN_0 + 33U], (&kernelContext_0)->shN_bwd_0[sN_0 + 34U], (&kernelContext_0)->shN_bwd_0[sN_0 + 35U]);
+        (&sh_2)->b13_0 = float3((&kernelContext_0)->shN_bwd_0[sN_0 + 36U], (&kernelContext_0)->shN_bwd_0[sN_0 + 37U], (&kernelContext_0)->shN_bwd_0[sN_0 + 38U]);
+        (&sh_2)->b14_0 = float3((&kernelContext_0)->shN_bwd_0[sN_0 + 39U], (&kernelContext_0)->shN_bwd_0[sN_0 + 40U], (&kernelContext_0)->shN_bwd_0[sN_0 + 41U]);
+        (&sh_2)->b15_0 = float3((&kernelContext_0)->shN_bwd_0[sN_0 + 42U], (&kernelContext_0)->shN_bwd_0[sN_0 + 43U], (&kernelContext_0)->shN_bwd_0[sN_0 + 44U]);
+    }
     float3 cot_1 = float3((&kernelContext_0)->cot_color_0[dBase_0], (&kernelContext_0)->cot_color_0[_S230], (&kernelContext_0)->cot_color_0[_S231]);
     thread SHBands16_0 _S233 = sh_2;
     ShEvalGrad_0 _S234 = sh_eval_deg3_grad_0(deg_0, dir_2, &_S233, cot_1);
@@ -827,6 +846,48 @@ struct KernelContext_0
     *((&kernelContext_0)->grad_shN_0+(sN_0 + 6U)) = _S234.sh_0.b3_0.x;
     *((&kernelContext_0)->grad_shN_0+(sN_0 + 7U)) = _S234.sh_0.b3_0.y;
     *((&kernelContext_0)->grad_shN_0+(sN_0 + 8U)) = _S234.sh_0.b3_0.z;
+    if(rest_0 >= 8U)
+    {
+        *((&kernelContext_0)->grad_shN_0+(sN_0 + 9U)) = _S234.sh_0.b4_0.x;
+        *((&kernelContext_0)->grad_shN_0+(sN_0 + 10U)) = _S234.sh_0.b4_0.y;
+        *((&kernelContext_0)->grad_shN_0+(sN_0 + 11U)) = _S234.sh_0.b4_0.z;
+        *((&kernelContext_0)->grad_shN_0+(sN_0 + 12U)) = _S234.sh_0.b5_0.x;
+        *((&kernelContext_0)->grad_shN_0+(sN_0 + 13U)) = _S234.sh_0.b5_0.y;
+        *((&kernelContext_0)->grad_shN_0+(sN_0 + 14U)) = _S234.sh_0.b5_0.z;
+        *((&kernelContext_0)->grad_shN_0+(sN_0 + 15U)) = _S234.sh_0.b6_0.x;
+        *((&kernelContext_0)->grad_shN_0+(sN_0 + 16U)) = _S234.sh_0.b6_0.y;
+        *((&kernelContext_0)->grad_shN_0+(sN_0 + 17U)) = _S234.sh_0.b6_0.z;
+        *((&kernelContext_0)->grad_shN_0+(sN_0 + 18U)) = _S234.sh_0.b7_0.x;
+        *((&kernelContext_0)->grad_shN_0+(sN_0 + 19U)) = _S234.sh_0.b7_0.y;
+        *((&kernelContext_0)->grad_shN_0+(sN_0 + 20U)) = _S234.sh_0.b7_0.z;
+        *((&kernelContext_0)->grad_shN_0+(sN_0 + 21U)) = _S234.sh_0.b8_0.x;
+        *((&kernelContext_0)->grad_shN_0+(sN_0 + 22U)) = _S234.sh_0.b8_0.y;
+        *((&kernelContext_0)->grad_shN_0+(sN_0 + 23U)) = _S234.sh_0.b8_0.z;
+    }
+    if(rest_0 >= 15U)
+    {
+        *((&kernelContext_0)->grad_shN_0+(sN_0 + 24U)) = _S234.sh_0.b9_0.x;
+        *((&kernelContext_0)->grad_shN_0+(sN_0 + 25U)) = _S234.sh_0.b9_0.y;
+        *((&kernelContext_0)->grad_shN_0+(sN_0 + 26U)) = _S234.sh_0.b9_0.z;
+        *((&kernelContext_0)->grad_shN_0+(sN_0 + 27U)) = _S234.sh_0.b10_0.x;
+        *((&kernelContext_0)->grad_shN_0+(sN_0 + 28U)) = _S234.sh_0.b10_0.y;
+        *((&kernelContext_0)->grad_shN_0+(sN_0 + 29U)) = _S234.sh_0.b10_0.z;
+        *((&kernelContext_0)->grad_shN_0+(sN_0 + 30U)) = _S234.sh_0.b11_0.x;
+        *((&kernelContext_0)->grad_shN_0+(sN_0 + 31U)) = _S234.sh_0.b11_0.y;
+        *((&kernelContext_0)->grad_shN_0+(sN_0 + 32U)) = _S234.sh_0.b11_0.z;
+        *((&kernelContext_0)->grad_shN_0+(sN_0 + 33U)) = _S234.sh_0.b12_0.x;
+        *((&kernelContext_0)->grad_shN_0+(sN_0 + 34U)) = _S234.sh_0.b12_0.y;
+        *((&kernelContext_0)->grad_shN_0+(sN_0 + 35U)) = _S234.sh_0.b12_0.z;
+        *((&kernelContext_0)->grad_shN_0+(sN_0 + 36U)) = _S234.sh_0.b13_0.x;
+        *((&kernelContext_0)->grad_shN_0+(sN_0 + 37U)) = _S234.sh_0.b13_0.y;
+        *((&kernelContext_0)->grad_shN_0+(sN_0 + 38U)) = _S234.sh_0.b13_0.z;
+        *((&kernelContext_0)->grad_shN_0+(sN_0 + 39U)) = _S234.sh_0.b14_0.x;
+        *((&kernelContext_0)->grad_shN_0+(sN_0 + 40U)) = _S234.sh_0.b14_0.y;
+        *((&kernelContext_0)->grad_shN_0+(sN_0 + 41U)) = _S234.sh_0.b14_0.z;
+        *((&kernelContext_0)->grad_shN_0+(sN_0 + 42U)) = _S234.sh_0.b15_0.x;
+        *((&kernelContext_0)->grad_shN_0+(sN_0 + 43U)) = _S234.sh_0.b15_0.y;
+        *((&kernelContext_0)->grad_shN_0+(sN_0 + 44U)) = _S234.sh_0.b15_0.z;
+    }
     return;
 }
 

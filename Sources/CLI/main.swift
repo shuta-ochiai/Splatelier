@@ -202,6 +202,13 @@ if let meter = gpuEnergyMeter {
 // (adds idle time between stages).
 GaussianRenderer.stageTiming = ProcessInfo.processInfo.environment["STAGE_TIMING"] == "1"
 
+// SPLATELIER_SH_DEGREE=1|2|3: foreground SH degree the models carry (experiment; default 2). Set
+// before any model is made, since it fixes the shape of shN.
+if let degree = ProcessInfo.processInfo.environment["SPLATELIER_SH_DEGREE"].flatMap({ Int($0) }) {
+    GaussianModel.configuredShDegree = degree
+    print("foreground SH degree: \(GaussianModel.maxShDegree) (\(GaussianModel.shRestBands) rest bands)")
+}
+
 
 // THERMAL_SIM=nominal|fair|serious: pins the thermalState seen by the thermal guard and reproduces
 // on the Mac iOS's slowdown at serious (sleep between steps).

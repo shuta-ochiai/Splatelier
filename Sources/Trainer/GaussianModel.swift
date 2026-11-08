@@ -9,7 +9,7 @@ import MLXRandom
 
 /// Learnable Gaussian parameters. Stored raw (pre-activation): scales = exp(logScales), opacities =
 /// sigmoid(logitOpacities). Color uses gsplat-style SH: RGB = clamp(SH_eval + 0.5, 0). sh0 (DC) =
-/// (rgb - 0.5) / C0; shN (degree 1) starts at 0 with a lower LR to avoid overfitting the DC.
+/// (rgb - 0.5) / C0; shN (degrees 1...`maxShDegree`) starts at 0.
 public final class GaussianModel {
 
     /// PocketGS Operator I kernel: per-point 3×3 symmetric eigendecomposition (Smith 1961 / Cardano
@@ -30,7 +30,7 @@ public final class GaussianModel {
     public var logScales: MLXArray          // [N, 3]
     public var logitOpacities: MLXArray     // [N]
     public var sh0: MLXArray                // [N, 3]      DC coefficients
-    public var shN: MLXArray                // [N, 3, 3]  higher-order coefficients (degree 1)
+    public var shN: MLXArray                // [N, R, 3]  higher-order coefficients (R = shRestBands)
 
     /// The last `environmentCount` rows are the environment (far background) sphere: the bg-SH
     /// baked into a far shell on the export copy (`appendBakedBackgroundSphere`). PLYWriter exempts
@@ -74,12 +74,23 @@ public final class GaussianModel {
 
     public var count: Int { means.shape[0] }
 
-    /// Number of higher-order foreground SH coefficients (3, since degree 1). sh_eval_deg3.slang
-    /// also caps at degree 1.
-    public static let shRestBands = 3
+    /// Foreground SH degree the models of this process carry (1–3; the kernel handles up to 3).
+    /// 2 is the default: on an iPhone 16 Pro it trains about 9% longer than degree 1 and heats the
+    /// phone about as much, for about +0.16 dB of held-out PSNR on average (up in 7 of 8 captures).
+    /// Degree 3 adds almost nothing on average, varies more between captures (one outdoor capture
+    /// lost 0.23 dB), trains about 24% longer than degree 1 and reaches the serious thermal state,
+    /// mostly from the Adam step over shN and its moments.
+    /// Experiment hook (`SPLATELIER_SH_DEGREE`): set it once at startup, before any model, trainer
+    /// or PLY is made, since it fixes the shape of shN everywhere.
+    nonisolated(unsafe) public static var configuredShDegree = 2 {
+        didSet { configuredShDegree = Swift.max(1, Swift.min(3, configuredShDegree)) }
+    }
 
-    /// Max foreground SH degree. The kernel caps at degree 1, so larger values add no bands.
-    public static let maxShDegree = 1
+    /// Number of higher-order foreground SH coefficients per channel: (degree+1)² − 1 (3, 8, 15).
+    public static var shRestBands: Int { (maxShDegree + 1) * (maxShDegree + 1) - 1 }
+
+    /// Max foreground SH degree.
+    public static var maxShDegree: Int { configuredShDegree }
 
     /// Activated per-axis standard deviations.
     public func scales() -> MLXArray { MLX.exp(logScales) }
