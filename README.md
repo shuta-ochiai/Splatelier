@@ -33,14 +33,16 @@ and compiled to Metal.
 ## Features
 
 - **Guided capture**: ARKit images and poses, a live splat preview that shows which parts of the
-  scene are covered, and frames that would come out motion-blurred left out of training.
+  scene are covered, and frames that would come out motion-blurred left out of training. Before
+  training, the app shows the captured frames and how many of them pass the check.
 - **On-device training**: bundle adjustment refines the ARKit poses, multi-view stereo provides dense
   seed points, and the Gaussians are trained on the iPhone's GPU, with each frame's exposure and
   white balance compensated. Training adapts to the device's temperature, and a finished model can
   be trained further.
 - **Built-in viewer**: orbit the result, choose the layers to show, measure distances, grade the
   colours, crop the splats with a box, sphere or lasso, and select and delete floaters. The Library
-  lists your captures and opens `.ply`, `.splat` and `.spz` files you import.
+  lists your captures and opens `.ply`, `.splat` and `.spz` files you import; Orient stands a model
+  that comes in on its side upright with quarter turns.
 - **CAD models**: import a STEP model into a capture and place it by hand: drag it (it settles on
   floors and tables), turn it with its rings, a two-finger twist or quarter-turn buttons.
 - **Export**: share the splats as a standard 3DGS PLY, compressed PLY, SPZ, `.splat`, glTF (GLB), SOG
@@ -205,9 +207,9 @@ sources. It does not run the tests, because most of them need a Metal GPU: run `
   long-axis split for densification, whose prune takes faint Gaussians larger than the median; a
   directional spherical-harmonics background; per-frame exposure and white balance gains; fused
   SSIM; coarse-to-fine; thermal throttling; continued training with the Adam state kept.
-- **Output**: a standard 3DGS PLY (SH degree 2, written in the degree-3 layout so common viewers read
-  it) with the background baked into a far shell of Gaussians, and a TSDF mesh that is generated
-  automatically after training.
+- **Output**: a standard 3DGS PLY in the usual 3DGS axes (SH degree 2, written in the degree-3 layout
+  so common viewers read it) with the background baked into a far shell of Gaussians, and a TSDF
+  mesh that is generated automatically after training.
 - **Viewer**: [MetalSplatter](https://github.com/scier/MetalSplatter) with local patches: blending that
   matches training, stochastic transparency while the camera moves, a mesh overlay, hiding the
   background and distance measurement. See [VENDORED.md](Vendor/MetalSplatter/VENDORED.md).
