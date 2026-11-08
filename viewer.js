@@ -162,6 +162,69 @@ function link(gl, vs, fs) {
   return prog;
 }
 
+// Undoes gzip with the browser's own DecompressionStream.
+export async function gunzip(buffer) {
+  const stream = new Blob([buffer]).stream().pipeThrough(new DecompressionStream('gzip'));
+  return new Response(stream).arrayBuffer();
+}
+
+// Decodes a Niantic SPZ file (version 2 or 3, gzip; base colors are used, higher SH is skipped)
+// into .splat records (32 bytes each), in the PLY axes the rest of the page uses: SPZ stores
+// right-up-back, so y and z flip back (positions, and the quaternion's y and z).
+export async function decodeSpz(buffer) {
+  const d = new DataView(await gunzip(buffer));
+  if (d.getUint32(0, true) !== 0x5053474e) throw new Error('not an SPZ file');
+  const version = d.getUint32(4, true), n = d.getUint32(8, true);
+  const fracBits = d.getUint8(13);
+  if (version !== 2 && version !== 3) throw new Error(`SPZ version ${version}`);
+  const u8 = new Uint8Array(d.buffer);
+  const posAt = 16, alphaAt = posAt + n * 9, colorAt = alphaAt + n, scaleAt = colorAt + n * 3;
+  const rotAt = scaleAt + n * 3;
+  const out = new ArrayBuffer(n * 32);
+  const f32 = new Float32Array(out), o8 = new Uint8Array(out);
+  const posScale = 1 / (1 << fracBits), SH_C0 = 0.28209479177387814, SQRT1_2 = Math.SQRT1_2;
+  const q = [0, 0, 0, 0];
+  for (let i = 0; i < n; i++) {
+    for (let k = 0; k < 3; k++) {
+      const p = posAt + i * 9 + k * 3;
+      let v = u8[p] | (u8[p + 1] << 8) | (u8[p + 2] << 16);
+      if (v & 0x800000) v -= 0x1000000;
+      f32[i * 8 + k] = v * posScale * (k === 0 ? 1 : -1);
+      f32[i * 8 + 3 + k] = Math.exp(u8[scaleAt + i * 3 + k] / 16 - 10);
+      const c = 0.5 + SH_C0 * ((u8[colorAt + i * 3 + k] / 255 - 0.5) / 0.15);
+      o8[i * 32 + 24 + k] = clamp(Math.round(c * 255), 0, 255);
+    }
+    o8[i * 32 + 27] = u8[alphaAt + i];
+    if (version === 3) {
+      // Smallest three: 2 bits for the largest component, then 3 × (sign + 9-bit magnitude).
+      const r = rotAt + i * 4;
+      let comp = (u8[r] | (u8[r + 1] << 8) | (u8[r + 2] << 16) | (u8[r + 3] << 24)) >>> 0;
+      const largest = comp >>> 30;
+      let sum = 0;
+      for (let k = 3; k >= 0; k--) {
+        if (k === largest) continue;
+        const mag = comp & 511, neg = (comp >>> 9) & 1;
+        comp >>>= 10;
+        const v = (SQRT1_2 * mag) / 511;
+        q[k] = neg ? -v : v;
+        sum += v * v;
+      }
+      q[largest] = Math.sqrt(Math.max(0, 1 - sum));
+    } else {
+      const r = rotAt + i * 3;
+      q[0] = u8[r] / 127.5 - 1; q[1] = u8[r + 1] / 127.5 - 1; q[2] = u8[r + 2] / 127.5 - 1;
+      q[3] = Math.sqrt(Math.max(0, 1 - q[0] * q[0] - q[1] * q[1] - q[2] * q[2]));
+    }
+    // SPZ is x y z w; .splat is w x y z, each as u8 = q * 128 + 128.
+    const b = i * 32 + 28;
+    o8[b] = clamp(Math.round(q[3] * 128 + 128), 0, 255);
+    o8[b + 1] = clamp(Math.round(q[0] * 128 + 128), 0, 255);
+    o8[b + 2] = clamp(Math.round(-q[1] * 128 + 128), 0, 255);
+    o8[b + 3] = clamp(Math.round(-q[2] * 128 + 128), 0, 255);
+  }
+  return out;
+}
+
 // Parses the page's binary mesh: "SPLM", u32 vertex count, u32 triangle count, f32 positions,
 // u8 RGBA colors, u32 indices. Returns the arrays plus smooth per-vertex normals.
 export function parseMesh(buffer) {

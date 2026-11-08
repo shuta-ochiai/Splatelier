@@ -254,7 +254,7 @@ footer a { color: var(--ink-2); }
     <div class="eyebrow">Guided capture</div>
     <h2>See what you have covered while you capture.</h2>
     <article class="tool capture-card">
-      <div class="media capture-media"><video src="media/capture.mp4?v=20261108l" poster="media/capture.jpg?v=20261108l" muted loop playsinline preload="none" aria-label="Capture replay: the white camera view fills in with colored splats as the phone moves along a painted wall"></video></div>
+      <div class="media capture-media"><video src="media/capture.mp4?v=20261108m" poster="media/capture.jpg?v=20261108m" muted loop playsinline preload="none" aria-label="Capture replay: the white camera view fills in with colored splats as the phone moves along a painted wall"></video></div>
       <div>
         <h3>Color fills in where you have been</h3>
         <p>As you walk around, the camera view turns white and fills in with splats wherever the phone has seen the surface, finer the closer you get. A gap is easy to spot and go back for. Frames that would come out motion-blurred are left out of training, and short animated tips on the start screen show how to move.</p>      </div>
@@ -277,17 +277,17 @@ footer a { color: var(--ink-2); }
         <p>Splatelier can turn a trained scene into a vertex-colored mesh: it fuses the Gaussians’ depth into a TSDF and extracts the surface. Show it with the splats or as plain shape in the viewer, measure on it, and export it as OBJ.</p>
       </article>
       <article class="tool">
-        <div class="media portrait"><video src="media/crop.mp4?v=20261108l" poster="media/crop.jpg?v=20261108l" muted loop playsinline preload="none" aria-label="Screen recording: a box turned and fitted to the pay phone keeps it and removes the wall and floor around it"></video></div>
+        <div class="media portrait"><video src="media/crop.mp4?v=20261108m" poster="media/crop.jpg?v=20261108m" muted loop playsinline preload="none" aria-label="Screen recording: a box turned and fitted to the pay phone keeps it and removes the wall and floor around it"></video></div>
         <h3>Crop with a box, sphere or lasso</h3>
         <p>Move, turn and resize a box or sphere with its handles to keep or remove what is inside, or draw a loop on screen to cut through the scene. Crops only hide splats, so undo is instant.</p>
       </article>
       <article class="tool">
-        <div class="media portrait"><video src="media/floaters.mp4?v=20261108l" poster="media/floaters.jpg?v=20261108l" muted loop playsinline preload="none" aria-label="Screen recording: behind the lion, haze hides the statue; Auto Detect selects it in orange and Delete clears the view"></video></div>
+        <div class="media portrait"><video src="media/floaters.mp4?v=20261108m" poster="media/floaters.jpg?v=20261108m" muted loop playsinline preload="none" aria-label="Screen recording: behind the lion, haze hides the statue; Auto Detect selects it in orange and Delete clears the view"></video></div>
         <h3>Clear the floaters</h3>
         <p>Stray splats can hang in the air and hide the subject from some angles. Let Auto Detect find them, or tap them with a brush, then delete them together. Undo brings them back.</p>
       </article>
       <article class="tool">
-        <div class="media portrait"><video src="media/color.mp4?v=20261108l" poster="media/color.jpg?v=20261108l" muted loop playsinline preload="none" aria-label="Screen recording: moving the temperature and saturation sliders, then Reset"></video></div>
+        <div class="media portrait"><video src="media/color.mp4?v=20261108m" poster="media/color.jpg?v=20261108m" muted loop playsinline preload="none" aria-label="Screen recording: moving the temperature and saturation sliders, then Reset"></video></div>
         <h3>Grade the colors</h3>
         <p>Tint, temperature, saturation, brightness, black and white points and opacity. The grade is non-destructive: the trained data stays as it was, and Reset brings it back.</p>
       </article>
@@ -380,16 +380,16 @@ open App/Splatelier.xcodeproj
 <script type="module">
 // Bump VERSION (here and in the import) whenever the viewer or the scene files change, so browsers
 // don't keep showing cached copies.
-import { SplatViewer, parseMesh } from './viewer.js?v=20261108l';
-const VERSION = '20261108l';
+import { SplatViewer, parseMesh, decodeSpz, gunzip } from './viewer.js?v=20261108m';
+const VERSION = '20261108m';
 const versioned = (url) => `${url}?v=${VERSION}`;
 
 const SCENES = {
-  playground: { file: 'scenes/playground.splat', path: 'scenes/playground.path.json', cam: { target: [0.016, -1.722, -3.148], yaw: -0.747, pitch: 0.657, dist: 4.5, fovY: 56 } },
-  lion:       { file: 'scenes/lion.splat',       path: 'scenes/lion.path.json', cam: { target: [0.062, -0.97, -0.889],  yaw: -2.647, pitch: 0.75,  dist: 1.9, fovY: 56 } },
-  phone:      { file: 'scenes/phone.splat',      path: 'scenes/phone.path.json', cam: { target: [-0.225, -1.376, -0.704], yaw: 1.64,  pitch: 0.774, dist: 2.3, fovY: 56 } },
-  stump:      { file: 'scenes/stump.splat',      path: 'scenes/stump.path.json', cam: { target: [-0.322, -0.94, -1.338], yaw: 1.275, pitch: 0.6, dist: 1.3, fovY: 56 } },
-  graffiti:   { file: 'scenes/graffiti.splat',   path: 'scenes/graffiti.path.json', cam: { target: [-2.926, -0.284, -5.743], yaw: -0.862, pitch: 0.1, dist: 5.1, fovY: 56 } },
+  playground: { file: 'scenes/playground.spz', path: 'scenes/playground.path.json', cam: { target: [0.016, -1.722, -3.148], yaw: -0.747, pitch: 0.657, dist: 4.5, fovY: 56 } },
+  lion:       { file: 'scenes/lion.spz',       path: 'scenes/lion.path.json', cam: { target: [0.062, -0.97, -0.889],  yaw: -2.647, pitch: 0.75,  dist: 1.9, fovY: 56 } },
+  phone:      { file: 'scenes/phone.spz',      path: 'scenes/phone.path.json', cam: { target: [-0.225, -1.376, -0.704], yaw: 1.64,  pitch: 0.774, dist: 2.3, fovY: 56 } },
+  stump:      { file: 'scenes/stump.spz',      path: 'scenes/stump.path.json', cam: { target: [-0.322, -0.94, -1.338], yaw: 1.275, pitch: 0.6, dist: 1.3, fovY: 56 } },
+  graffiti:   { file: 'scenes/graffiti.spz',   path: 'scenes/graffiti.path.json', cam: { target: [-2.926, -0.284, -5.743], yaw: -0.862, pitch: 0.1, dist: 5.1, fovY: 56 } },
 };
 
 const status = document.getElementById('status');
@@ -439,21 +439,38 @@ function loading(text) {
   bar.style.width = '0%';
 }
 
+// Splats come as SPZ (gzip, quantized) and meshes gzipped, about half the size of the raw files;
+// both are decoded once and kept.
+const splats = new Map();
+async function loadSplats(name) {
+  if (!splats.has(name)) {
+    const file = await fetchFile(SCENES[name].file);
+    splats.set(name, { buffer: await decodeSpz(file), bytes: file.byteLength });
+  }
+  return splats.get(name);
+}
+async function loadMesh(name) {
+  if (!meshes.has(name)) {
+    const file = await fetchFile(SCENES[name].file.replace('.spz', '.mesh.gz'));
+    meshes.set(name, parseMesh(await gunzip(file)));
+  }
+  return meshes.get(name);
+}
+
 function describe(name) {
-  const splat = cache.get(SCENES[name].file);
+  const splat = splats.get(name);
   if (!splat) return;
   const mesh = meshes.get(name);
   info.textContent = mode !== 'splats' && mesh
     ? `${Math.round(mesh.triangles / 1000)}k triangles · simplified for the web`
-    : `${Math.round(splat.byteLength / 32 / 1000)}k splats · ${(splat.byteLength / 1e6).toFixed(1)} MB`;
+    : `${Math.round(splat.buffer.byteLength / 32 / 1000)}k splats · ${(splat.bytes / 1e6).toFixed(1)} MB`;
 }
 
 async function showMesh(name) {
   if (meshShown === name) return;
   if (!meshes.has(name)) {
     loading('Loading mesh…');
-    const buffer = await fetchFile(SCENES[name].file.replace('.splat', '.mesh'));
-    meshes.set(name, parseMesh(buffer));
+    await loadMesh(name);
   }
   if (current !== name || mode === 'splats') return;
   viewer.setMesh(meshes.get(name));
@@ -471,10 +488,10 @@ async function show(name) {
     const pathReq = SCENES[name].path
       ? fetch(versioned(SCENES[name].path)).then((r) => (r.ok ? r.json() : null)).catch(() => null)
       : Promise.resolve(null);
-    const [buffer, path] = await Promise.all([fetchFile(SCENES[name].file), pathReq]);
+    const [splat, path] = await Promise.all([loadSplats(name), pathReq]);
     if (current !== name) return;
     if (mode === 'splats') viewer.onFirstFrame = () => status.classList.add('hidden');
-    viewer.setSplats(buffer, SCENES[name].cam);
+    viewer.setSplats(splat.buffer, SCENES[name].cam);
     viewer.setPath(path);
     if (mode !== 'splats') await showMesh(name);
     describe(name);
@@ -526,11 +543,7 @@ async function startMeshCard() {
   let v;
   try { v = new SplatViewer(document.getElementById('mesh-canvas')); } catch { return; }
   try {
-    if (!meshes.has('lion')) {
-      const res = await fetch(versioned('scenes/lion.mesh'));
-      if (!res.ok) throw new Error(res.status);
-      meshes.set('lion', parseMesh(await res.arrayBuffer()));
-    }
+    await loadMesh('lion');
     const path = await fetch(versioned(SCENES.lion.path)).then((r) => (r.ok ? r.json() : null)).catch(() => null);
     v.setMesh(meshes.get('lion'));
     v.setMode('shape');
