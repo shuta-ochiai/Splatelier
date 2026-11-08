@@ -32,6 +32,7 @@ public struct SplatViewerScreen: View {
     private let cadURL: URL?
     private let cadPlacement: SplatViewerCADPlacement?
     private let onCADPlacementChange: ((SplatViewerCADPlacement) -> Void)?
+    private let onSceneRotationChange: ((SplatViewerSceneRotation) -> Void)?
     private let onImportCAD: ((URL) throws -> URL)?
     private let onRemoveCAD: (() -> Void)?
     private let shareItems: [SplatViewerShareItem]
@@ -87,6 +88,9 @@ public struct SplatViewerScreen: View {
     ///     two-finger twist or the quarter-turn buttons turn it.
     ///   - cadPlacement: Where the CAD model was left last time (nil: the middle of the scene).
     ///   - onCADPlacementChange: Told the placement after each move or turn, to save it.
+    ///   - sceneRotation: How the scene was turned upright with Orient last time (nil: as its file
+    ///     has it).
+    ///   - onSceneRotationChange: Told the scene's rotation after each Orient turn, to save it.
     ///   - onImportCAD: Keeps a CAD model picked with Import (the app copies it beside the scene) and
     ///     returns where it now is; the viewer then loads it, replacing any. nil hides Import.
     ///   - onRemoveCAD: Forgets the CAD model when Remove is confirmed (the app deletes its copy and
@@ -102,6 +106,8 @@ public struct SplatViewerScreen: View {
         cadURL: URL? = nil,
         cadPlacement: SplatViewerCADPlacement? = nil,
         onCADPlacementChange: ((SplatViewerCADPlacement) -> Void)? = nil,
+        sceneRotation: SplatViewerSceneRotation? = nil,
+        onSceneRotationChange: ((SplatViewerSceneRotation) -> Void)? = nil,
         onImportCAD: ((URL) throws -> URL)? = nil,
         onRemoveCAD: (() -> Void)? = nil,
         name: String? = nil,
@@ -111,13 +117,14 @@ public struct SplatViewerScreen: View {
         trainMoreMessage: String = "Training continues from this result.",
         onRename: ((String) -> Void)? = nil
     ) {
-        _model = StateObject(wrappedValue: SplatViewerModel(cropExport: cropExport))
+        _model = StateObject(wrappedValue: SplatViewerModel(cropExport: cropExport, sceneRotation: sceneRotation))
         self.url = url
         self.seedURL = seedURL
         self.meshURL = meshURL
         self.cadURL = cadURL
         self.cadPlacement = cadPlacement
         self.onCADPlacementChange = onCADPlacementChange
+        self.onSceneRotationChange = onSceneRotationChange
         self.onImportCAD = onImportCAD
         self.onRemoveCAD = onRemoveCAD
         self.shareItems = shareItems
@@ -139,7 +146,10 @@ public struct SplatViewerScreen: View {
                 url: url, seedURL: seedURL, meshURL: meshURL, cadURL: cadURL, cadPlacement: cadPlacement,
                 model: model)
                 .ignoresSafeArea()
-                .onAppear { model.onCADPlacementChange = onCADPlacementChange }
+                .onAppear {
+                    model.onCADPlacementChange = onCADPlacementChange
+                    model.onSceneRotationChange = onSceneRotationChange
+                }
             #if os(macOS)
                 .gesture(orbitGesture)
                 .simultaneousGesture(zoomGesture)
@@ -339,6 +349,7 @@ public struct SplatViewerScreen: View {
             hintRow("ruler", "Measure", "Turn on Measure, then tap 2 points")
             hintRow("crop", "Crop", "Edit, then Crop, then drag a handle of the box or sphere")
             hintRow("aqi.medium", "Floaters", "Edit, then Floaters, then tap a floater or Auto Detect")
+            hintRow("rotate.3d", "Orient", "Display, then Orient, then turn the model until it stands upright")
             if model.hasCAD {
                 hintRow("cube.transparent", "CAD model", "Drag it to move it; it settles on floors and tables. Twist with 2 fingers or drag a ring to turn it; the buttons below turn it by quarter turns")
             }
@@ -349,6 +360,7 @@ public struct SplatViewerScreen: View {
             hintRow("ruler", "Measure", "Turn on Measure, then click 2 points")
             hintRow("crop", "Crop", "Edit, then Crop, then drag a handle of the box or sphere")
             hintRow("aqi.medium", "Floaters", "Edit, then Floaters, then click a floater or Auto Detect")
+            hintRow("rotate.3d", "Orient", "Display, then Orient, then turn the model until it stands upright")
             if model.hasCAD {
                 hintRow("cube.transparent", "CAD model", "Drag it to move it; it settles on floors and tables. Drag a ring or rotate on the trackpad to turn it; the buttons below turn it by quarter turns")
             }
@@ -414,6 +426,9 @@ public struct SplatViewerScreen: View {
                 if model.isCADSelected {
                     cadTurnControls
                 }
+                if model.isOrienting {
+                    orientControls
+                }
                 if model.hasGS && showEditOptions {
                     editOptions
                 }
@@ -456,14 +471,22 @@ public struct SplatViewerScreen: View {
     private var displayButton: some View {
         toggleCapsule("Display", systemImage: "eye", isOn: showDisplayOptions) {
             showDisplayOptions.toggle()
+            // Closing Display closes Orient with it, so its band isn't left behind without its row.
+            if !showDisplayOptions { model.isOrienting = false }
         }
     }
 
-    /// One line of layer switches, so the model stays in view while they are flipped. It scrolls
-    /// sideways when it doesn't fit and is centered when it does. Background and Shaded are disabled
-    /// (not hidden) while their layer is off, so the switches don't move.
+    /// One line: Orient, then the layer switches, so the model stays in view while they are
+    /// flipped. It scrolls sideways when it doesn't fit and is centered when it does. Background and
+    /// Shaded are disabled (not hidden) while their layer is off, so the switches don't move.
     private var displayOptions: some View {
         let row = HStack(spacing: 6) {
+            // Orient changes only how the scene is seen, not its splats, so it sits here, not in Edit.
+            // It comes first, so it isn't lost past the layer switches.
+            toggleCapsule("Orient", systemImage: "rotate.3d", isOn: model.isOrienting) {
+                model.isOrienting.toggle()
+            }
+            displayDivider
             if model.hasGS {
                 toggleCapsule("Splats", systemImage: "cube.fill", isOn: model.showGS) {
                     model.showGS.toggle()
@@ -651,6 +674,45 @@ public struct SplatViewerScreen: View {
         .padding(.horizontal, 4)
         .background(.ultraThinMaterial, in: Capsule())
         .padding(.bottom, 4)
+    }
+
+    /// Quarter turns of the whole scene, shown while Orient is on: one small band of icons, as for
+    /// the CAD model.
+    private var orientControls: some View {
+        HStack(spacing: 0) {
+            ForEach(SplatViewerSceneTurn.allCases, id: \.self) { turn in
+                cadIconButton(Self.title(of: turn), systemImage: Self.symbol(of: turn)) {
+                    model.turnScene(turn)
+                }
+                Divider().frame(height: 18)
+            }
+            cadIconButton("Reset orientation", systemImage: "arrow.uturn.backward") {
+                model.resetSceneRotation()
+            }
+            .disabled(!model.isSceneTurned)
+            .opacity(model.isSceneTurned ? 1 : 0.35)
+        }
+        .padding(.horizontal, 4)
+        .background(.ultraThinMaterial, in: Capsule())
+        .padding(.bottom, 4)
+    }
+
+    private static func title(of turn: SplatViewerSceneTurn) -> String {
+        switch turn {
+        case .rotateLeft: "Rotate left 90°"
+        case .rotateRight: "Rotate right 90°"
+        case .tipForward: "Tip toward you 90°"
+        case .tipBack: "Tip away 90°"
+        }
+    }
+
+    private static func symbol(of turn: SplatViewerSceneTurn) -> String {
+        switch turn {
+        case .rotateLeft: "rotate.left"
+        case .rotateRight: "rotate.right"
+        case .tipForward: "arrow.uturn.down"
+        case .tipBack: "arrow.uturn.up"
+        }
     }
 
     private func cadIconButton(

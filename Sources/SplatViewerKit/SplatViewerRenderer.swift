@@ -483,7 +483,8 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
         SplatViewerCamera(
             azimuth: model.azimuth, elevation: model.elevation, distance: model.distance,
             center: model.center, fovyRadians: model.fovyRadians,
-            aspect: Float(drawableSize.width / max(1, drawableSize.height)))
+            aspect: Float(drawableSize.width / max(1, drawableSize.height)),
+            sceneRotation: model.sceneRotation)
     }
 
     private func viewportDescriptor(_ camera: SplatViewerCamera) -> SplatRenderer.ViewportDescriptor {
@@ -693,22 +694,25 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
         }
         isFindingFloor = true
         let reach = cadSnapReach
-        let foot = SplatViewerCADSurface.foot(of: free)
+        // Floors are found in the viewer's coordinates, where up is +Y however the scene is turned.
+        let scene = model.sceneRotation
+        let foot = SplatViewerCADSurface.foot(of: free.rotated(by: scene))
         // The slope is read across at least 15 cm, so splat bumps don't make the model wobble.
         let probes = SplatViewerCADSurface.probes(under: foot, reach: reach, spread: max(4 * reach, 0.15))
         let down = SIMD3<Float>(0, -1, 0)
         Task { [weak self] in
             let hits = await Task.detached(priority: .userInitiated) {
                 probes.map { origin in
-                    caster.cast(origin: origin, direction: down, pixelAngle: 0.002)
+                    caster.cast(origin: scene.inverse.act(origin), direction: scene.inverse.act(down), pixelAngle: 0.002)
                         .flatMap { $0 <= 2 * reach ? origin + down * $0 : nil }
                 }
             }.value
             guard let self else { return }
             self.isFindingFloor = false
-            self.cadFloor = SplatViewerCADSurface.floor(hits: hits, foot: foot, reach: reach)
+            // The scene may have turned meanwhile: the floor goes with it.
+            self.cadFloor = SplatViewerCADSurface.floor(hits: hits, foot: foot, reach: reach)?.rotated(by: scene.inverse)
             if let free = self.cadFreeRegion {
-                self.model.setCADRegion(SplatViewerCADSurface.settled(free, on: self.cadFloor, reach: reach))
+                self.model.setCADRegion(self.settledCAD(free, reach: reach))
             }
             if self.floorSearchPending, self.cadFreeRegion != nil {
                 self.floorSearchPending = false
@@ -719,6 +723,14 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
                 if self.activeCADHandle == nil { self.model.onCADPlacementChange?(self.model.cadPlacement) }
             }
         }
+    }
+
+    /// `box` settled on the last floor found, worked out in the viewer's coordinates (+Y up).
+    private func settledCAD(_ box: SplatViewerCropRegion, reach: Float) -> SplatViewerCropRegion {
+        let scene = model.sceneRotation
+        return SplatViewerCADSurface.settled(
+            box.rotated(by: scene), on: cadFloor?.rotated(by: scene), reach: reach
+        ).rotated(by: scene.inverse)
     }
 
     /// Two-finger twist (or trackpad rotation) of the selected CAD model about the vertical.
@@ -812,7 +824,7 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
                 // The model moves freely in the screen plane, and settles on a floor within reach.
                 let moved = free.dragged(.center, byPixels: delta * pixelSize, camera: camera(), viewSize: pixelSize)
                 cadFreeRegion = moved
-                model.setCADRegion(SplatViewerCADSurface.settled(moved, on: cadFloor, reach: cadSnapReach))
+                model.setCADRegion(settledCAD(moved, reach: cadSnapReach))
                 findFloor()
             } else {
                 model.setCADRegion(cadGizmo(camera()).dragged(
