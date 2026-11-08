@@ -641,6 +641,9 @@ struct SplatLibraryView: View {
                 try FileManager.default.removeItem(at: dest)
             }
             try FileManager.default.copyItem(at: src, to: dest)
+            // A copy keeps the source's date (when another app exported it, maybe long ago), and the
+            // Library lists newest first: date it now, so the import shows at the top.
+            try? FileManager.default.setAttributes([.modificationDate: Date()], ofItemAtPath: dest.path)
             reload()
         } catch {
             errorMessage = error.localizedDescription
