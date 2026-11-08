@@ -122,7 +122,8 @@ targets:
     # them (made by scripts/flexglue/export_models.py). They are not in the repository (about 230 MB,
     # and the descriptor's weights are under the DINOv3 License); without them the app builds as
     # usual and does not offer the switch. The packages are compiled here so the app loads them
-    # directly.
+    # directly, and encrypted when App/FlexGlueModels/flexglue.mlmodelkey (a Core ML model key made
+    # in Xcode for the team) is there: the license asks not to invite reverse engineering.
     postCompileScripts:
       - name: Bundle FlexGlue models
         basedOnDependencyAnalysis: false
@@ -132,8 +133,13 @@ targets:
           rm -rf "$DST"
           [ -d "$SRC" ] || exit 0
           mkdir -p "$DST"
+          KEY="$SRC/flexglue.mlmodelkey"
           for m in "$SRC"/*.mlpackage; do
-            xcrun coremlcompiler compile "$m" "$DST" > /dev/null || exit 1
+            if [ -f "$KEY" ]; then
+              xcrun coremlcompiler compile "$m" "$DST" --encrypt "$KEY" > /dev/null || exit 1
+            else
+              xcrun coremlcompiler compile "$m" "$DST" > /dev/null || exit 1
+            fi
           done
           cp "$SRC"/*.safetensors "$DST"/
     dependencies:

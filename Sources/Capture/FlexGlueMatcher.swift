@@ -71,7 +71,7 @@ public final class FlexGlueMatcher: @unchecked Sendable {
                     try fm.moveItem(at: temp, to: url)
                 }
             }
-            return try MLModel(contentsOf: url, configuration: c)
+            return try Self.loadModel(at: url, configuration: c)
         }
         descriptor = try load(Self.modelNames[0])
         transformerA = try load(Self.modelNames[1])
@@ -80,6 +80,20 @@ public final class FlexGlueMatcher: @unchecked Sendable {
         self.earlyStopCovisibility = earlyStopCovisibility
         self.filterThreshold = filterThreshold
         self.maxCyclePx = maxCyclePx
+    }
+
+    /// Loads a compiled model, waiting for Core ML's asynchronous loader: an encrypted model (as the
+    /// app bundles them when built with a model key) loads only that way, fetching its key from
+    /// Apple on first use. Not on the main thread.
+    static func loadModel(at url: URL, configuration: MLModelConfiguration) throws -> MLModel {
+        final class Box: @unchecked Sendable { var result: Swift.Result<MLModel, Error>? }
+        let box = Box(), done = DispatchSemaphore(value: 0)
+        MLModel.load(contentsOf: url, configuration: configuration) { result in
+            box.result = result
+            done.signal()
+        }
+        done.wait()
+        return try box.result!.get()
     }
 
     /// The elements of a Core ML array in row-major order. Core ML pads rows (strides): a last
