@@ -321,7 +321,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "SRC=\"$SRCROOT/FlexGlueModels\"\nDST=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/FlexGlue\"\nrm -rf \"$DST\"\n# The App Store version (AppStore configuration) leaves the experimental feature out.\n[ \"$CONFIGURATION\" = \"AppStore\" ] && exit 0\n[ -d \"$SRC\" ] || exit 0\nmkdir -p \"$DST\"\nfor m in \"$SRC\"/*.mlpackage; do\n  xcrun coremlcompiler compile \"$m\" \"$DST\" > /dev/null || exit 1\ndone\ncp \"$SRC\"/*.safetensors \"$DST\"/\n";
+			shellScript = "SRC=\"$SRCROOT/FlexGlueModels\"\nDST=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/FlexGlue\"\nrm -rf \"$DST\"\n# The App Store version (AppStore configuration) leaves the experimental feature out.\n[ \"$CONFIGURATION\" = \"AppStore\" ] && exit 0\n[ -d \"$SRC\" ] || exit 0\nmkdir -p \"$DST\"\nKEY=\"$SRC/flexglue.mlmodelkey\"\nfor m in \"$SRC\"/*.mlpackage; do\n  if [ -f \"$KEY\" ]; then\n    xcrun coremlcompiler compile \"$m\" \"$DST\" --encrypt \"$KEY\" > /dev/null || exit 1\n  else\n    xcrun coremlcompiler compile \"$m\" \"$DST\" > /dev/null || exit 1\n  fi\ndone\ncp \"$SRC\"/*.safetensors \"$DST\"/\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
