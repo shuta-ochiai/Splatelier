@@ -47,6 +47,7 @@ func yUpModelIsWrittenTurnedAndReadBack() throws {
 
     let header = try #require(PLYAxes.header(of: url))
     #expect(PLYAxes.isTurned(header: header))
+    #expect(header.split(separator: "\n").contains { $0 == PLYWriter.versionComment })
 
     let file = try SplatTable.readPLY(url: url)
     let means = model.means.asArray(Float.self), quats = model.quats.asArray(Float.self)

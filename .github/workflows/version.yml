@@ -1,0 +1,24 @@
+# Checks that the release version is the same in the Swift package and the app
+# (scripts/version.sh check), and on a release tag that it is the tag's.
+name: Version
+
+on:
+  push:
+    branches: [main, develop]
+    tags: ['v*']
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Version strings agree
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - env:
+          TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: ./scripts/version.sh check ${TAG:+"$TAG"}

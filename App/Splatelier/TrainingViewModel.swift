@@ -365,7 +365,7 @@ final class TrainingViewModel: ObservableObject {
                 opticalFlowWeighting: true,
                 wideLoopClosure: wideLoopModels != nil,
                 maxShDegree: GaussianModel.maxShDegree,
-                appVersion: AppVersion.plain
+                appVersion: Splatelier.versionDescription
             ),
             for: plyURL
         )
@@ -386,7 +386,7 @@ final class TrainingViewModel: ObservableObject {
         if let logURL { FileManager.default.createFile(atPath: logURL.path, contents: nil) }
         let logHandle = logURL.flatMap { try? FileHandle(forWritingTo: $0) }
         if let h = logHandle {
-            let header = "=== splatelier \(AppVersion.full) log @\(timestamp), \(effectiveIterations) iter ===\n"
+            let header = "=== splatelier v\(Splatelier.versionDescription) log @\(timestamp), \(effectiveIterations) iter ===\n"
             if let d = header.data(using: .utf8) { h.write(d) }
         }
 

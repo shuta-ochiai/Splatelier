@@ -70,10 +70,10 @@ targets:
         # Display name shown on the home screen, App Switcher, etc. Takes precedence over CFBundleName
         # ($(PRODUCT_NAME)=Splatelier). Without it, regeneration exposes the internal name.
         CFBundleDisplayName: Splatelier
-        # The release version, kept equal to the git tag and to Splatelier.version
-        # (Sources/Trainer/Splatelier.swift). CFBundleVersion is the build number.
-        CFBundleShortVersionString: "0.6.0"
-        CFBundleVersion: "1"
+        # The release version and the build number come from Config/Version.xcconfig, so a new
+        # version needs no regeneration; the "Stamp the build" script sets the build number.
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         # Input is RGB + coarse pose from ARKit. CameraUsageDescription is the text shown in the OS dialog
         # when the ARSession starts. Unified as "Splatelier" to match the display name.
         NSCameraUsageDescription: Splatelier uses the camera with ARKit to reconstruct scenes in 3D.
@@ -126,13 +126,14 @@ targets:
       path: Splatelier/Splatelier.entitlements
       properties:
         com.apple.developer.kernel.increased-memory-limit: true
-    # The team and bundle identifier come from Config/Signing.xcconfig, which includes the
-    # git-ignored Config/Local.xcconfig (copy Config/Local.xcconfig.example). They are not set under
+    # Config/App.xcconfig includes Config/Version.xcconfig (the release version) and
+    # Config/Signing.xcconfig, which includes the git-ignored Config/Local.xcconfig with the team and
+    # bundle identifier (copy Config/Local.xcconfig.example). None of these are set under
     # `settings`, which would override the xcconfig.
     configFiles:
-      Debug: Config/Signing.xcconfig
-      Release: Config/Signing.xcconfig
-      AppStore: Config/Signing.xcconfig
+      Debug: Config/App.xcconfig
+      Release: Config/App.xcconfig
+      AppStore: Config/App.xcconfig
     settings:
       base:
         TARGETED_DEVICE_FAMILY: "1,2"     # iPhone + iPad
@@ -178,6 +179,23 @@ targets:
             fi
           done
           cp "$SRC"/*.safetensors "$DST"/
+    # The build number is the number of commits up to HEAD, which grows with every merge, so each
+    # upload to App Store Connect has a higher one than the last, and a build number leads back to
+    # its commit. SplatelierCommit names the commit (+dirty when tracked files had changes);
+    # `Splatelier.build` reads both, and a trained PLY's header carries them. Without git (a source
+    # archive) the Info.plist keeps Version.xcconfig's placeholder 1 and no commit.
+    postBuildScripts:
+      - name: Stamp the build
+        basedOnDependencyAnalysis: false
+        script: |
+          cd "$SRCROOT"
+          COUNT=$(git rev-list --count HEAD 2>/dev/null) || exit 0
+          COMMIT=$(git rev-parse --short=12 HEAD)
+          git diff --quiet HEAD -- || COMMIT="$COMMIT+dirty"
+          PLIST="$TARGET_BUILD_DIR/$INFOPLIST_PATH"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $COUNT" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Delete :SplatelierCommit" "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :SplatelierCommit string $COMMIT" "$PLIST"
     dependencies:
       - package: splatelier
         product: Trainer
