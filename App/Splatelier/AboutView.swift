@@ -63,7 +63,7 @@ struct AboutView: View {
                         Label("Report a problem", systemImage: "exclamationmark.bubble")
                     }
                 }
-                Section("Open source licenses") {
+                Section {
                     ForEach(licenseEntries) { entry in
                         NavigationLink {
                             LicenseTextView(entry: entry)
@@ -74,6 +74,13 @@ struct AboutView: View {
                                 Text(entry.license).foregroundStyle(.secondary)
                             }
                         }
+                    }
+                } header: {
+                    Text("Open source licenses")
+                } footer: {
+                    if TrainingViewModel.bundledWideLoopModels != nil {
+                        Text("The wide-angle loop closure's models include DINOv3, used under the DINOv3 License. "
+                             + "Extracting, decompiling or reverse-engineering the bundled models is not permitted.")
                     }
                 }
             }
