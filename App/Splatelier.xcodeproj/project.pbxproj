@@ -7,8 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		34A4CF592217EB1A587AB2BE /* DINOv3.txt in Resources */ = {isa = PBXBuildFile; fileRef = E3433B133989D8E7CE1C196B /* DINOv3.txt */; };
-		E9FCD5DC22122941EEA11F21 /* FlexGlue.txt in Resources */ = {isa = PBXBuildFile; fileRef = 42B4AB2B48F6A57C61E0CAE0 /* FlexGlue.txt */; };
 		01DE23788286703E4855E8C1 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32632ECDB986EBB1F4C83F97 /* RootView.swift */; };
 		08D5D1562685698D761475E7 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B8797B29940BF5CBEF3B92DC /* Assets.xcassets */; };
 		0A728E054B6350E87C05C079 /* launch.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = 117ADD30B81D1B38F22AAA67 /* launch.mp4 */; };
@@ -20,8 +18,10 @@
 		22BC0717D7675E9009278F51 /* guide_pivot.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = 4F5BA88DADD619751FBB57AD /* guide_pivot.mp4 */; };
 		257D0E560BFC95E94DFA0FBE /* guide_turn.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = 1DFDB32D079E7B9B7340FBB5 /* guide_turn.mp4 */; };
 		2A528F932C4DB8A60EFB3B21 /* guide_slow.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = D08F13DBF1F74C9DD78CBFE7 /* guide_slow.mp4 */; };
+		34A4CF592217EB1A587AB2BE /* DINOv3.txt in Resources */ = {isa = PBXBuildFile; fileRef = E3433B133989D8E7CE1C196B /* DINOv3.txt */; };
 		3BB284D8935A15E054C1BE83 /* Capture in Frameworks */ = {isa = PBXBuildFile; productRef = 0760E214BC88FE08E67D6904 /* Capture */; };
 		49666DB4953BB06BA86C2086 /* GuideClipView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE1374C4B556E184452A79D5 /* GuideClipView.swift */; };
+		4D6ABE06B7B419E24CEF21B5 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 8F5825658976B5EAFF5F0609 /* PrivacyInfo.xcprivacy */; };
 		62C135012E87F56761AC7BD3 /* TrainingViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBF730EC4E24862592C75822 /* TrainingViewModel.swift */; };
 		63C571BD3900936FEDB501D3 /* guide_subjects.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = CC9ECD3EFACEFC22C2C11415 /* guide_subjects.mp4 */; };
 		67579914402A5CA66D97092F /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B17198F83EB1972856C242D7 /* AboutView.swift */; };
@@ -32,42 +32,45 @@
 		816E887CAA9077FF394DEA38 /* mlx.txt in Resources */ = {isa = PBXBuildFile; fileRef = A3623F5700962DAAE44C4F86 /* mlx.txt */; };
 		981EE82D39D2E8F67F71113A /* spz-swift.txt in Resources */ = {isa = PBXBuildFile; fileRef = F2A122E8E98CCFC565269E5A /* spz-swift.txt */; };
 		9E182E3B3AE4A089C9DF4F69 /* MetalSplatter.txt in Resources */ = {isa = PBXBuildFile; fileRef = 0B4A6F147A19BC01C1467EFE /* MetalSplatter.txt */; };
-		CA3DF9EA157FB97FAAA25696 /* cadmpeg.txt in Resources */ = {isa = PBXBuildFile; fileRef = 1C69033F657662496456997A /* cadmpeg.txt */; };
+		A588E3A5C80CB2A3488980FD /* guide_cool.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = F47585790BBEA0F1D316AE87 /* guide_cool.mp4 */; };
 		A590BC20BA16735A21DC6C11 /* SplatLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CDD1105446E7504D3E5DC30 /* SplatLibraryView.swift */; };
 		A6ED43F1088832DEFEFA29A9 /* ShareOptionsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 304812711AF3443F715DF7F9 /* ShareOptionsSheet.swift */; };
 		AF2431FEEC9631555EDB4331 /* nlohmann-json.txt in Resources */ = {isa = PBXBuildFile; fileRef = 6B79730CE5E423E2E5D35D49 /* nlohmann-json.txt */; };
 		B402D65B4BEEF56A8E00485F /* mlx-swift.txt in Resources */ = {isa = PBXBuildFile; fileRef = 048A89475E71C4E8D52C87AA /* mlx-swift.txt */; };
 		B9249B43E69C7EFBB1C0D8C3 /* guide_angles.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = 04A654A6F3CE144B29AC2196 /* guide_angles.mp4 */; };
-		A588E3A5C80CB2A3488980FD /* guide_cool.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = F47585790BBEA0F1D316AE87 /* guide_cool.mp4 */; };
 		BC9FD032C66D0912993CB11E /* SplatExportShare.swift in Sources */ = {isa = PBXBuildFile; fileRef = F58CEA4AB0AB3B2D8C237ABD /* SplatExportShare.swift */; };
 		C78C6BB9142D6438C43AE078 /* guide_loop.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = 69CEB026472D66F4CCE4E52B /* guide_loop.mp4 */; };
+		CA3DF9EA157FB97FAAA25696 /* cadmpeg.txt in Resources */ = {isa = PBXBuildFile; fileRef = 1C69033F657662496456997A /* cadmpeg.txt */; };
 		CDA7832F7C8BC941633CC7B7 /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 222B06897FC2E276AB4462F4 /* DesignSystem.swift */; };
 		D22D93101E7B98B7AF530BC0 /* TrainingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1CC444B02994F0756CA1681 /* TrainingView.swift */; };
+		D8A1F774BBC1F34A8D5E7BB4 /* DeviceSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3146F7A9B004422C3E1A7EA2 /* DeviceSupport.swift */; };
 		D8D67C1E2084074269A25FF6 /* SplatViewerKit in Frameworks */ = {isa = PBXBuildFile; productRef = 4E33263388A0B551FBF6A6E1 /* SplatViewerKit */; };
 		E1294DC40EA46275311A3A5E /* CaptureViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6415796D99C0BA08F2A7C122 /* CaptureViewModel.swift */; };
 		E63DA16526DE76C5F7B14B86 /* swift-numerics.txt in Resources */ = {isa = PBXBuildFile; fileRef = A635EA42807AABF63B5C7812 /* swift-numerics.txt */; };
 		E8AC33435119270BC5EB946D /* App.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CBE22F39754A8722352E099 /* App.swift */; };
+		E9FCD5DC22122941EEA11F21 /* FlexGlue.txt in Resources */ = {isa = PBXBuildFile; fileRef = 42B4AB2B48F6A57C61E0CAE0 /* FlexGlue.txt */; };
 		F4FB280852535D970E4FA5A8 /* mlx-c.txt in Resources */ = {isa = PBXBuildFile; fileRef = 89FC6F25895955481C97C70D /* mlx-c.txt */; };
+		F66839388562C8CE0ACF2942 /* AppFeatures.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BA325DF38EBD374278A114E /* AppFeatures.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		42B4AB2B48F6A57C61E0CAE0 /* FlexGlue.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = FlexGlue.txt; sourceTree = "<group>"; };
-		E3433B133989D8E7CE1C196B /* DINOv3.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = DINOv3.txt; sourceTree = "<group>"; };
 		048A89475E71C4E8D52C87AA /* mlx-swift.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "mlx-swift.txt"; sourceTree = "<group>"; };
 		04A654A6F3CE144B29AC2196 /* guide_angles.mp4 */ = {isa = PBXFileReference; path = guide_angles.mp4; sourceTree = "<group>"; };
-		F47585790BBEA0F1D316AE87 /* guide_cool.mp4 */ = {isa = PBXFileReference; path = guide_cool.mp4; sourceTree = "<group>"; };
 		0AA06C0E20ABD473CA332C58 /* metal-cpp.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "metal-cpp.txt"; sourceTree = "<group>"; };
 		0B4A6F147A19BC01C1467EFE /* MetalSplatter.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = MetalSplatter.txt; sourceTree = "<group>"; };
-		1C69033F657662496456997A /* cadmpeg.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = cadmpeg.txt; sourceTree = "<group>"; };
 		0F3068CFC477ECA713F841EA /* FrameReviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrameReviewView.swift; sourceTree = "<group>"; };
 		117ADD30B81D1B38F22AAA67 /* launch.mp4 */ = {isa = PBXFileReference; path = launch.mp4; sourceTree = "<group>"; };
+		1C69033F657662496456997A /* cadmpeg.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = cadmpeg.txt; sourceTree = "<group>"; };
 		1CBE22F39754A8722352E099 /* App.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App.swift; sourceTree = "<group>"; };
 		1DFDB32D079E7B9B7340FBB5 /* guide_turn.mp4 */ = {isa = PBXFileReference; path = guide_turn.mp4; sourceTree = "<group>"; };
 		222B06897FC2E276AB4462F4 /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
 		304812711AF3443F715DF7F9 /* ShareOptionsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareOptionsSheet.swift; sourceTree = "<group>"; };
+		3146F7A9B004422C3E1A7EA2 /* DeviceSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceSupport.swift; sourceTree = "<group>"; };
 		32632ECDB986EBB1F4C83F97 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		360CBE487E38E97640AD5677 /* fmt.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = fmt.txt; sourceTree = "<group>"; };
 		381CC46EA36AC4A9AF165BEC /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		3BA325DF38EBD374278A114E /* AppFeatures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppFeatures.swift; sourceTree = "<group>"; };
+		42B4AB2B48F6A57C61E0CAE0 /* FlexGlue.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = FlexGlue.txt; sourceTree = "<group>"; };
 		44D60E52950B5F46D58C659D /* Splatelier.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Splatelier.entitlements; sourceTree = "<group>"; };
 		4F5BA88DADD619751FBB57AD /* guide_pivot.mp4 */ = {isa = PBXFileReference; path = guide_pivot.mp4; sourceTree = "<group>"; };
 		6415796D99C0BA08F2A7C122 /* CaptureViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureViewModel.swift; sourceTree = "<group>"; };
@@ -76,6 +79,7 @@
 		77FA9D3F3D85A13D7BE47554 /* guide_light.mp4 */ = {isa = PBXFileReference; path = guide_light.mp4; sourceTree = "<group>"; };
 		89FC6F25895955481C97C70D /* mlx-c.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "mlx-c.txt"; sourceTree = "<group>"; };
 		8E0CE9C4A930FDA0C48A6EAF /* Splatelier.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Splatelier.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		8F5825658976B5EAFF5F0609 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		9CDD1105446E7504D3E5DC30 /* SplatLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplatLibraryView.swift; sourceTree = "<group>"; };
 		A1CC444B02994F0756CA1681 /* TrainingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainingView.swift; sourceTree = "<group>"; };
 		A3623F5700962DAAE44C4F86 /* mlx.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = mlx.txt; sourceTree = "<group>"; };
@@ -83,15 +87,17 @@
 		AC4C22862D2E266D030C936C /* ARCaptureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ARCaptureView.swift; sourceTree = "<group>"; };
 		AE1374C4B556E184452A79D5 /* GuideClipView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuideClipView.swift; sourceTree = "<group>"; };
 		B17198F83EB1972856C242D7 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
-		5255952A58A7D197B00C4F61 /* splatelier */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "splatelier"; path = ..; sourceTree = SOURCE_ROOT; };
 		B8797B29940BF5CBEF3B92DC /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		CC9ECD3EFACEFC22C2C11415 /* guide_subjects.mp4 */ = {isa = PBXFileReference; path = guide_subjects.mp4; sourceTree = "<group>"; };
 		D08F13DBF1F74C9DD78CBFE7 /* guide_slow.mp4 */ = {isa = PBXFileReference; path = guide_slow.mp4; sourceTree = "<group>"; };
+		5255952A58A7D197B00C4F61 /* splatelier */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "splatelier"; path = ..; sourceTree = SOURCE_ROOT; };
 		DADE075C65792EE63CAD5B27 /* CaptureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureView.swift; sourceTree = "<group>"; };
 		DBF730EC4E24862592C75822 /* TrainingViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainingViewModel.swift; sourceTree = "<group>"; };
 		DCE0FA924591D2503221DD4C /* LaunchVideoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchVideoView.swift; sourceTree = "<group>"; };
+		E3433B133989D8E7CE1C196B /* DINOv3.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = DINOv3.txt; sourceTree = "<group>"; };
 		E58234A2CB029E8F8AEED991 /* Splatelier.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = Splatelier.txt; sourceTree = "<group>"; };
 		F2A122E8E98CCFC565269E5A /* spz-swift.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "spz-swift.txt"; sourceTree = "<group>"; };
+		F47585790BBEA0F1D316AE87 /* guide_cool.mp4 */ = {isa = PBXFileReference; path = guide_cool.mp4; sourceTree = "<group>"; };
 		F58CEA4AB0AB3B2D8C237ABD /* SplatExportShare.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplatExportShare.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -112,9 +118,9 @@
 		136BADA5979A62B20AC87CC7 /* Licenses */ = {
 			isa = PBXGroup;
 			children = (
+				1C69033F657662496456997A /* cadmpeg.txt */,
 				E3433B133989D8E7CE1C196B /* DINOv3.txt */,
 				42B4AB2B48F6A57C61E0CAE0 /* FlexGlue.txt */,
-				1C69033F657662496456997A /* cadmpeg.txt */,
 				360CBE487E38E97640AD5677 /* fmt.txt */,
 				0AA06C0E20ABD473CA332C58 /* metal-cpp.txt */,
 				0B4A6F147A19BC01C1467EFE /* MetalSplatter.txt */,
@@ -149,16 +155,19 @@
 			children = (
 				B17198F83EB1972856C242D7 /* AboutView.swift */,
 				1CBE22F39754A8722352E099 /* App.swift */,
+				3BA325DF38EBD374278A114E /* AppFeatures.swift */,
 				AC4C22862D2E266D030C936C /* ARCaptureView.swift */,
 				B8797B29940BF5CBEF3B92DC /* Assets.xcassets */,
 				DADE075C65792EE63CAD5B27 /* CaptureView.swift */,
 				6415796D99C0BA08F2A7C122 /* CaptureViewModel.swift */,
 				222B06897FC2E276AB4462F4 /* DesignSystem.swift */,
+				3146F7A9B004422C3E1A7EA2 /* DeviceSupport.swift */,
 				0F3068CFC477ECA713F841EA /* FrameReviewView.swift */,
 				AE1374C4B556E184452A79D5 /* GuideClipView.swift */,
 				381CC46EA36AC4A9AF165BEC /* Info.plist */,
 				117ADD30B81D1B38F22AAA67 /* launch.mp4 */,
 				DCE0FA924591D2503221DD4C /* LaunchVideoView.swift */,
+				8F5825658976B5EAFF5F0609 /* PrivacyInfo.xcprivacy */,
 				32632ECDB986EBB1F4C83F97 /* RootView.swift */,
 				304812711AF3443F715DF7F9 /* ShareOptionsSheet.swift */,
 				44D60E52950B5F46D58C659D /* Splatelier.entitlements */,
@@ -266,11 +275,12 @@
 			buildActionMask = 2147483647;
 			files = (
 				08D5D1562685698D761475E7 /* Assets.xcassets in Resources */,
-				9E182E3B3AE4A089C9DF4F69 /* MetalSplatter.txt in Resources */,
-				CA3DF9EA157FB97FAAA25696 /* cadmpeg.txt in Resources */,
 				34A4CF592217EB1A587AB2BE /* DINOv3.txt in Resources */,
 				E9FCD5DC22122941EEA11F21 /* FlexGlue.txt in Resources */,
+				9E182E3B3AE4A089C9DF4F69 /* MetalSplatter.txt in Resources */,
+				4D6ABE06B7B419E24CEF21B5 /* PrivacyInfo.xcprivacy in Resources */,
 				20CC4713AD79BB9EFCB08138 /* Splatelier.txt in Resources */,
+				CA3DF9EA157FB97FAAA25696 /* cadmpeg.txt in Resources */,
 				108FD00B671709BEF68DDC25 /* fmt.txt in Resources */,
 				B9249B43E69C7EFBB1C0D8C3 /* guide_angles.mp4 in Resources */,
 				A588E3A5C80CB2A3488980FD /* guide_cool.mp4 in Resources */,
@@ -311,7 +321,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "SRC=\"$SRCROOT/FlexGlueModels\"\nDST=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/FlexGlue\"\nrm -rf \"$DST\"\n[ -d \"$SRC\" ] || exit 0\nmkdir -p \"$DST\"\nKEY=\"$SRC/flexglue.mlmodelkey\"\nfor m in \"$SRC\"/*.mlpackage; do\n  if [ -f \"$KEY\" ]; then\n    xcrun coremlcompiler compile \"$m\" \"$DST\" --encrypt \"$KEY\" > /dev/null || exit 1\n  else\n    xcrun coremlcompiler compile \"$m\" \"$DST\" > /dev/null || exit 1\n  fi\ndone\ncp \"$SRC\"/*.safetensors \"$DST\"/\n";
+			shellScript = "SRC=\"$SRCROOT/FlexGlueModels\"\nDST=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/FlexGlue\"\nrm -rf \"$DST\"\n# The App Store version (AppStore configuration) leaves the experimental feature out.\n[ \"$CONFIGURATION\" = \"AppStore\" ] && exit 0\n[ -d \"$SRC\" ] || exit 0\nmkdir -p \"$DST\"\nKEY=\"$SRC/flexglue.mlmodelkey\"\nfor m in \"$SRC\"/*.mlpackage; do\n  if [ -f \"$KEY\" ]; then\n    xcrun coremlcompiler compile \"$m\" \"$DST\" --encrypt \"$KEY\" > /dev/null || exit 1\n  else\n    xcrun coremlcompiler compile \"$m\" \"$DST\" > /dev/null || exit 1\n  fi\ndone\ncp \"$SRC\"/*.safetensors \"$DST\"/\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -323,9 +333,11 @@
 				0CD23FFAF683D9FB1C2A4D90 /* ARCaptureView.swift in Sources */,
 				67579914402A5CA66D97092F /* AboutView.swift in Sources */,
 				E8AC33435119270BC5EB946D /* App.swift in Sources */,
+				F66839388562C8CE0ACF2942 /* AppFeatures.swift in Sources */,
 				1DAE351555942B38E85D4D15 /* CaptureView.swift in Sources */,
 				E1294DC40EA46275311A3A5E /* CaptureViewModel.swift in Sources */,
 				CDA7832F7C8BC941633CC7B7 /* DesignSystem.swift in Sources */,
+				D8A1F774BBC1F34A8D5E7BB4 /* DeviceSupport.swift in Sources */,
 				806640FD40AE058896A9399D /* FrameReviewView.swift in Sources */,
 				49666DB4953BB06BA86C2086 /* GuideClipView.swift in Sources */,
 				1E5CF178161A77EED99F8687 /* LaunchVideoView.swift in Sources */,
@@ -341,6 +353,62 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
+		0620C82E121D63891F2637CA /* AppStore */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = AppStore;
+		};
 		163D6FE32B8E99B622C9F834 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -413,6 +481,7 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 434V3FTL9C;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Splatelier/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -421,7 +490,6 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = "io.github.shuta-ochiai.splatelier";
 				SDKROOT = iphoneos;
-				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				SWIFT_STRICT_CONCURRENCY = minimal;
 				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -437,6 +505,7 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 434V3FTL9C;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Splatelier/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -445,12 +514,36 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = "io.github.shuta-ochiai.splatelier";
 				SDKROOT = iphoneos;
-				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				SWIFT_STRICT_CONCURRENCY = minimal;
 				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
+		};
+		C5F7F7F5F8927E1DAE5CBD19 /* AppStore */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Splatelier/Splatelier.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 434V3FTL9C;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				INFOPLIST_FILE = Splatelier/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "io.github.shuta-ochiai.splatelier";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = APP_STORE;
+				SWIFT_STRICT_CONCURRENCY = minimal;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = AppStore;
 		};
 		D617E5AC82954C351C4B96B2 /* Release */ = {
 			isa = XCBuildConfiguration;
@@ -514,20 +607,22 @@
 		20DA78F03BD05D03B49E6D7A /* Build configuration list for PBXProject "Splatelier" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
+				0620C82E121D63891F2637CA /* AppStore */,
 				163D6FE32B8E99B622C9F834 /* Debug */,
 				D617E5AC82954C351C4B96B2 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Debug;
+			defaultConfigurationName = AppStore;
 		};
 		7F0F7D377C88FD387439ADB8 /* Build configuration list for PBXNativeTarget "Splatelier" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
+				C5F7F7F5F8927E1DAE5CBD19 /* AppStore */,
 				21BCDB4F11DDED343D1C9756 /* Debug */,
 				3636E1912340E4A4CAEF8760 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Debug;
+			defaultConfigurationName = AppStore;
 		};
 /* End XCConfigurationList section */
 

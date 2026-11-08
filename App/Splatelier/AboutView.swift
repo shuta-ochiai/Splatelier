@@ -39,10 +39,17 @@ private let licenseEntries: [LicenseEntry] = [
     LicenseEntry(name: "spz-swift", license: "MIT", file: "spz-swift"),
     LicenseEntry(name: "MetalSplatter", license: "MIT", file: "MetalSplatter"),
     LicenseEntry(name: "cadmpeg", license: "Apache-2.0", file: "cadmpeg"),
-    // The experimental wide-angle loop closure's models, when bundled
+    // The experimental wide-angle loop closure: its matcher is built in.
     LicenseEntry(name: "FlexGlue", license: "MIT", file: "FlexGlue"),
-    LicenseEntry(name: "DINOv3 (FlexGlue's descriptor)", license: "DINOv3 License", file: "DINOv3"),
 ]
+
+/// The licenses to list: the DINOv3 License covers the descriptor's weights, which only a build with
+/// the FlexGlue models bundled carries (never the App Store version).
+@MainActor private var shownLicenseEntries: [LicenseEntry] {
+    licenseEntries + (TrainingViewModel.bundledWideLoopModels != nil
+        ? [LicenseEntry(name: "DINOv3 (FlexGlue's descriptor)", license: "DINOv3 License", file: "DINOv3")]
+        : [])
+}
 
 struct AboutView: View {
     @Environment(\.dismiss) private var dismiss
@@ -55,16 +62,18 @@ struct AboutView: View {
             List {
                 header
                     .listRowBackground(Color.clear)
-                Section {
-                    Link(destination: repoURL) {
-                        Label("Source code on GitHub", systemImage: "chevron.left.forwardslash.chevron.right")
-                    }
-                    Link(destination: issuesURL) {
-                        Label("Report a problem", systemImage: "exclamationmark.bubble")
+                if AppFeatures.projectLinks {
+                    Section {
+                        Link(destination: repoURL) {
+                            Label("Source code on GitHub", systemImage: "chevron.left.forwardslash.chevron.right")
+                        }
+                        Link(destination: issuesURL) {
+                            Label("Report a problem", systemImage: "exclamationmark.bubble")
+                        }
                     }
                 }
                 Section {
-                    ForEach(licenseEntries) { entry in
+                    ForEach(shownLicenseEntries) { entry in
                         NavigationLink {
                             LicenseTextView(entry: entry)
                         } label: {

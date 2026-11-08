@@ -147,8 +147,9 @@ struct TrainingView: View {
                 ScrollView {
                     VStack(spacing: 16) {
                         header
-                        AnyView(trainingSettingsCard)
+                        if AppFeatures.trainingSettings { AnyView(trainingSettingsCard) }
                         if lowPowerMode { AnyView(lowPowerNotice) }
+                        if !DeviceSupport.canTrain { AnyView(unsupportedDeviceNotice) }
                         AnyView(startButton)
                     }
                     .frame(maxWidth: DesignSystem.readableWidth)
@@ -226,13 +227,14 @@ struct TrainingView: View {
                 title: "Mesh (OBJ)", systemImage: "triangle", url: mesh))
         }
         // The training log and the mesh log go out together as "Log".
-        let logs = [target.logURL, vm.meshLogURL].compactMap { $0 }
+        let logs = AppFeatures.developerInfo ? [target.logURL, vm.meshLogURL].compactMap { $0 } : []
         if !logs.isEmpty {
             shareItems.append(SplatViewerShareItem(title: "Log", systemImage: "doc.text", urls: logs))
         }
         return SplatViewerScreen(
             url: target.plyURL,
-            seedURL: vm.seedPLYURL,
+            // The seed points and capture cameras are for development.
+            seedURL: AppFeatures.developerInfo ? vm.seedPLYURL : nil,
             meshURL: vm.meshOBJURL,
             name: CaptureMetadataName.load(for: target.plyURL),
             shareItems: shareItems,
@@ -242,7 +244,9 @@ struct TrainingView: View {
                 vm.viewerTarget = nil
                 vm.continueTraining()
             } : nil,
-            trainMoreMessage: "Trains \(TrainingViewModel.continueIterationCount) more iterations on this result, then rebuilds the mesh. It takes a minute or two, and the result is replaced.",
+            trainMoreMessage: AppFeatures.meshGeneration
+                ? "Trains \(TrainingViewModel.continueIterationCount) more iterations on this result, then rebuilds the mesh. It takes a minute or two, and the result is replaced."
+                : "Trains \(TrainingViewModel.continueIterationCount) more iterations on this result. It takes a minute or two, and the result is replaced.",
             onRename: { newName in
                 vm.captureName = newName
                 vm.saveCaptureName()
@@ -295,13 +299,15 @@ struct TrainingView: View {
     }
 
     /// Time and GPU memory in one small line under the progress. The peak turns red above the 3 GB
-    /// the PocketGS paper aims under.
+    /// the PocketGS paper aims under. Builds without the developer info show the time alone.
     private var metricsCard: some View {
         HStack(spacing: 12) {
             metricItem("Elapsed", formatElapsed(vm.elapsedSec))
-            metricItem("GPU peak", formatBytes(vm.peakMemoryBytes),
-                       isMet: vm.peakMemoryBytes < 3 * 1024 * 1024 * 1024)
-            metricItem("GPU active", formatBytes(vm.activeMemoryBytes))
+            if AppFeatures.developerInfo {
+                metricItem("GPU peak", formatBytes(vm.peakMemoryBytes),
+                           isMet: vm.peakMemoryBytes < 3 * 1024 * 1024 * 1024)
+                metricItem("GPU active", formatBytes(vm.activeMemoryBytes))
+            }
         }
         .font(.caption2.monospacedDigit())
         .lineLimit(1)
@@ -387,6 +393,18 @@ struct TrainingView: View {
         .buttonStyle(.borderedProminent)
         .tint(Color.kikyoFill)
         .controlSize(.large)
+        .disabled(!DeviceSupport.canTrain)
+    }
+
+    /// On a device that can't train (see `DeviceSupport`); a capture saved on another device can
+    /// still be opened here, but not trained.
+    private var unsupportedDeviceNotice: some View {
+        Label(DeviceSupport.unsupportedMessage, systemImage: "exclamationmark.triangle.fill")
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(.yellow)
+            .padding()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .cardBackground()
     }
 
     private func settingHeader(_ title: String, help: TrainingHelp) -> some View {
@@ -441,7 +459,7 @@ struct TrainingView: View {
                         Text(vm.progressDetail).font(.body.monospacedDigit())
                     }
                     Spacer()
-                    if case .running(_, let loss?) = vm.phase {
+                    if AppFeatures.developerInfo, case .running(_, let loss?) = vm.phase {
                         Text("loss \(String(format: "%.4f", loss))")
                             .font(.body.monospacedDigit())
                             .foregroundStyle(.secondary)
@@ -456,16 +474,19 @@ struct TrainingView: View {
             case .completed(let url, _, let count, let finalLoss):
                 Label("Training complete", systemImage: "checkmark.seal.fill")
                     .font(.headline).foregroundStyle(.green)
-                Text("\(count) gaussians").font(.body.monospacedDigit())
-                Text("Total \(vm.cumulativeIterations) iter").font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
-                if let finalLoss {
-                    Text("final loss \(String(format: "%.4f", finalLoss))")
-                        .font(.body.monospacedDigit())
+                // The Gaussian count, iterations, loss and file name are for development.
+                if AppFeatures.developerInfo {
+                    Text("\(count) gaussians").font(.body.monospacedDigit())
+                    Text("Total \(vm.cumulativeIterations) iter").font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                    if let finalLoss {
+                        Text("final loss \(String(format: "%.4f", finalLoss))")
+                            .font(.body.monospacedDigit())
+                    }
+                    Text(url.lastPathComponent).font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1).truncationMode(.middle)
                 }
-                Text(url.lastPathComponent).font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1).truncationMode(.middle)
             case .failed(let msg):
                 Label("Training failed", systemImage: "xmark.octagon.fill")
                     .font(.headline).foregroundStyle(.red)
@@ -540,7 +561,9 @@ struct TrainingView: View {
                     Button("Discard and go back", role: .destructive, action: onClose)
                     Button("Cancel", role: .cancel) { }
                 } message: {
-                    Text("If you haven't trained it or used \"Save for validation\", the capture data will be lost. This can't be undone.")
+                    Text(AppFeatures.validationDatasets
+                        ? "If you haven't trained it or used \"Save for validation\", the capture data will be lost. This can't be undone."
+                        : "If you haven't trained it, the capture data will be lost. This can't be undone.")
                 }
             } else {
                 Button(action: onClose) {

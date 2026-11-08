@@ -74,6 +74,14 @@ and compiled to Metal.
 4. Select the **Splatelier** scheme and your device, and run. The scheme builds in Release, because
    training in Debug is much slower.
 
+The **Splatelier** scheme builds the app with every feature. The **Splatelier App Store** scheme
+builds the version for the App Store (the `AppStore` configuration, with the `APP_STORE` flag): it
+stops at the trained splats, with no mesh after training and no CAD models in the viewer, and
+leaves out the experimental LiDAR depth and wide-angle loop closure (its models are not bundled),
+validation datasets and the information that is there for development, and trains with the default
+iterations and Gaussian cap (`App/Splatelier/AppFeatures.swift`). Archive with that scheme for an App
+Store upload.
+
 On iPhone the app is portrait only. On iPad it takes every orientation and any window size, as
 iPadOS requires; columns of cards and buttons stay at a readable width in a wide window.
 
