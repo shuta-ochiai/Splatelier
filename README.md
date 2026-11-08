@@ -9,9 +9,9 @@
   <img alt="Swift 6.0" src="https://img.shields.io/badge/Swift-6.0-orange?logo=swift&logoColor=white">
 </p>
 
-<p align="center">
-  <a href="https://shuta-ochiai.github.io/Splatelier/"><img alt="Capturing a painted wall with the iPhone: the app shows tracking, frames, time and splat count and a Stop button while the camera view fills in with splats where the phone has been. Then the trained 3D Gaussian splats as the camera swings around the blue paint in the middle of the wall, and on the way back the mesh made from the same capture, first with its colors, then plain gray" src=".github/assets/wall-painting.gif" width="480"></a>
-</p>
+<div align="center">
+  <video src="VIDEO_URL" width="100%"></video>
+</div>
 
 <p align="center">
   <a href="https://shuta-ochiai.github.io/Splatelier/"><b>Project page</b></a>: scenes trained on an iPhone that you can orbit in the browser, and short clips of capture and editing.
