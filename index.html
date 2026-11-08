@@ -126,6 +126,7 @@ section { padding: 72px 0 8px; }
 .capture-card h3 { margin-top: 0; }
 .capture-card p + p { margin-top: 12px; }
 .media.capture-media { aspect-ratio: 3 / 4; }
+.media.capture-media video { pointer-events: none; }
 @media (max-width: 760px) {
   .capture-card { grid-template-columns: 1fr; }
   .media.capture-media { width: min(100%, 340px); margin: 0 auto; }
@@ -254,7 +255,7 @@ footer a { color: var(--ink-2); }
     <div class="eyebrow">Guided capture</div>
     <h2>See what you have covered while you capture.</h2>
     <article class="tool capture-card">
-      <div class="media capture-media"><video src="media/capture.mp4?v=20261108m" poster="media/capture.jpg?v=20261108m" muted loop playsinline preload="none" aria-label="Capture replay: the white camera view fills in with colored splats as the phone moves along a painted wall"></video></div>
+      <div class="media capture-media"><video data-ambient src="media/capture.mp4?v=20261108n" poster="media/capture.jpg?v=20261108n" muted loop playsinline preload="none" disablepictureinpicture disableremoteplayback tabindex="-1" aria-label="Capture replay: the white camera view fills in with colored splats as the phone moves along a painted wall"></video></div>
       <div>
         <h3>Color fills in where you have been</h3>
         <p>As you walk around, the camera view turns white and fills in with splats wherever the phone has seen the surface, finer the closer you get. A gap is easy to spot and go back for. Frames that would come out motion-blurred are left out of training, and short animated tips on the start screen show how to move.</p>      </div>
@@ -277,17 +278,17 @@ footer a { color: var(--ink-2); }
         <p>Splatelier can turn a trained scene into a vertex-colored mesh: it fuses the Gaussians’ depth into a TSDF and extracts the surface. Show it with the splats or as plain shape in the viewer, measure on it, and export it as OBJ.</p>
       </article>
       <article class="tool">
-        <div class="media portrait"><video src="media/crop.mp4?v=20261108m" poster="media/crop.jpg?v=20261108m" muted loop playsinline preload="none" aria-label="Screen recording: a box turned and fitted to the pay phone keeps it and removes the wall and floor around it"></video></div>
+        <div class="media portrait"><video src="media/crop.mp4?v=20261108n" poster="media/crop.jpg?v=20261108n" muted loop playsinline preload="none" aria-label="Screen recording: a box turned and fitted to the pay phone keeps it and removes the wall and floor around it"></video></div>
         <h3>Crop with a box, sphere or lasso</h3>
         <p>Move, turn and resize a box or sphere with its handles to keep or remove what is inside, or draw a loop on screen to cut through the scene. Crops only hide splats, so undo is instant.</p>
       </article>
       <article class="tool">
-        <div class="media portrait"><video src="media/floaters.mp4?v=20261108m" poster="media/floaters.jpg?v=20261108m" muted loop playsinline preload="none" aria-label="Screen recording: behind the lion, haze hides the statue; Auto Detect selects it in orange and Delete clears the view"></video></div>
+        <div class="media portrait"><video src="media/floaters.mp4?v=20261108n" poster="media/floaters.jpg?v=20261108n" muted loop playsinline preload="none" aria-label="Screen recording: behind the lion, haze hides the statue; Auto Detect selects it in orange and Delete clears the view"></video></div>
         <h3>Clear the floaters</h3>
         <p>Stray splats can hang in the air and hide the subject from some angles. Let Auto Detect find them, or tap them with a brush, then delete them together. Undo brings them back.</p>
       </article>
       <article class="tool">
-        <div class="media portrait"><video src="media/color.mp4?v=20261108m" poster="media/color.jpg?v=20261108m" muted loop playsinline preload="none" aria-label="Screen recording: moving the temperature and saturation sliders, then Reset"></video></div>
+        <div class="media portrait"><video src="media/color.mp4?v=20261108n" poster="media/color.jpg?v=20261108n" muted loop playsinline preload="none" aria-label="Screen recording: moving the temperature and saturation sliders, then Reset"></video></div>
         <h3>Grade the colors</h3>
         <p>Tint, temperature, saturation, brightness, black and white points and opacity. The grade is non-destructive: the trained data stays as it was, and Reset brings it back.</p>
       </article>
@@ -380,8 +381,8 @@ open App/Splatelier.xcodeproj
 <script type="module">
 // Bump VERSION (here and in the import) whenever the viewer or the scene files change, so browsers
 // don't keep showing cached copies.
-import { SplatViewer, parseMesh, decodeSpz, gunzip } from './viewer.js?v=20261108m';
-const VERSION = '20261108m';
+import { SplatViewer, parseMesh, decodeSpz, gunzip } from './viewer.js?v=20261108n';
+const VERSION = '20261108n';
 const versioned = (url) => `${url}?v=${VERSION}`;
 
 const SCENES = {
@@ -520,14 +521,16 @@ for (const b of document.querySelectorAll('.scene')) {
 }
 document.getElementById('reset').addEventListener('click', () => viewer && viewer.resetView());
 // Screen recordings play while on screen (and not at all when the viewer asks for less motion).
+// The capture replay (data-ambient) is a backdrop: it never shows controls or reacts to taps.
 const clips = document.querySelectorAll('.media video');
-if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
-  for (const v of clips) v.controls = true;
-} else if ('IntersectionObserver' in window) {
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+for (const v of clips) if (v.dataset.ambient === undefined && reduce) v.controls = true;
+if (!reduce && 'IntersectionObserver' in window) {
   const io = new IntersectionObserver((entries) => {
     for (const e of entries) {
-      if (e.isIntersecting) e.target.play().catch(() => { e.target.controls = true; });
-      else e.target.pause();
+      const v = e.target;
+      if (e.isIntersecting) v.play().catch(() => { if (v.dataset.ambient === undefined) v.controls = true; });
+      else v.pause();
     }
   }, { threshold: 0.4 });
   for (const v of clips) io.observe(v);
