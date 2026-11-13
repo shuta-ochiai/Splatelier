@@ -27,6 +27,8 @@ public enum LoopClosureResolver {
         public let cameraMotion: CameraMotion?
         /// ARKit's streamed camera pose (c2w) when the frame was taken.
         public let captureCameraToWorld: simd_float4x4?
+        /// Whether the frame passed the keyframe gate (`CapturedFrame.isKeyframe`).
+        public let isKeyframe: Bool
 
         public init(
             anchorID: UUID, image: MLXArray,
@@ -36,7 +38,8 @@ public enum LoopClosureResolver {
             lidarSamples: [LiDARSample] = [],
             cameraSettings: CameraSettings? = nil,
             cameraMotion: CameraMotion? = nil,
-            captureCameraToWorld: simd_float4x4? = nil
+            captureCameraToWorld: simd_float4x4? = nil,
+            isKeyframe: Bool = true
         ) {
             self.anchorID = anchorID
             self.image = image
@@ -49,6 +52,7 @@ public enum LoopClosureResolver {
             self.cameraSettings = cameraSettings
             self.cameraMotion = cameraMotion
             self.captureCameraToWorld = captureCameraToWorld
+            self.isKeyframe = isKeyframe
         }
     }
 
@@ -100,7 +104,8 @@ public enum LoopClosureResolver {
                 lidarSamples: r.lidarSamples,
                 cameraSettings: r.cameraSettings,
                 cameraMotion: r.cameraMotion,
-                captureViewmat: r.captureCameraToWorld.map { PoseConversion.viewmat(fromCameraToWorld: $0) }
+                captureViewmat: r.captureCameraToWorld.map { PoseConversion.viewmat(fromCameraToWorld: $0) },
+                isKeyframe: r.isKeyframe
             ))
         }
         return out

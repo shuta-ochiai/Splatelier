@@ -104,6 +104,9 @@ public struct CaptureConfiguration: Sendable {
     /// noise. Blur remained at 1/120s. nil locks the AE value as is.
     public var maxShutterDuration: TimeInterval?
     public var liveReconstructionMode: LiveReconstructionMode
+    /// Keyframes only (the default), or frames at a fixed interval for a moving subject
+    /// (`CaptureFrameSampling.timed`). In timed mode `maxFrames` still caps the count.
+    public var frameSampling: CaptureFrameSampling
 
     public init(
         minMotionMeters: Float = 0.05,        // PocketGS τ_d
@@ -125,7 +128,8 @@ public struct CaptureConfiguration: Sendable {
         lockExposureAndWhiteBalance: Bool = true,
         exposureLockWarmupSeconds: TimeInterval = 1.0,
         maxShutterDuration: TimeInterval? = 1.0 / 250.0,
-        liveReconstructionMode: LiveReconstructionMode = .featurePoints
+        liveReconstructionMode: LiveReconstructionMode = .featurePoints,
+        frameSampling: CaptureFrameSampling = .keyframes
     ) {
         precondition(minMotionMeters >= 0)
         precondition(minRotationRadians >= 0)
@@ -157,6 +161,10 @@ public struct CaptureConfiguration: Sendable {
         self.exposureLockWarmupSeconds = exposureLockWarmupSeconds
         self.maxShutterDuration = maxShutterDuration
         self.liveReconstructionMode = liveReconstructionMode
+        if case .timed(let interval, let maxDuration) = frameSampling {
+            precondition(interval > 0 && maxDuration > 0)
+        }
+        self.frameSampling = frameSampling
     }
 }
 
@@ -196,6 +204,12 @@ public struct CaptureDiagnostics: Sendable {
     /// The camera has barely moved for a while during capture (`CaptureStillnessDetector`).
     /// Only set while tracking is `.normal`.
     public var cameraStill: Bool
+    /// Kept frames that passed the keyframe gate. Equals `keptFrameCount` in keyframe mode; in a
+    /// timed capture it counts the viewpoints the static scene will be built from.
+    public var keyframeCount: Int
+    /// A timed capture ran its full duration (`CaptureFrameSampling.timed`) and keeps no more
+    /// frames; the app stops it.
+    public var durationReached: Bool
 
     public init(
         keptFrameCount: Int = 0,
@@ -213,7 +227,9 @@ public struct CaptureDiagnostics: Sendable {
         exposureLocked: Bool = false,
         pixelBufferColorTags: String? = nil,
         liveMVSSummary: String? = nil,
-        cameraStill: Bool = false
+        cameraStill: Bool = false,
+        keyframeCount: Int = 0,
+        durationReached: Bool = false
     ) {
         self.keptFrameCount = keptFrameCount
         self.trackingStateDescription = trackingStateDescription
@@ -231,6 +247,8 @@ public struct CaptureDiagnostics: Sendable {
         self.pixelBufferColorTags = pixelBufferColorTags
         self.liveMVSSummary = liveMVSSummary
         self.cameraStill = cameraStill
+        self.keyframeCount = keyframeCount
+        self.durationReached = durationReached
     }
 }
 
@@ -400,6 +418,8 @@ public final class ARKitCaptureSession {
         case .lidarPoints(let n): _diagnostics.lidarPointCount = n
         case .exposureLocked(let b): _diagnostics.exposureLocked = b
         case .cameraStill(let b): _diagnostics.cameraStill = b
+        case .keyframeCount(let n): _diagnostics.keyframeCount = n
+        case .durationReached: _diagnostics.durationReached = true
         case .qualityCandidate: _diagnostics.qualityCandidateFrameCount += 1
         case .qualityRejected(let reasons):
             _diagnostics.qualityRejectedFrameCount += 1
@@ -429,6 +449,8 @@ fileprivate enum DiagnosticsUpdate {
     case qualityRejected([CaptureRealtimeFrameSelector.RejectReason])
     case exposureLocked(Bool)
     case cameraStill(Bool)
+    case keyframeCount(Int)
+    case durationReached
 }
 
 // MARK: - iOS implementation
@@ -456,6 +478,8 @@ private final class IOSImpl: NSObject, ARSessionDelegate {
         let cameraSettings: CameraSettings
         // Camera motion from the ARKit pose just before this frame
         let cameraMotion: CameraMotion?
+        // Passed the keyframe gate (always true in keyframe mode)
+        let isKeyframe: Bool
     }
 
     private let configuration: CaptureConfiguration
@@ -518,10 +542,14 @@ private final class IOSImpl: NSObject, ARSessionDelegate {
     private var capturing = false
     private var pending: [PendingFrame] = []
     private var anchorTransforms: [UUID: simd_float4x4] = [:]
-    private var lastKeptCameraToWorld: simd_float4x4 = matrix_identity_float4x4
+    // The pose of the last keyframe (in keyframe mode every kept frame is one).
+    private var lastKeyframeCameraToWorld: simd_float4x4?
+    // The clock of timed sampling (nil in keyframe mode).
+    private var timedSampler: CaptureTimedSampler?
     // The pose of the previous ARFrame (every frame, not only kept ones), for `CameraMotion`.
     private var previousFramePose: (cameraToWorld: simd_float4x4, timestamp: TimeInterval)?
-    private var hasKeptFirst = false
+    // The timed capture ran its full duration and keeps no more frames.
+    private var durationReached = false
     private var anchorUpdateCount = 0
     private var relocalizationObserved = false
     private var stillnessDetector = CaptureStillnessDetector()
@@ -571,7 +599,13 @@ private final class IOSImpl: NSObject, ARSessionDelegate {
             self.pending.removeAll(keepingCapacity: true)
             self.anchorTransforms.removeAll()
             self.featurePoints.removeAll()
-            self.hasKeptFirst = false
+            self.lastKeyframeCameraToWorld = nil
+            if case .timed(let interval, let maxDuration) = self.configuration.frameSampling {
+                self.timedSampler = CaptureTimedSampler(interval: interval, maxDuration: maxDuration)
+            } else {
+                self.timedSampler = nil
+            }
+            self.durationReached = false
             self.anchorUpdateCount = 0
             self.relocalizationObserved = false
             self.stillnessDetector.reset()
@@ -756,7 +790,8 @@ private final class IOSImpl: NSObject, ARSessionDelegate {
                 lidarSamples: p.lidarSamples,
                 cameraSettings: p.cameraSettings,
                 cameraMotion: p.cameraMotion,
-                captureCameraToWorld: p.seedTransform
+                captureCameraToWorld: p.seedTransform,
+                isKeyframe: p.isKeyframe
             ))
             if let cur = anchorTransforms[p.anchorID], cur == p.seedTransform {
                 unsettled += 1
@@ -786,11 +821,14 @@ private final class IOSImpl: NSObject, ARSessionDelegate {
             lidarFrameCount: lidarFrameCount,
             lidarPointCount: lidarPointCount,
             pixelBufferColorTags: pixelBufferColorTags,
-            liveMVSSummary: liveMVSSummary
+            liveMVSSummary: liveMVSSummary,
+            keyframeCount: frames.filter(\.isKeyframe).count,
+            durationReached: durationReached
         )
         cont.resume(returning: CapturedScene(
             frames: frames, sparsePoints: worldPoints,
-            diagnostics: diag
+            diagnostics: diag,
+            kind: timedSampler == nil ? .keyframes : .timed
         ))
     }
 
@@ -862,9 +900,20 @@ private final class IOSImpl: NSObject, ARSessionDelegate {
         }
 
         guard pending.count < configuration.maxFrames else { return }
+        if let timedSampler, timedSampler.isFinished(at: frame.timestamp) {
+            if !durationReached {
+                durationReached = true
+                stateChange?(.durationReached)
+            }
+            return
+        }
         if configuration.requireNormalTracking {
             guard case .normal = frame.camera.trackingState else { return }
         }
+
+        // Timed: keep on schedule whether the camera moved or not; the keyframe flag below rides
+        // along. Checked first so frames off schedule cost nothing more.
+        if let timedSampler, !timedSampler.isDue(frame.timestamp) { return }
 
         // Translation / rotation gate
         let c2w = frame.camera.transform
@@ -878,42 +927,15 @@ private final class IOSImpl: NSObject, ARSessionDelegate {
                              Swift.min(configuration.keyframeSpacingCeil,
                                        configuration.keyframeDepthFactor * depth))
         }()
-        if hasKeptFirst {
-            let lastT = lastKeptCameraToWorld.columns.3
-            let curT = c2w.columns.3
-            let dx = curT.x - lastT.x
-            let dy = curT.y - lastT.y
-            let dz = curT.z - lastT.z
-            let d2 = dx * dx + dy * dy + dz * dz
-            let motionOK = d2 >= effMinMotion * effMinMotion
-            // Approximate rotation by the angle between view axes (column 2)
-            let lastZ = SIMD3<Float>(lastKeptCameraToWorld.columns.2.x,
-                                     lastKeptCameraToWorld.columns.2.y,
-                                     lastKeptCameraToWorld.columns.2.z)
-            let curZ = SIMD3<Float>(c2w.columns.2.x, c2w.columns.2.y, c2w.columns.2.z)
-            let cosA = max(-1, min(1, simd_dot(lastZ, curZ)))
-            let angle = acos(cosA)
-            let rotationOK = angle >= configuration.minRotationRadians
-            guard motionOK || rotationOK else { return }
-
-            // Redundant viewpoint: drop if close in both position and angle to an existing frame.
-            // The previous frame is guaranteed above threshold by the gate above, so it never hits
-            // the strict <, and normal forward capture is not rejected.
-            if configuration.cullRedundantViewpoints {
-                let dupDist2 = effMinMotion * effMinMotion
-                let dupAngle = configuration.minRotationRadians
-                for p in pending {
-                    let pt = p.seedTransform.columns.3
-                    let pdx = curT.x - pt.x, pdy = curT.y - pt.y, pdz = curT.z - pt.z
-                    guard pdx * pdx + pdy * pdy + pdz * pdz < dupDist2 else { continue }
-                    let pz = SIMD3<Float>(p.seedTransform.columns.2.x,
-                                          p.seedTransform.columns.2.y,
-                                          p.seedTransform.columns.2.z)
-                    let cosP = max(-1, min(1, simd_dot(curZ, pz)))
-                    if acos(cosP) < dupAngle { return }
-                }
-            }
-        }
+        let keyframeGate = CaptureKeyframeGate(minMotion: effMinMotion,
+                                               minRotation: configuration.minRotationRadians)
+        // Redundant viewpoint: drop if close in both position and angle to an existing keyframe.
+        // Comparing only against the previous one lets redundant frames pile up when orbiting back
+        // to the same viewpoint.
+        let isKeyframe = keyframeGate.isNewViewpoint(c2w, last: lastKeyframeCameraToWorld)
+            && !(configuration.cullRedundantViewpoints
+                 && keyframeGate.isRedundant(c2w, existing: pending.lazy.filter(\.isKeyframe).map(\.seedTransform)))
+        if timedSampler == nil { guard isKeyframe else { return } }
 
         let out: PixelBufferToBytes.Output
         do {
@@ -1023,11 +1045,13 @@ private final class IOSImpl: NSObject, ARSessionDelegate {
             featureObservations: featureObs,
             lidarSamples: lidarSamples,
             cameraSettings: Self.cameraSettings(of: frame),
-            cameraMotion: motion
+            cameraMotion: motion,
+            isKeyframe: isKeyframe
         ))
-        lastKeptCameraToWorld = c2w
-        hasKeptFirst = true
+        if isKeyframe { lastKeyframeCameraToWorld = c2w }
+        timedSampler?.recordKept(frame.timestamp)
         stateChange?(.keptFrameCount(pending.count))
+        if isKeyframe { stateChange?(.keyframeCount(pending.lazy.filter(\.isKeyframe).count)) }
 
         // Record feature points in anchor-local coordinates (keep the first anchor on
         // re-observation)
@@ -1058,7 +1082,8 @@ private final class IOSImpl: NSObject, ARSessionDelegate {
         }
 
         // .mvs: pass the keyframe and new feature points (for depth range and reference selection)
-        // to incremental MVS
+        // to incremental MVS. The frames between keyframes of a timed capture add no viewpoint.
+        guard isKeyframe else { return }
         liveMVS?.submit(
             rgb: out.bytes, width: out.width, height: out.height,
             intrinsics: (fx: scaled.fx, fy: scaled.fy, cx: scaled.cx, cy: scaled.cy),

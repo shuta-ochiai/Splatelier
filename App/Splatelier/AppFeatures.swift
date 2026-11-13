@@ -34,6 +34,9 @@ enum AppFeatures {
     /// The experimental wide-angle loop closure with FlexGlue. The AppStore configuration doesn't
     /// bundle its models either (App/project.yml), so the switch never shows there.
     static let wideLoopClosure = false
+    /// The experimental "moving subject" switch on the capture screen: frames at a fixed rate for
+    /// up to a minute instead of keyframes only (`CaptureFrameSampling.timed`).
+    static let movingSubjectCapture = false
     #else
     static let meshGeneration = true
     static let cadModels = true
@@ -44,6 +47,7 @@ enum AppFeatures {
     static let trainingSettings = true
     static let projectLinks = true
     static let wideLoopClosure = true
+    static let movingSubjectCapture = true
     #endif
 
     /// The environment variables unattended A/B runs are launched with (`devicectl …

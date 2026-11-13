@@ -153,6 +153,19 @@ final class DepthMapFile: @unchecked Sendable {
 
 extension CaptureTraining {
 
+    /// The frames the static scene is built from: the keyframes of a timed capture, every frame
+    /// otherwise. Keeps all frames if, unexpectedly, none is a keyframe.
+    static func staticSceneFrames(_ scene: CapturedScene, log: (String) -> Void) -> CapturedScene {
+        guard scene.kind == .timed else { return scene }
+        let keyframes = scene.keyframeScene
+        guard !keyframes.frames.isEmpty else {
+            log("[timed capture] no keyframes; building the static scene from all \(scene.frames.count) frames")
+            return scene
+        }
+        log("[timed capture] static scene from \(keyframes.frames.count) keyframes of \(scene.frames.count) frames")
+        return keyframes
+    }
+
     /// Intake (pose outliers, quality filter, optical-flow weights) → BA → MVS. The defaults are
     /// the app's configuration (`MVSMode`).
     public static func prepareGeometry(
@@ -189,6 +202,9 @@ extension CaptureTraining {
     ) -> CaptureGeometry {
         precondition(!scene.frames.isEmpty, "CapturedScene has no frames")
         logIntake(scene: scene, log: log)
+        // A timed capture also holds the frames between keyframes, for the moving subject. They
+        // add no viewpoint for the static scene, so BA, MVS and training see the keyframes alone.
+        let scene = staticSceneFrames(scene, log: log)
 
         // [timing] Diagnostic log of per-phase preprocessing wall-clock.
         let t0 = Date()

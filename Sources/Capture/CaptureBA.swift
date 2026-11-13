@@ -921,7 +921,8 @@ public enum CaptureBA {
             sparsePoints: combinedSparse,
             baRefinedPoints: baRefinedPoints,
             lidarPoints: scene.lidarPoints,
-            diagnostics: scene.diagnostics
+            diagnostics: scene.diagnostics,
+            kind: scene.kind
         )
     }
 

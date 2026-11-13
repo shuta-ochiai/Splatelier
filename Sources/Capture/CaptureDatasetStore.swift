@@ -71,6 +71,8 @@ public enum CaptureDatasetStore {
         var sparsePoints: [Float]       // flattened xyz
         var baRefinedPoints: [Float]?
         var lidarPoints: [Float]
+        // How the frames were picked (`CaptureKind`; nil in old datasets: keyframes).
+        var kind: CaptureKind?
     }
 
     struct FrameRecord: Codable {
@@ -97,6 +99,9 @@ public enum CaptureDatasetStore {
         // ARKit's streamed pose when the frame was taken, before loop closure moved the anchor
         // (row-major world→camera; nil in old datasets).
         var captureViewmat: [Float]?
+        // Whether the frame passed the keyframe gate (nil in old datasets, which hold keyframes
+        // only). Written only for the frames of a timed capture that did not.
+        var isKeyframe: Bool?
     }
 
     /// Floats per sample in a `.lidar` file: camera x, y, z, depth spread, confidence level.
@@ -135,7 +140,8 @@ public enum CaptureDatasetStore {
                     ? nil : try writeLiDARSamples(f.lidarSamples, to: tmp, index: i),
                 camera: f.cameraSettings,
                 motion: f.cameraMotion,
-                captureViewmat: f.captureViewmat
+                captureViewmat: f.captureViewmat,
+                isKeyframe: f.isKeyframe ? nil : false
             ))
         }
 
@@ -145,7 +151,8 @@ public enum CaptureDatasetStore {
             frames: records,
             sparsePoints: packPoints(scene.sparsePoints),
             baRefinedPoints: scene.baRefinedPoints.map(packPoints),
-            lidarPoints: packPoints(scene.lidarPoints)
+            lidarPoints: packPoints(scene.lidarPoints),
+            kind: scene.kind == .keyframes ? nil : scene.kind
         )
         let data = try JSONEncoder().encode(manifest)
         try data.write(to: tmp.appendingPathComponent("manifest.json"))
@@ -220,7 +227,8 @@ public enum CaptureDatasetStore {
                 lidarSamples: try readLiDARSamples(r, from: directory),
                 cameraSettings: r.camera,
                 cameraMotion: r.motion,
-                captureViewmat: r.captureViewmat
+                captureViewmat: r.captureViewmat,
+                isKeyframe: r.isKeyframe ?? true
             )
             frame.imageStorage.attach(files, path: r.imageFile)
             frames.append(frame)
@@ -231,7 +239,8 @@ public enum CaptureDatasetStore {
             sparsePoints: unpackPoints(manifest.sparsePoints),
             baRefinedPoints: manifest.baRefinedPoints.map(unpackPoints),
             lidarPoints: unpackPoints(manifest.lidarPoints),
-            diagnostics: nil
+            diagnostics: nil,
+            kind: manifest.kind ?? .keyframes
         )
     }
 
