@@ -279,7 +279,7 @@ extension TrainingDriver {
                     let output = trainer.stepWithCache(
                         camera: stepCamera, targetImage: stepTarget, shDegree: shDegree,
                         geometry: geometry, mvsDepth: v.mvsDepth, surfaceMask: v.surfaceMask,
-                        opaqueMask: v.opaqueMask, viewIndex: viewIndex, fitGain: fitGain
+                        opaqueMask: v.opaqueMask, lossMask: v.lossMask, viewIndex: viewIndex, fitGain: fitGain
                     )
                     return (output.loss, output.cache)
                 } else {
@@ -287,7 +287,7 @@ extension TrainingDriver {
                         trainer.step(
                             camera: stepCamera, targetImage: stepTarget, shDegree: shDegree,
                             geometry: geometry, mvsDepth: v.mvsDepth, surfaceMask: v.surfaceMask,
-                            opaqueMask: v.opaqueMask, viewIndex: viewIndex, fitGain: fitGain
+                            opaqueMask: v.opaqueMask, lossMask: v.lossMask, viewIndex: viewIndex, fitGain: fitGain
                         ),
                         nil
                     )
@@ -592,7 +592,7 @@ extension TrainingDriver {
                 // The scale cap is applied inside trainer.step. The gains go on being fitted.
                 return trainer.step(camera: v.camera, targetImage: v.imageFloat, shDegree: shDegree,
                                     geometry: geometry, mvsDepth: v.mvsDepth, surfaceMask: v.surfaceMask,
-                                    opaqueMask: v.opaqueMask, viewIndex: viewIndex,
+                                    opaqueMask: v.opaqueMask, lossMask: v.lossMask, viewIndex: viewIndex,
                                     fitGain: trainer.photometricGains != nil)
             }
             lastStepSeconds = Date().timeIntervalSince(t0)

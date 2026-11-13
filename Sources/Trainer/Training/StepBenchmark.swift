@@ -120,7 +120,7 @@ extension TrainingDriver {
                     let step = measure(r, tile: v.tile) { view, cam, t in
                         let i = session.views.firstIndex { $0.name == view.name }
                         _ = trainer.step(camera: cam, targetImage: t, shDegree: shDegree,
-                                         surfaceMask: view.surfaceMask, opaqueMask: view.opaqueMask,
+                                         surfaceMask: view.surfaceMask, opaqueMask: view.opaqueMask, lossMask: view.lossMask,
                                          viewIndex: i, fitGain: trainer.photometricGains != nil)
                         eval(trainer.model.means, trainer.model.sh0, trainer.model.shN)
                     }

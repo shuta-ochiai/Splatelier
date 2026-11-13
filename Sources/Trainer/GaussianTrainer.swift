@@ -190,11 +190,13 @@ public final class GaussianTrainer: GaussianParamStore {
         camera: Camera, targetImage: MLXArray, shDegree: Int = 3,
         geometry: GeometryRegularization? = nil, mvsDepth: DepthTarget? = nil,
         surfaceMask: MLXArray? = nil, opaqueMask: MLXArray? = nil,
+        lossMask: MLXArray? = nil,
         viewIndex: Int? = nil, fitGain: Bool = false
     ) -> Float {
         stepWithCache(camera: camera, targetImage: targetImage, shDegree: shDegree,
                       geometry: geometry, mvsDepth: mvsDepth, surfaceMask: surfaceMask,
-                      opaqueMask: opaqueMask, viewIndex: viewIndex, fitGain: fitGain).loss
+                      opaqueMask: opaqueMask, lossMask: lossMask,
+                      viewIndex: viewIndex, fitGain: fitGain).loss
     }
 
     /// Renders the current model for evaluation and returns [H,W,3], compositing the background as
@@ -224,6 +226,8 @@ public final class GaussianTrainer: GaussianParamStore {
         surfaceMask: MLXArray? = nil,
         // [gh, gw] 1 where alpha is pulled to 1 (`TrainView.opaqueMask`).
         opaqueMask: MLXArray? = nil,
+        // [gh, gw] 1 where the image is compared, 0 where it is ignored (`TrainView.lossMask`).
+        lossMask: MLXArray? = nil,
         // Index of the view in `photometricGains`: its gain multiplies the render before the loss.
         // `fitGain` also moves that gain towards the one that fits this render to the image.
         viewIndex: Int? = nil,
@@ -261,10 +265,13 @@ public final class GaussianTrainer: GaussianParamStore {
         let gains = photometricGains
         let gain: SIMD3<Float>? = viewIndex.flatMap { i in gains.map { $0.gain(view: i) } }
         let gainArray = gain.map { MLXArray([$0.x, $0.y, $0.z], [3]) }
+        // [H,W,1] where the image counts (`lossMask`, upsampled to this step's resolution).
+        let compareMask = lossMask.map { Self.upsampleNearest($0, height: h, width: w)[0..., 0..., .newAxis] }
         var gainFit: MLXArray? = nil        // [2, 3]: Σ render·image and Σ render² per channel
         if fitGain, gainArray != nil {
-            gainFit = MLX.stacked([(composited * targetImage).sum(axes: [0, 1]),
-                                   (composited * composited).sum(axes: [0, 1])])
+            let weighted = compareMask.map { composited * $0 } ?? composited
+            gainFit = MLX.stacked([(weighted * targetImage).sum(axes: [0, 1]),
+                                   (weighted * composited).sum(axes: [0, 1])])
         }
         let predicted = gainArray.map { composited * $0 } ?? composited
         if partTiming {
@@ -273,7 +280,10 @@ public final class GaussianTrainer: GaussianParamStore {
         }
 
         // Image loss and dL/d(predicted). L1 is closed-form; D-SSIM uses the fused SSIM kernel.
-        let target = targetImage
+        // Ignored pixels (`lossMask` 0) take the prediction as their target: the L1 difference is 0
+        // there, and the SSIM map's cotangent is zeroed there below, so they pull on nothing. SSIM
+        // windows straddling the mask edge still see both sides (up to the 5 px window radius).
+        let target = Self.maskedTarget(targetImage, predicted: predicted, mask: compareMask)
         let lambda = lambdaSSIM
         let n = Float(h * w * 3)
 
@@ -322,7 +332,8 @@ public final class GaussianTrainer: GaussianParamStore {
             }
             // Fused backward: SSIM cotangent + (1-λ)·sign(diff)/N in one dispatch.
             vLoss = fusedSSIM.backward(
-                predicted, target, dLdMap: dLdMapFull, cache: ssimCache,
+                predicted, target, dLdMap: compareMask.map { dLdMapFull * $0 } ?? dLdMapFull,
+                cache: ssimCache,
                 oneMinusLambda: 1 - lambda, invN: 1 / n
             )
         } else {
@@ -343,13 +354,20 @@ public final class GaussianTrainer: GaussianParamStore {
         var lossArrayFinal = lossArray
         if enableBackgroundSH, let bg = bgImage, let bgK = bgKernels {
             if alphaLossWeight > 0 || surfaceAlphaWeight > 0 {
-                let surface = surfaceMask.map { Self.upsampleNearest($0, height: h, width: w) }
+                var surface = surfaceMask.map { Self.upsampleNearest($0, height: h, width: w) }
                     ?? MLXArray.zeros([h, w])
-                let opaque = opaqueMask.map { Self.upsampleNearest($0, height: h, width: w) }
+                var opaque = opaqueMask.map { Self.upsampleNearest($0, height: h, width: w) }
                     ?? MLXArray.zeros([h, w])
+                if let compareMask {
+                    // Ignored pixels are neither background to push alpha down at (counted as a
+                    // measured surface, which the background test skips) nor surface to pull it up.
+                    let compare2d = compareMask[0..., 0..., 0]
+                    surface = MLX.maximum(surface, 1 - compare2d)
+                    opaque = opaque * compare2d
+                }
                 // The background test compares the image with the background as the scene has it,
                 // before the gain.
-                let canonicalTarget = gainArray.map { target / $0 } ?? target
+                let canonicalTarget = gainArray.map { targetImage / $0 } ?? targetImage
                 let terms = compiledAlphaTerms([vRender, bg, canonicalTarget, renderAlpha, surface, opaque])
                 vAlpha = terms[0]
                 lossArrayFinal = lossArrayFinal + terms[1]
@@ -493,6 +511,13 @@ public final class GaussianTrainer: GaussianParamStore {
             loss = loss + opaqueWeight * ((1 - alpha2d) * opaque).sum() / oSum
         }
         return (vAlpha, loss)
+    }
+
+    /// The target with the ignored pixels (`mask` 0, [H,W,1]) replaced by the prediction, so the
+    /// photometric loss has nothing to say about them. The target as it is without a mask.
+    static func maskedTarget(_ target: MLXArray, predicted: MLXArray, mask: MLXArray?) -> MLXArray {
+        guard let mask else { return target }
+        return MLX.where(mask .> 0.5, target, predicted)
     }
 
     /// `grid` [gh, gw] resampled to [height, width] by nearest cell (both span the same field of
