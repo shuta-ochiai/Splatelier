@@ -465,7 +465,20 @@ public enum CaptureTraining {
         /// small cost in held-out PSNR.
         /// References prefer covisibility ≥ 0.6: selecting by camera position alone mixes in refs
         /// that do not see the pixels, splitting walls with gaps between them.
+        /// Coarse-to-fine: the whole depth range at 1/4 of the MVS input (1/8 of a 1080px frame),
+        /// then ±6% of that depth with 8 hypotheses at the input's 1/2. The finer pass measures
+        /// faint texture (plain walls, glossy panels) the 1/4 pass averaged away, so with the
+        /// stronger MVS depth loss (`AppPreset.geometryRegularization`) flat surfaces bow less, for
+        /// about 10% more MVS time than one pass at 1/4.
         public static var mvsParameters: CostVolumeMVS.Parameters {
+            var p = liveParameters
+            p.bandRefinement = CostVolumeMVS.BandRefinement(factor: 4, hypotheses: 8, halfWidth: 0.06)
+            return p
+        }
+
+        /// One pass at `liveMVSTargetLongSide`: the capture-time MVS (`LiveMVSReconstructor`),
+        /// which has to keep up with the camera.
+        public static var liveParameters: CostVolumeMVS.Parameters {
             .mobile3DRecon(
                 m: 5, voxelDedupSize: 0.003,
                 fusionConsistency: CostVolumeMVS.FusionConsistency(vMin: 3),
@@ -474,7 +487,10 @@ public enum CaptureTraining {
     }
 
     /// Target long side (px) of the MVS input. With `mvsDownscale == nil`, box-downscale by the
-    /// smallest integer factor making the long side ≤ this (1080px → 1/4). 1/4 beats full size and
-    /// 1/2 in both plane error and multi-view agreement rate.
-    public static let mvsTargetLongSide = 320
+    /// smallest integer factor making the long side ≤ this (1080px → 1/2): the fine pass of
+    /// `MVSMode.mvsParameters`' coarse-to-fine search.
+    public static let mvsTargetLongSide = 640
+    /// Target long side (px) of the capture-time MVS (1080px → 1/4). In one pass, 1/4 beats full
+    /// size and 1/2 in both plane error and multi-view agreement rate.
+    public static let liveMVSTargetLongSide = 320
 }

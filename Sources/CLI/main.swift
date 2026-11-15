@@ -47,7 +47,12 @@ func usage() {
     print("         VIEW_CAP=<n> (training view cap; default 0.4 view/frame, at least 120, as in the app;")
     print("           0 = all frames)")
     print("         THERMAL_SIM=nominal|fair|serious fixes the thermal guard's thermalState (reproduces the serious slow-down)")
-    print("         GEO_REG=0 turns off the geometric regularization (on as in the app)")
+    print("         GEO_REG=0 turns off the geometric regularization (on as in the app); GEO_WMVS=<w> the MVS depth")
+    print("           loss weight (app 0.5), GEO_MVS_TRUNC=<r> leaves samples more than r off the MVS depth out")
+    print("           (app 0.08, 0 = keep all)")
+    print("         MVS_BAND=<factor>:<hypotheses>:<halfWidth> coarse-to-fine MVS (app 4:8:0.06); MVS_BAND=0 with")
+    print("           MVS_DOWNSCALE=4 is the former one-pass MVS")
+    print("         EVAL_SPLIT=<run.split.json> with EVAL_HOLDOUT trains and holds out the views of that run")
     print("         POSE_SOURCE=arkit trains on the ARKit poses instead of the BA poses (BA still runs);")
     print("           POSE_SOURCE=capture starts BA from ARKit's streamed capture-time poses instead of the anchors'")
     print("           final ones (datasets saved since they were recorded)")
@@ -80,7 +85,15 @@ func usage() {
     print("")
     print("  splatelier mesh-eval <dataset.valset> <mesh.obj>...")
     print("    Compares meshes on the views train-capture held out (EVAL_HOLDOUT, default 8): coverage, PSNR of")
-    print("    the vertex colors, agreement with the views' MVS depth, roughness. EVAL_SCALE, EVAL_IMAGES=<dir>.")
+    print("    the vertex colors, agreement with the views' MVS depth, roughness; then plane RMS / robust σ,")
+    print("    normal RMS and corner error against the large planes found on the first mesh. EVAL_SCALE,")
+    print("    EVAL_IMAGES=<dir> (also the planes and their signed distance, ±8 mm).")
+    print("")
+    print("  splatelier holdout-views <dataset.valset> <outDir> <a.ply> <b.ply>")
+    print("    Per held-out view PSNR of two trained PLYs, and the views where b loses most (EVAL_SPLIT).")
+    print("")
+    print("  splatelier compare-views <dataset.valset> <outDir> <before.ply> <after.ply> <before.obj> <after.obj>")
+    print("    Photo, splat renders and shaded meshes at 3 held-out views, with turns.json to stand them up.")
     print("")
     print("  splatelier dump-sparse <dataset.valset> <output.ply>")
     print("    Writes the .valset sparse points (ORB+BA refined) as a gaussian PLY for inspection in a viewer.")
@@ -298,6 +311,12 @@ case "train-capture":
     }
     let valsetURL = URL(fileURLWithPath: args[2])
     let outputPLY = URL(fileURLWithPath: args[3])
+    // EVAL_SPLIT=<split.json> with EVAL_HOLDOUT: train on that run's views and hold out the same ones.
+    if let path = ProcessInfo.processInfo.environment["EVAL_SPLIT"],
+       let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+       let split = try? JSONDecoder().decode(EvaluationSplit.self, from: data) {
+        CaptureTraining.fixedEvaluationSplit = (Set(split.training), Set(split.heldOut))
+    }
     let env = ProcessInfo.processInfo.environment
     let capMax = env["CAP_MAX"].flatMap { Int($0) } ?? CaptureTraining.AppPreset.defaultGaussianCap
     // <start>[,<end>] for MCMC_SCALE_LR (a single value means constant).
@@ -410,9 +429,21 @@ case "train-capture":
                 if let d = env["MVS_DEDUP"].flatMap({ Float($0) }) { p.voxelDedupSize = d }
                 if let c = env["MVS_CONF"].flatMap({ Float($0) }) { p.confidenceThreshold = c }
                 if let c = env["MVS_COVIS"] { p.refSelection.minCovisibility = mvsCovisibility(c) }
+                // MVS_BAND=<factor>:<hypotheses>:<halfWidth> (the app: 4:8:0.06): coarse-to-fine MVS,
+                // the whole range at 1/factor of MVS_DOWNSCALE's resolution, then a narrow band;
+                // MVS_BAND=0 one pass (use MVS_DOWNSCALE=4 for the former default).
+                if let v = env["MVS_BAND"], ["0", "off", "no", "false"].contains(v.lowercased()) {
+                    p.bandRefinement = nil
+                } else if let v = env["MVS_BAND"] {
+                    let f = v.split(separator: ":").map(String.init)
+                    p.bandRefinement = CostVolumeMVS.BandRefinement(
+                        factor: f.count > 0 ? Int(f[0]) ?? 2 : 2,
+                        hypotheses: f.count > 1 ? Int(f[1]) ?? 16 : 16,
+                        halfWidth: f.count > 2 ? Float(f[2]) ?? 0.04 : 0.04)
+                }
                 return p
             }(),
-            // MVS_DOWNSCALE=<s>: downscale MVS input to 1/s. Unset = auto (long side ~320px), 1 =
+            // MVS_DOWNSCALE=<s>: downscale MVS input to 1/s. Unset = auto (long side ~640px), 1 =
             // full size.
             mvsDownscale: env["MVS_DOWNSCALE"].flatMap { Int($0) },
             // POSE_DUMP=<path.json> writes poses before and after BA (for evaluating pose
@@ -512,6 +543,8 @@ case "train-capture":
                 guard var g = CaptureTraining.AppPreset.geometryRegularization else { return nil }
                 if let v = env["GEO_WN"].flatMap({ Float($0) }) { g.normalWeight = v }
                 if let v = env["GEO_WMVS"].flatMap({ Float($0) }) { g.mvsDepthWeight = v }
+                // GEO_MVS_TRUNC=<r>: leave samples more than r (relative) off the MVS depth out of its loss.
+                if let v = env["GEO_MVS_TRUNC"].flatMap({ Float($0) }) { g.mvsTruncation = v > 0 ? v : nil }
                 if let v = env["GEO_START"].flatMap({ Float($0) }) { g.startFraction = v }
                 if let v = env["GEO_EVERY"].flatMap({ Int($0) }) { g.every = max(1, v) }
                 if env["GEO_PROFILE"] == "gof" { g.depth.profile = .opacityField }
@@ -591,6 +624,37 @@ case "mesh-eval":
             log: { FileHandle.standardError.write(Data(($0 + "\n").utf8)) })
     } catch {
         print("mesh-eval failed: \(error)")
+        exit(1)
+    }
+
+case "compare-views":
+    // Photo, splat renders and meshes side by side at 3 held-out views (CompareViews.swift).
+    guard args.count >= 8 else {
+        print("usage: splatelier compare-views <dataset.valset> <outDir> <before.ply> <after.ply> <before.obj> <after.obj>  (EVAL_SPLIT)")
+        exit(1)
+    }
+    do {
+        try runCompareViews(valsetURL: URL(fileURLWithPath: args[2]), outDir: URL(fileURLWithPath: args[3]),
+                            plyURLs: args[4...5].map { URL(fileURLWithPath: $0) },
+                            objURLs: args[6...7].map { URL(fileURLWithPath: $0) },
+                            log: { FileHandle.standardError.write(Data(($0 + "\n").utf8)) })
+    } catch {
+        print("compare-views failed: \(error)")
+        exit(1)
+    }
+
+case "holdout-views":
+    // Two trained PLYs compared view by view on the held-out views (SplatHoldoutViews.swift).
+    guard args.count >= 6 else {
+        print("usage: splatelier holdout-views <dataset.valset> <outDir> <a.ply> <b.ply>  (EVAL_SPLIT / EVAL_HOLDOUT)")
+        exit(1)
+    }
+    do {
+        try runHoldoutViews(valsetURL: URL(fileURLWithPath: args[2]), outDir: URL(fileURLWithPath: args[3]),
+                            plyURLs: args[4...5].map { URL(fileURLWithPath: $0) },
+                            log: { FileHandle.standardError.write(Data(($0 + "\n").utf8)) })
+    } catch {
+        print("holdout-views failed: \(error)")
         exit(1)
     }
 
