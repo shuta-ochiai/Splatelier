@@ -272,7 +272,7 @@ public enum MeshPlanarity {
     public static func detectCorners(planes: [Plane], positions: [SIMD3<Float>], indices: [UInt32],
                                      parameters p: Parameters = Parameters()) -> [Corner] {
         let faces = Faces(positions: positions, indices: indices)
-        let members = planes.map { members(of: $0, in: faces, parameters: p, margin: 0) }
+        let regionFaces = planes.map { Self.members(of: $0, in: faces, parameters: p, margin: 0) }
         let maxCos = sin(p.cornerAngleTolerance * .pi / 180)
         let reach: Float = 0.04
         var corners: [Corner] = []
@@ -282,7 +282,7 @@ public enum MeshPlanarity {
                       let l = line(planes[i], planes[j]) else { continue }
                 func interval(_ k: Int) -> ClosedRange<Float>? {
                     var ts: [Float] = []
-                    for f in members[k] {
+                    for f in regionFaces[k] {
                         let d = faces.centroid[f] - l.point
                         let t = dot(d, l.direction)
                         if length(d - t * l.direction) < reach { ts.append(t) }
