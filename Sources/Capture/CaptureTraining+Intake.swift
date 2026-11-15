@@ -185,10 +185,22 @@ extension CaptureTraining {
             holdoutBeforeSelection: holdoutBeforeSelection, log: { _ in })
     }
 
+    /// A training / held-out split by frame timestamp to use instead of selecting one, so runs whose
+    /// BA poses differ slightly (and would pick other views) are evaluated on the same views
+    /// (experimental, CLI EVAL_SPLIT with EVAL_HOLDOUT).
+    public nonisolated(unsafe) static var fixedEvaluationSplit: (training: Set<TimeInterval>, heldOut: Set<TimeInterval>)?
+
     static func selectTrainingFrames(
         _ frames: [CapturedFrame], cap: Int, sceneScale: Float, holdoutEvery: Int,
         holdoutBeforeSelection: Bool = false, log: (String) -> Void
     ) -> (training: [CapturedFrame], heldOut: [CapturedFrame]) {
+        if holdoutEvery > 1, let fixed = fixedEvaluationSplit {
+            let training = frames.filter { fixed.training.contains($0.timestamp) }
+            let heldOut = frames.filter { fixed.heldOut.contains($0.timestamp) }
+            log("[eval-holdout] fixed split: \(heldOut.count) held-out / \(training.count) training views "
+                + "(of \(fixed.heldOut.count) / \(fixed.training.count) in the split)")
+            return (training, heldOut)
+        }
         if holdoutBeforeSelection, holdoutEvery > 1 {
             let heldOut = frames.enumerated().filter { $0.offset % holdoutEvery == 0 }.map(\.element)
             let candidates = frames.enumerated().filter { $0.offset % holdoutEvery != 0 }.map(\.element)

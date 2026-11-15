@@ -20,6 +20,31 @@ private let appMVSParameters = CostVolumeMVS.Parameters.mobile3DRecon(
 /// ~2% apart here).
 @Test
 func costVolumeMVSMultiViewPlane() {
+    multiViewPlane(parameters: appMVSParameters)
+}
+
+/// The same plane with the coarse-to-fine search: the coarse pass at half the size, then ±6% with
+/// 8 hypotheses at full size.
+@Test
+func costVolumeMVSBandRefinementPlane() {
+    var p = appMVSParameters
+    p.bandRefinement = CostVolumeMVS.BandRefinement(factor: 2, hypotheses: 8, halfWidth: 0.06)
+    multiViewPlane(parameters: p)
+}
+
+/// Band factors run from 1 + halfWidth down to 1 − halfWidth (far to near, as the depth
+/// hypotheses do), evenly spaced in inverse depth.
+@Test
+func bandRefinementFactors() {
+    let f = CostVolumeMVS.BandRefinement(factor: 2, hypotheses: 8, halfWidth: 0.06).factors
+    #expect(f.count == 8)
+    #expect(abs(f.first! - 1.06) < 1e-5 && abs(f.last! - 0.94) < 1e-5)
+    let inv = f.map { 1 / $0 }
+    let steps = zip(inv.dropFirst(), inv).map { $0 - $1 }
+    #expect(steps.allSatisfy { $0 > 0 && abs($0 - steps[0]) < 1e-5 })
+}
+
+private func multiViewPlane(parameters: CostVolumeMVS.Parameters) {
     let w = 48, h = 24
     let fx: Float = 50, fy: Float = 50, cx: Float = Float(w) / 2, cy: Float = Float(h) / 2
     let spacing: Float = 0.5
@@ -61,7 +86,7 @@ func costVolumeMVSMultiViewPlane() {
         sparsePoints: sparse,
         sceneCenter: SIMD3<Float>(spacing * Float(n - 1) / 2, 0, trueDepth)
     )
-    let result = CostVolumeMVS.build(inputs: inputs, parameters: appMVSParameters)
+    let result = CostVolumeMVS.build(inputs: inputs, parameters: parameters)
 
     #expect(result.positions.shape[0] > 0,
         "expected non-empty cloud; got shape \(result.positions.shape)")

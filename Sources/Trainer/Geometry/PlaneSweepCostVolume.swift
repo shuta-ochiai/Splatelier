@@ -13,6 +13,7 @@ public enum PlaneSweepCostVolume {
     private static let kernel = SlangCompiledKernel.required("plane_sweep_cost")
 
     private static let medianKernel = SlangCompiledKernel.required("plane_sweep_cost_median")
+    private static let medianBandKernel = SlangCompiledKernel.required("plane_sweep_cost_median_band")
 
     /// Maximum number of references the fused kernel handles (must match `MEDIAN_M_MAX` in
     /// `plane_sweep_cost_median.slang`).
@@ -148,6 +149,47 @@ public enum PlaneSweepCostVolume {
                 MLXArray(intrinsicsRefs.flatMap { $0 }, [m * 4]),
                 MLXArray(relativeRTs.flatMap { $0 }, [m * 12]),
                 MLXArray(depths, [k]),
+                dims,
+            ],
+            grid: (((w + 31) / 32) * 32, ((h + 7) / 8) * 8, 1),
+            threadGroup: (32, 8, 1),
+            outputShapes: [[h * w * k]],
+            outputDTypes: [.int32]
+        )
+        return outputs[0].reshaped([h, w, k])
+    }
+
+    /// `computeMedian` with hypotheses per pixel: pixel p's k-th depth is `centerDepth[p]·factors[k]`
+    /// (`centerDepth` [H, W] at the target census's resolution; <= 0 gives the maximum cost).
+    public static func computeMedianBand(
+        targetCensus: MLXArray, refCensuses: [MLXArray],
+        intrinsicsTarget: [Float], intrinsicsRefs: [[Float]],
+        relativeRTs: [[Float]],
+        centerDepth: MLXArray, factors: [Float]
+    ) -> MLXArray {
+        let m = refCensuses.count
+        precondition(m >= 1 && m <= medianMaxRefs, "M=\(m) must be in 1...\(medianMaxRefs)")
+        precondition(intrinsicsRefs.count == m && relativeRTs.count == m)
+        precondition(targetCensus.shape.count == 2)
+        let refShape = refCensuses[0].shape
+        precondition(refCensuses.allSatisfy { $0.shape == refShape },
+                     "all reference census maps must share one resolution")
+        let h = targetCensus.shape[0]
+        let w = targetCensus.shape[1]
+        precondition(centerDepth.size == h * w, "centerDepth must match the target census")
+        let k = factors.count
+        let dims = MLXArray(
+            [Int32(w), Int32(h), Int32(refShape[1]), Int32(refShape[0]), Int32(k), Int32(m)], [6])
+        let refs = MLX.concatenated(refCensuses.map { $0.reshaped([refShape[0] * refShape[1]]) }, axis: 0)
+        let outputs = medianBandKernel(
+            [
+                targetCensus.reshaped([h * w]),
+                refs,
+                MLXArray(intrinsicsTarget, [4]),
+                MLXArray(intrinsicsRefs.flatMap { $0 }, [m * 4]),
+                MLXArray(relativeRTs.flatMap { $0 }, [m * 12]),
+                MLXArray(factors, [k]),
+                centerDepth.reshaped([h * w]).asType(.float32),
                 dims,
             ],
             grid: (((w + 31) / 32) * 32, ((h + 7) / 8) * 8, 1),

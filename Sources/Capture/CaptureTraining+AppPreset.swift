@@ -62,8 +62,14 @@ extension CaptureTraining {
         public static let tileSize = 8
         /// Geometric regularization (G³S surface depth with normal consistency and the MVS depth,
         /// every 8 iterations from 30% of training), so the Gaussians' surface depth gives a flat
-        /// TSDF mesh (generated after training in the app), at a small cost in GPU energy and held-out PSNR.
-        public static let geometryRegularization: GeometryRegularization? = GeometryRegularization()
+        /// TSDF mesh (generated after training in the app). The MVS depth loss weighs ten times
+        /// G³S's: at 0.05 the surface drifted into 10-50 cm bows on plain walls even where the
+        /// coarse-to-fine MVS (`MVSMode`) measured them flat. Samples more than 8% off the MVS depth
+        /// are left out, so where MVS is wrong (a thin bar's depth spread onto the floor behind it)
+        /// the strong loss does not drag the surface. Over 11 captures the planes' spread fell in 8
+        /// (by up to a third on a glossy panel) at the same held-out PSNR.
+        public static let geometryRegularization: GeometryRegularization? =
+            GeometryRegularization(mvsDepthWeight: 0.5, mvsTruncation: 0.08)
         /// A gain per frame on the render (exposure and white balance), fitted from 30% of training
         /// on. Frames shot before the exposure lock, or under a changing light, then do not pull
         /// the scene's colours; with a locked exposure the gains stay near 1.
