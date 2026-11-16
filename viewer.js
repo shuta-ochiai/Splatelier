@@ -189,7 +189,10 @@ export async function decodeSpz(buffer) {
       const p = posAt + i * 9 + k * 3;
       let v = u8[p] | (u8[p + 1] << 8) | (u8[p + 2] << 16);
       if (v & 0x800000) v -= 0x1000000;
-      f32[i * 8 + k] = v * posScale * (k === 0 ? 1 : -1);
+      // SPZ's axes to the page's (y and z flipped), and turned 180° about z: the app writes splats
+      // in the usual 3DGS axes, turned from the capture's Y-up world that the meshes and camera
+      // paths here are in.
+      f32[i * 8 + k] = v * posScale * (k === 1 ? 1 : -1);
       f32[i * 8 + 3 + k] = Math.exp(u8[scaleAt + i * 3 + k] / 16 - 10);
       const c = 0.5 + SH_C0 * ((u8[colorAt + i * 3 + k] / 255 - 0.5) / 0.15);
       o8[i * 32 + 24 + k] = clamp(Math.round(c * 255), 0, 255);
@@ -215,12 +218,13 @@ export async function decodeSpz(buffer) {
       q[0] = u8[r] / 127.5 - 1; q[1] = u8[r + 1] / 127.5 - 1; q[2] = u8[r + 2] / 127.5 - 1;
       q[3] = Math.sqrt(Math.max(0, 1 - q[0] * q[0] - q[1] * q[1] - q[2] * q[2]));
     }
-    // SPZ is x y z w; .splat is w x y z, each as u8 = q * 128 + 128.
+    // SPZ is x y z w; .splat is w x y z, each as u8 = q * 128 + 128. The y/z flip gives
+    // (w, x, -y, -z); the 180° turn about z, applied on the left, makes it (z, y, x, w).
     const b = i * 32 + 28;
-    o8[b] = clamp(Math.round(q[3] * 128 + 128), 0, 255);
-    o8[b + 1] = clamp(Math.round(q[0] * 128 + 128), 0, 255);
-    o8[b + 2] = clamp(Math.round(-q[1] * 128 + 128), 0, 255);
-    o8[b + 3] = clamp(Math.round(-q[2] * 128 + 128), 0, 255);
+    o8[b] = clamp(Math.round(q[2] * 128 + 128), 0, 255);
+    o8[b + 1] = clamp(Math.round(q[1] * 128 + 128), 0, 255);
+    o8[b + 2] = clamp(Math.round(q[0] * 128 + 128), 0, 255);
+    o8[b + 3] = clamp(Math.round(q[3] * 128 + 128), 0, 255);
   }
   return out;
 }
