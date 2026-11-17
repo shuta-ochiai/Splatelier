@@ -28,6 +28,10 @@ public struct TrainView {
     /// `surfaceMask` cells away from its edges, so a silhouette is not pushed over the background
     /// next to it (nil: none).
     public var opaqueMask: MLXArray?
+    /// [gh, gw] float32 grid over the image, 1 where the photometric loss compares the render with
+    /// the image and 0 where it ignores the image (a subject that moved, so the static scene should
+    /// not be fitted to it). Upsampled nearest to each step's resolution. nil: every pixel counts.
+    public var lossMask: MLXArray?
 
     public init(camera: Camera, image: MLXArray, name: String, weight: Float = 1.0, mvsDepth: DepthTarget? = nil) {
         self.camera = camera

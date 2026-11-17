@@ -39,7 +39,18 @@ final class CaptureViewModel: ObservableObject {
     private var captureStartDate: Date?
 
     /// Frame cap of the capture. Beyond it, frames are no longer kept.
-    var maxFrames: Int { baseConfiguration.maxFrames }
+    var maxFrames: Int { activeConfiguration?.maxFrames ?? baseConfiguration.maxFrames }
+    /// The configuration of the running (or last) capture.
+    private var activeConfiguration: CaptureConfiguration?
+    /// Whether the running (or last) capture keeps frames at a fixed rate for a moving subject.
+    var isMovingSubjectCapture: Bool {
+        if case .timed = activeConfiguration?.frameSampling { return true }
+        return false
+    }
+    /// The capture reached its duration and `stop()` is on its way (so the poll asks only once).
+    private var autoStopRequested = false
+    /// Longest moving-subject capture, in seconds.
+    static let movingSubjectMaxSeconds: TimeInterval = 60
 
     /// Exposed so ARCaptureView can reference the ARSession and point cloud. nil before start.
     var captureSession: ARKitCaptureSession? { session }
@@ -57,17 +68,28 @@ final class CaptureViewModel: ObservableObject {
 
     /// - Parameter useLiDAR: record LiDAR depth with each frame and draw it over the MVS surfels.
     ///   Ignored on devices without LiDAR.
-    func start(useLiDAR: Bool) {
+    /// - Parameter movingSubject: keep a frame every 0.1 s for up to a minute instead of keyframes
+    ///   only, for a subject that moves during the capture. Frames are 768 px on the long side
+    ///   (600 frames of 768×576 are about 0.8 GB) and LiDAR is not recorded.
+    func start(useLiDAR: Bool, movingSubject: Bool = false) {
         guard state != .running else { return }
         capturedScene = nil
         errorMessage = nil
         var cfg = baseConfiguration
         cfg.enableLiDARDepth = useLiDAR && ARKitCaptureSession.isLiDARAvailable
+        if movingSubject {
+            cfg.frameSampling = .timed(interval: 0.1, maxDuration: Self.movingSubjectMaxSeconds)
+            cfg.maxFrames = Int((Self.movingSubjectMaxSeconds / 0.1).rounded())
+            cfg.targetMaxDim = 768
+            cfg.enableLiDARDepth = false
+        }
         cfg.liveReconstructionMode = .mvs
         // Quality selection during capture (drop blurred / badly exposed frames before saving) is
         // always ON.
         cfg.enableRealtimeQualityGate = true
         cfg.realtimeQualityGate.enabled = true
+        activeConfiguration = cfg
+        autoStopRequested = false
         let session = ARKitCaptureSession(configuration: cfg)
         self.session = session
         do {
@@ -170,6 +192,11 @@ final class CaptureViewModel: ObservableObject {
         if state == .running, let captureStartDate {
             let sec = Int(Date().timeIntervalSince(captureStartDate))
             if sec != captureElapsedSec { captureElapsedSec = sec }
+        }
+        // A moving-subject capture ends itself once it has run its full duration.
+        if state == .running, diagnostics.durationReached, !autoStopRequested {
+            autoStopRequested = true
+            Task { await stop() }
         }
     }
 }

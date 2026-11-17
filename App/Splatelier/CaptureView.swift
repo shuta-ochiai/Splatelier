@@ -17,6 +17,8 @@ struct CaptureView: View {
     @AppStorage("capture.useLiDAR") private var useLiDAR = false
     /// Experimental wide-angle loop closure with FlexGlue (offered when the app has its models).
     @AppStorage(TrainingViewModel.wideLoopClosureKey) private var wideLoopClosure = false
+    /// Experimental capture of a moving subject: frames at a fixed rate for up to a minute.
+    @AppStorage("capture.movingSubject") private var movingSubject = false
 
     // MARK: training (in this screen)
     /// Set once there is something to train: a fresh capture, a resumed dataset or a validation
@@ -165,6 +167,10 @@ struct CaptureView: View {
                     Toggle("Wide-angle loop closure (experimental)", isOn: $wideLoopClosure)
                         .padding(.horizontal)
                 }
+                if AppFeatures.movingSubjectCapture {
+                    Toggle("Moving subject (experimental)", isOn: $movingSubject)
+                        .padding(.horizontal)
+                }
                 controlRow
             }
             .frame(maxWidth: DesignSystem.readableWidth)
@@ -224,6 +230,9 @@ struct CaptureView: View {
             #endif
             VStack {
                 liveHUD
+                if vm.state == .running && vm.isMovingSubjectCapture {
+                    movingSubjectHint
+                }
                 if showKeepMovingWarning {
                     keepMovingWarning
                         .transition(.move(edge: .top).combined(with: .opacity))
@@ -248,6 +257,16 @@ struct CaptureView: View {
             && vm.diagnostics.keptFrameCount < vm.maxFrames
     }
 
+    /// What a moving-subject capture needs from the person holding the phone: the camera tracks the
+    /// still surroundings, so the moving subject should not fill the frame.
+    private var movingSubjectHint: some View {
+        Label("Keep the moving subject under half the frame", systemImage: "person.and.background.dotted")
+            .font(.subheadline)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(.ultraThinMaterial, in: Capsule())
+    }
+
     private var keepMovingWarning: some View {
         Label("Keep moving around the subject", systemImage: "figure.walk.motion")
             .font(.subheadline.bold())
@@ -262,7 +281,9 @@ struct CaptureView: View {
             hudItem(label: "Tracking", value: vm.diagnostics.trackingStateDescription)
             hudItem(label: "Frames", value: "\(vm.diagnostics.keptFrameCount)/\(vm.maxFrames)",
                     highlight: vm.diagnostics.keptFrameCount >= vm.maxFrames)
-            hudItem(label: "Time", value: formatCaptureTime(vm.captureElapsedSec))
+            hudItem(label: "Time", value: vm.isMovingSubjectCapture
+                        ? "\(formatCaptureTime(vm.captureElapsedSec))/\(formatCaptureTime(Int(CaptureViewModel.movingSubjectMaxSeconds)))"
+                        : formatCaptureTime(vm.captureElapsedSec))
             hudItem(label: "Splats", value: "\(vm.pointCount)")
             if vm.diagnostics.qualityRejectedFrameCount > 0 {
                 hudItem(label: "Rejected", value: "\(vm.diagnostics.qualityRejectedFrameCount)")
@@ -568,7 +589,10 @@ struct CaptureView: View {
     }
 
     private var captureStartButton: some View {
-        Button(action: { vm.start(useLiDAR: AppFeatures.lidarDepth && useLiDAR) }) {
+        Button(action: {
+            vm.start(useLiDAR: AppFeatures.lidarDepth && useLiDAR,
+                     movingSubject: AppFeatures.movingSubjectCapture && movingSubject)
+        }) {
             Label("Start capture", systemImage: "record.circle")
                 .frame(maxWidth: .infinity)
         }

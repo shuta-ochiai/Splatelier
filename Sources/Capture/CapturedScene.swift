@@ -294,6 +294,10 @@ public struct CapturedFrame {
     /// frame anchor's final pose instead, which ARKit's loop closure may have moved since; nil for
     /// frames not from an ARKit capture, and in datasets saved before it was recorded.
     public let captureViewmat: [Float]?
+    /// Whether the frame passed the keyframe gate (enough motion since the previous keyframe). Every
+    /// frame of a keyframe capture does; a timed capture (`CaptureKind.timed`) also keeps the frames
+    /// in between, and the static scene is built from the keyframes alone.
+    public let isKeyframe: Bool
 
     public init(
         image: MLXArray, viewmat: [Float],
@@ -304,7 +308,8 @@ public struct CapturedFrame {
         lidarSamples: [LiDARSample] = [],
         cameraSettings: CameraSettings? = nil,
         cameraMotion: CameraMotion? = nil,
-        captureViewmat: [Float]? = nil
+        captureViewmat: [Float]? = nil,
+        isKeyframe: Bool = true
     ) {
         precondition(viewmat.count == 16, "viewmat must be a row-major 4×4")
         precondition(image.shape.count == 3 && image.shape[2] == 3,
@@ -322,6 +327,7 @@ public struct CapturedFrame {
         self.cameraSettings = cameraSettings
         self.cameraMotion = cameraMotion
         self.captureViewmat = captureViewmat
+        self.isKeyframe = isKeyframe
     }
 
     private init(copying f: CapturedFrame, viewmat: [Float], intrinsics: Intrinsics,
@@ -339,6 +345,7 @@ public struct CapturedFrame {
         self.cameraSettings = f.cameraSettings
         self.cameraMotion = f.cameraMotion
         self.captureViewmat = f.captureViewmat
+        self.isKeyframe = f.isKeyframe
     }
 
     /// Frame with only the pose replaced (image and undistortion spec unchanged).
@@ -371,25 +378,36 @@ public struct CapturedScene {
     public let lidarPoints: [SIMD3<Float>]
     /// Capture-time diagnostic counters (ARKit / LiDAR). Non-nil only for scenes from capture.
     public let diagnostics: CaptureDiagnostics?
+    /// How the frames were picked: keyframes only, or at a fixed interval with the keyframes marked.
+    public let kind: CaptureKind
 
     public init(
         frames: [CapturedFrame],
         sparsePoints: [SIMD3<Float>],
         baRefinedPoints: [SIMD3<Float>]? = nil,
         lidarPoints: [SIMD3<Float>] = [],
-        diagnostics: CaptureDiagnostics? = nil
+        diagnostics: CaptureDiagnostics? = nil,
+        kind: CaptureKind = .keyframes
     ) {
         self.frames = frames
         self.sparsePoints = sparsePoints
         self.baRefinedPoints = baRefinedPoints
         self.lidarPoints = lidarPoints
         self.diagnostics = diagnostics
+        self.kind = kind
     }
 
-    /// Scene with only the frames replaced (point clouds and diagnostics unchanged).
+    /// Scene with only the frames replaced (point clouds, diagnostics and kind unchanged).
     public func withFrames(_ frames: [CapturedFrame]) -> CapturedScene {
         CapturedScene(frames: frames, sparsePoints: sparsePoints, baRefinedPoints: baRefinedPoints,
-                      lidarPoints: lidarPoints, diagnostics: diagnostics)
+                      lidarPoints: lidarPoints, diagnostics: diagnostics, kind: kind)
+    }
+
+    /// The scene with only its keyframes (`CapturedFrame.isKeyframe`): the frames the static scene
+    /// is built from. A keyframe capture is returned as it is.
+    public var keyframeScene: CapturedScene {
+        guard frames.contains(where: { !$0.isKeyframe }) else { return self }
+        return withFrames(frames.filter(\.isKeyframe))
     }
 
     /// A LiDAR sample in world coordinates with its fusion confidence, the depth it was seen at
