@@ -191,7 +191,7 @@ The release version is `Splatelier.version` (`Sources/Trainer/Splatelier.swift`)
 app's build number is the number of commits up to the commit built, so every upload to App Store
 Connect has a higher one; the app build writes it and the commit into the Info.plist. A trained PLY
 names the version that wrote it in a header comment, and in the app the build and commit too:
-`comment splatelier: written by Splatelier 0.6.0 (build 412, 1a2b3c4d5e6f)`.
+`comment splatelier: written by Splatelier 0.7.0 (build 412, 1a2b3c4d5e6f)`.
 
 ### Continuous integration
 
@@ -208,17 +208,21 @@ run the tests, because most of them need a Metal GPU: run `make test` locally.
   between frames that see the same ARKit feature points (the points are eliminated by per-point QR
   and the reduced system is solved with Accelerate); the cameras are held to ARKit's frame-to-frame
   motion more than to its absolute poses, which its own loop closure can bend; and dense seed
-  points from multi-view stereo (plane sweep + SGM). With the experimental wide-angle loop closure,
+  points from multi-view stereo (plane sweep + SGM, coarse to fine: the whole depth range at 1/8 of
+  the frame, then a narrow band around that depth at 1/2). With the experimental wide-angle loop closure,
   frames that see the same place from directions 45° or more apart (the two faces of a sign, the
   start and end of an orbit) are matched with [FlexGlue](https://github.com/cvg/FlexGlue) on the
   Neural Engine, and a pose graph closes those loops before bundle adjustment. With the experimental LiDAR switch, LiDAR depth,
   reprojected with the refined poses, joins the seed points.
 - **Training**: PocketGS disc-like initialization; a hybrid of MCMC and ImprovedGS+
   long-axis split for densification, whose prune takes faint Gaussians larger than the median; a
-  directional spherical-harmonics background; per-frame exposure and white balance gains; fused
-  SSIM; coarse-to-fine; thermal throttling; continued training with the Adam state kept.
+  directional spherical-harmonics background; per-frame exposure and white balance gains; a surface
+  held to the MVS depth (outliers left out) with normal consistency, so flat surfaces stay flat in
+  the mesh; fused SSIM; coarse-to-fine; thermal throttling; continued training with the Adam state
+  kept.
 - **Output**: a standard 3DGS PLY in the usual 3DGS axes (SH degree 2, written in the degree-3 layout
-  so common viewers read it) with the background baked into a far shell of Gaussians, and a TSDF
+  so common viewers read it) with the background baked into a far shell of faint, overlapping
+  Gaussians that blend without a pattern, and a TSDF
   mesh that is generated automatically after training.
 - **Viewer**: [MetalSplatter](https://github.com/scier/MetalSplatter) with local patches: blending that
   matches training, stochastic transparency while the camera moves, a mesh overlay, hiding the

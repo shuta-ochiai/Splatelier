@@ -7,7 +7,7 @@ import Foundation
 public enum Splatelier {
     /// The release version. `scripts/version.sh set` writes it here and in App/Config/Version.xcconfig
     /// (the app's CFBundleShortVersionString), and CI checks that the two and the release tag agree.
-    public static let version = "0.6.0"
+    public static let version = "0.7.0"
 
     /// The app build this runs in. The app's "Stamp the build" script writes both into its
     /// Info.plist; the CLI and the tests have neither.
@@ -30,7 +30,7 @@ public enum Splatelier {
 
     public static let build = Build(info: Bundle.main.infoDictionary)
 
-    /// "0.6.0 (build 412, 1a2b3c4d5e6f)" in the app, "0.6.0" elsewhere.
+    /// "0.7.0 (build 412, 1a2b3c4d5e6f)" in the app, "0.7.0" elsewhere.
     public static var versionDescription: String { describe(version: version, build: build) }
 
     static func describe(version: String, build: Build?) -> String {
