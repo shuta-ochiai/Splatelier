@@ -12,6 +12,8 @@
 //   MVS covered  share of the view's MVS pixels the mesh covers
 //   roughness    median angle (deg) between the normal of the rendered depth and the mean normal
 //                of its 7×7 neighborhood: lower is smoother
+// and then, in world space, against the large planes and their corners found on the first mesh
+// (`MeshPlanarity`): plane RMS and robust σ (mm), normal RMS (deg), plane coverage, corner RMS (mm), corner fill.
 // env: EVAL_SCALE=<s> render scale relative to the frames (default 0.5), EVAL_IMAGES=<dir> writes
 // the photo and each mesh's color / shaded renders of the first 3 held-out views.
 
@@ -132,6 +134,83 @@ func runMeshEvaluation(valsetURL: URL, meshURLs: [URL], log: (String) -> Void) t
             100 * mean(coverage), mean(psnr), 100 * mean(relErr), 100 * mean(within),
             100 * mean(mvsCovered), mean(rough)))
     }
+    let reference = try PlanarityReference(meshURL: meshURLs[0], log: log)
+    if let imagesDir {
+        for (name, colored) in [("planes", reference.regionColoredMesh()), ("residual", reference.residualColoredMesh())] {
+            for (vi, view) in views.prefix(3).enumerated() {
+                let r = rasterize(colored, viewmat: view.frame.viewmat, intrinsics: view.intrinsics,
+                                  width: view.width, height: view.height)
+                try writePNG(r.color.enumerated().map { r.depth[$0.offset] < .infinity ? $0.element : SIMD3(1, 1, 1) },
+                             width: view.width, height: view.height,
+                             to: imagesDir.appendingPathComponent("view\(vi)_\(name).png"))
+            }
+        }
+    }
+    try printPlanarity(meshURLs: meshURLs, reference: reference)
+}
+
+/// The planes and corners found on mesh-eval's first mesh.
+private struct PlanarityReference {
+    let mesh: (positions: [SIMD3<Float>], colors: [SIMD3<Float>], indices: [UInt32])
+    let planes: [MeshPlanarity.Plane]
+    let corners: [MeshPlanarity.Corner]
+    let areas: [Float]
+
+    init(meshURL: URL, log: (String) -> Void) throws {
+        mesh = try readOBJ(meshURL)
+        planes = MeshPlanarity.detectPlanes(positions: mesh.positions, indices: mesh.indices)
+        corners = MeshPlanarity.detectCorners(planes: planes, positions: mesh.positions, indices: mesh.indices)
+        areas = MeshPlanarity.regionAreas(positions: mesh.positions, indices: mesh.indices, planes: planes)
+        log(String(format: "planarity: %d planes (%.2f m²), %d corners on %@", planes.count,
+                   planes.reduce(0) { $0 + $1.area }, corners.count, meshURL.lastPathComponent))
+    }
+
+    /// The mesh in gray with each plane's faces in a color of its own.
+    func regionColoredMesh() -> (positions: [SIMD3<Float>], colors: [SIMD3<Float>], indices: [UInt32]) {
+        let region = MeshPlanarity.faceRegions(positions: mesh.positions, indices: mesh.indices, planes: planes)
+        var colors = [SIMD3<Float>](repeating: SIMD3(0.6, 0.6, 0.6), count: mesh.positions.count)
+        for (f, k) in region.enumerated() where k >= 0 {
+            // Golden-angle hues.
+            let h = (Float(k) * 0.618034).truncatingRemainder(dividingBy: 1) * 6
+            let x = 1 - abs(h.truncatingRemainder(dividingBy: 2) - 1)
+            let rgb: SIMD3<Float> = h < 1 ? SIMD3(1, x, 0) : h < 2 ? SIMD3(x, 1, 0) : h < 3 ? SIMD3(0, 1, x)
+                : h < 4 ? SIMD3(0, x, 1) : h < 5 ? SIMD3(x, 0, 1) : SIMD3(1, 0, x)
+            for c in 0 ..< 3 { colors[Int(mesh.indices[3 * f + c])] = 0.2 + 0.8 * rgb }
+        }
+        return (mesh.positions, colors, mesh.indices)
+    }
+
+    /// The mesh in gray with the planes' faces colored by their signed distance to the plane:
+    /// red in front, blue behind, full color at ±8 mm.
+    func residualColoredMesh() -> (positions: [SIMD3<Float>], colors: [SIMD3<Float>], indices: [UInt32]) {
+        let residual = MeshPlanarity.faceResiduals(positions: mesh.positions, indices: mesh.indices, planes: planes)
+        var colors = [SIMD3<Float>](repeating: SIMD3(0.6, 0.6, 0.6), count: mesh.positions.count)
+        for (f, d) in residual.enumerated() where !d.isNaN {
+            let t = Swift.max(-1, Swift.min(1, d / 0.008))
+            let rgb: SIMD3<Float> = t >= 0 ? SIMD3(1, 1 - t, 1 - t) : SIMD3(1 + t, 1 + t, 1)
+            for c in 0 ..< 3 { colors[Int(mesh.indices[3 * f + c])] = rgb }
+        }
+        return (mesh.positions, colors, mesh.indices)
+    }
+}
+
+/// The planarity table of mesh-eval (`MeshPlanarity`): every mesh measured against the planes and
+/// corners found on the first.
+private func printPlanarity(meshURLs: [URL], reference ref: PlanarityReference) throws {
+    func pad(_ s: String, _ n: Int) -> String { s.count >= n ? s : s + String(repeating: " ", count: n - s.count) }
+    let (planes, corners, areas) = (ref.planes, ref.corners, ref.areas)
+    print(pad("mesh", 28) + " planes  plane RMS  plane σ  normal°  coverage  corners  corner RMS  corner fill")
+    for url in meshURLs {
+        let mesh = url == meshURLs[0] ? ref.mesh : try readOBJ(url)
+        let r = MeshPlanarity.evaluate(positions: mesh.positions, indices: mesh.indices, planes: planes,
+                                       corners: corners, referenceAreas: areas)
+        print(pad(url.deletingPathExtension().lastPathComponent, 28) + String(
+            format: " %3d/%-3d %7.2fmm %6.2fmm %8.2f %8.1f%% %3d/%-3d %8.2fmm %10.1f%%",
+            r.planes.compactMap { $0 }.count, planes.count, 1000 * r.planeRMS, 1000 * r.planeRobustSigma,
+            r.normalRMSDegrees,
+            100 * r.coverage, r.corners.compactMap { $0 }.count, corners.count, 1000 * r.cornerRMS,
+            100 * r.cornerFill))
+    }
 }
 
 /// The training / held-out split of a train-capture run, by frame timestamp (stable across runs,
@@ -165,7 +244,7 @@ struct EvaluationSplit: Codable {
 }
 
 /// A triangle mesh as `MeshOBJWriter` writes it (`v x y z r g b`, `f a//a b//b c//c`).
-private func readOBJ(_ url: URL) throws -> (positions: [SIMD3<Float>], colors: [SIMD3<Float>], indices: [UInt32]) {
+func readOBJ(_ url: URL) throws -> (positions: [SIMD3<Float>], colors: [SIMD3<Float>], indices: [UInt32]) {
     let data = try Data(contentsOf: url)
     var positions: [SIMD3<Float>] = [], colors: [SIMD3<Float>] = [], indices: [UInt32] = []
     data.withUnsafeBytes { (raw: UnsafeRawBufferPointer) in
@@ -203,7 +282,7 @@ private func readOBJ(_ url: URL) throws -> (positions: [SIMD3<Float>], colors: [
 }
 
 /// Z-buffer rasterization with perspective-correct depth and vertex colors. Pixel centers at +0.5.
-private func rasterize(
+func rasterize(
     _ mesh: (positions: [SIMD3<Float>], colors: [SIMD3<Float>], indices: [UInt32]),
     viewmat v: [Float], intrinsics k: Intrinsics, width w: Int, height h: Int
 ) -> (depth: [Float], color: [SIMD3<Float>]) {
@@ -302,7 +381,7 @@ private func roughness(depth: [Float], width w: Int, height h: Int, intrinsics k
 }
 
 /// Gray shading of a depth map by its normals (light from the camera); white where empty.
-private func shading(depth: [Float], width w: Int, height h: Int, intrinsics k: Intrinsics) -> [SIMD3<Float>] {
+func shading(depth: [Float], width w: Int, height h: Int, intrinsics k: Intrinsics) -> [SIMD3<Float>] {
     depthNormals(depth: depth, width: w, height: h, intrinsics: k).enumerated().map { i, n in
         guard depth[i] < .infinity else { return SIMD3(1, 1, 1) }
         guard let n else { return SIMD3(0.3, 0.3, 0.3) }
@@ -311,7 +390,7 @@ private func shading(depth: [Float], width w: Int, height h: Int, intrinsics k: 
     }
 }
 
-private func writePNG(_ pixels: [SIMD3<Float>], width: Int, height: Int, to url: URL) throws {
+func writePNG(_ pixels: [SIMD3<Float>], width: Int, height: Int, to url: URL) throws {
     #if os(macOS)
     let flat = pixels.flatMap { [$0.x, $0.y, $0.z] }
     saveImagePNG(MLXArray(flat, [height, width, 3]), to: url)

@@ -203,3 +203,25 @@ private func makeTinyModel(n: Int) -> GaussianModel {
     for v in tail { maxAbs = max(maxAbs, abs(v)) }
     #expect(maxAbs < 1e-4, "grey bg should bake sh0≈0, got maxAbs=\(maxAbs)")
 }
+
+/// Jittered sphere points stay on the sphere, move off the lattice by at most the asked fraction
+/// of the spacing, and come out the same every time.
+@Test func jitteredBackgroundSphereStaysOnSphere() {
+    let m = 600
+    let radius: Float = 10
+    let spacing = radius * (4 * Float.pi / Float(m)).squareRoot()
+    let lattice = GaussianModel.fibonacciSphere(center: .zero, radius: radius, count: m)
+    let a = GaussianModel.fibonacciSphere(center: .zero, radius: radius, count: m, jitter: 0.5)
+    let b = GaussianModel.fibonacciSphere(center: .zero, radius: radius, count: m, jitter: 0.5)
+    #expect(a.pos == b.pos)
+    var moved = 0
+    for i in 0..<m {
+        let p = SIMD3(a.pos[i * 3], a.pos[i * 3 + 1], a.pos[i * 3 + 2])
+        let q = SIMD3(lattice.pos[i * 3], lattice.pos[i * 3 + 1], lattice.pos[i * 3 + 2])
+        #expect(abs((p * p).sum().squareRoot() - radius) < 1e-3)
+        let d = ((p - q) * (p - q)).sum().squareRoot()
+        #expect(d <= 0.5 * spacing * Float(3).squareRoot() + 1e-3)
+        if d > 0.05 * spacing { moved += 1 }
+    }
+    #expect(moved > m * 3 / 4)
+}

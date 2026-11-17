@@ -365,7 +365,7 @@ final class TrainingViewModel: ObservableObject {
                 opticalFlowWeighting: true,
                 wideLoopClosure: wideLoopModels != nil,
                 maxShDegree: GaussianModel.maxShDegree,
-                appVersion: AppVersion.plain
+                appVersion: Splatelier.versionDescription
             ),
             for: plyURL
         )
@@ -386,7 +386,7 @@ final class TrainingViewModel: ObservableObject {
         if let logURL { FileManager.default.createFile(atPath: logURL.path, contents: nil) }
         let logHandle = logURL.flatMap { try? FileHandle(forWritingTo: $0) }
         if let h = logHandle {
-            let header = "=== splatelier \(AppVersion.full) log @\(timestamp), \(effectiveIterations) iter ===\n"
+            let header = "=== splatelier v\(Splatelier.versionDescription) log @\(timestamp), \(effectiveIterations) iter ===\n"
             if let d = header.data(using: .utf8) { h.write(d) }
         }
 
@@ -445,7 +445,15 @@ final class TrainingViewModel: ObservableObject {
                     + "+ depth averaging, voxel 3mm, window 1), "
                     + "disc-init uncapped, coarse 1/\(CaptureTraining.AppPreset.coarseToFineFactor), strategy Hybrid")
                 if wideLoopModels != nil { logHandler("[wide-angle loop closure] FlexGlue (experimental): on") }
-                let geometry = CaptureTraining.prepareGeometry(scene: captured, wideLoopModels: wideLoopModels, log: logHandler)
+                // SPLATELIER_MVS_LEGACY=1 (unattended A/B runs): the former MVS (one pass at 1/4)
+                // and MVS depth loss (weight 0.05, no truncation).
+                let legacyMVS = AppFeatures.developerEnvironment["SPLATELIER_MVS_LEGACY"] == "1"
+                if legacyMVS { logHandler("[MVS mode] legacy: one pass at 1/4, MVS depth weight 0.05") }
+                let geometry = legacyMVS
+                    ? CaptureTraining.prepareGeometry(
+                        scene: captured, wideLoopModels: wideLoopModels,
+                        mvsParameters: CaptureTraining.MVSMode.liveParameters, mvsDownscale: 4, log: logHandler)
+                    : CaptureTraining.prepareGeometry(scene: captured, wideLoopModels: wideLoopModels, log: logHandler)
                 geometryCache.geometry = geometry
                 // Unattended A/B runs launched with devicectl can override the resolution plan:
                 // SPLATELIER_FINAL_FRAC=<fraction> of the iterations at the captured resolution
@@ -471,6 +479,7 @@ final class TrainingViewModel: ObservableObject {
                     // The seed points and capture cameras (about 60 MB) are only for the
                     // viewer's development layers, which the App Store build leaves out.
                     seedInspectionPLY: AppFeatures.developerInfo ? seedURL : nil,
+                    geometryRegularization: legacyMVS ? GeometryRegularization() : CaptureTraining.AppPreset.geometryRegularization,
                     onThermalThrottle: thermalHandler,
                     onPreview: previewHandler,
                     log: logHandler

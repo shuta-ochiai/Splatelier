@@ -7,8 +7,7 @@ import SwiftUI
 import UIKit
 import Trainer
 
-/// The version the app shows, read from Info.plist (the release version). The build number
-/// (CFBundleVersion) is left out: it stays 1, so it tells nothing.
+/// The version the app shows, read from Info.plist (the release version).
 enum AppVersion {
     /// "0.1.0"
     static var plain: String {
@@ -18,6 +17,13 @@ enum AppVersion {
 
     /// "v0.1.0"
     static var full: String { "v" + plain }
+
+    /// "v0.1.0 (412)": with the build number (CFBundleVersion), which App Store Connect and
+    /// TestFlight list builds by. Just `full` when the build was not stamped.
+    static var withBuild: String {
+        guard let build = Splatelier.build else { return full }
+        return "\(full) (\(build.number))"
+    }
 }
 
 private struct LicenseEntry: Identifiable {
@@ -109,7 +115,7 @@ struct AboutView: View {
         VStack(spacing: 6) {
             Text("Splatelier")
                 .font(.system(size: 30, weight: .semibold, design: .serif))
-            Text(AppVersion.full)
+            Text(AppVersion.withBuild)
                 .font(.subheadline.monospacedDigit())
                 .foregroundStyle(.secondary)
             Text("Capture, train and view 3D Gaussian splats on your \(UIDevice.current.model).")

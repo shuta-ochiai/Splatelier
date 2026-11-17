@@ -38,6 +38,10 @@ public struct GeometryRegularization: Sendable {
     public var normalWeight: Float
     /// Weight of the relative MVS depth loss per step.
     public var mvsDepthWeight: Float
+    /// Samples whose relative difference to the MVS depth exceeds this are left out of the MVS loss
+    /// (nil: none), so a wrong MVS depth (a thin bar's depth spread onto the background behind it)
+    /// does not pull the surface, while small differences such as a bowed wall are still corrected.
+    public var mvsTruncation: Float?
     /// Share of the iterations before the regularization starts (G³S: 7K of 30K).
     public var startFraction: Float
     /// Regularize every n-th step from the start on.
@@ -48,13 +52,14 @@ public struct GeometryRegularization: Sendable {
     public var sampleWidth: Int
     public var depth: GaussianSurfaceDepth.Parameters
 
-    public init(normalWeight: Float = 0.05, mvsDepthWeight: Float = 0.05, startFraction: Float = 0.3,
-                every: Int = 8, sampleWidth: Int = 180,
+    public init(normalWeight: Float = 0.05, mvsDepthWeight: Float = 0.05, mvsTruncation: Float? = nil,
+                startFraction: Float = 0.3, every: Int = 8, sampleWidth: Int = 180,
                 depth: GaussianSurfaceDepth.Parameters = .init(profile: .stochasticSolid, bisectionIterations: 9)) {
         precondition(normalWeight >= 0 && mvsDepthWeight >= 0 && startFraction >= 0 && every >= 1)
         precondition(sampleWidth >= 8)
         self.normalWeight = normalWeight
         self.mvsDepthWeight = mvsDepthWeight
+        self.mvsTruncation = mvsTruncation
         self.startFraction = startFraction
         self.every = every
         self.sampleWidth = sampleWidth
@@ -128,9 +133,11 @@ public struct GeometryRegularization: Sendable {
             var total = wn * normalLoss
             var mvsLoss = MLXArray(Float(0))
             if let mvs {
-                let m = mvs.mask * valid
+                var m = mvs.mask * valid
+                let rel = MLX.abs(depthMap - mvs.target) / mvs.target
+                if let tau = self.mvsTruncation { m = m * stopGradient((rel .< tau).asType(.float32)) }
                 let mCount = MLX.maximum(m.sum(), MLXArray(Float(1)))
-                mvsLoss = (m * MLX.abs(depthMap - mvs.target) / mvs.target).sum() / mCount
+                mvsLoss = (m * rel).sum() / mCount
                 total = total + wm * mvsLoss
             }
             return [total, normalLoss, mvsLoss]

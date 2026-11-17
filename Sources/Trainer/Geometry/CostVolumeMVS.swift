@@ -35,8 +35,35 @@ public enum CostVolumeMVS {
         }
     }
 
+    /// Coarse-to-fine depth: each target's depth is first searched over the whole range at
+    /// 1/`factor` of the input resolution, then at the input resolution only within ±`halfWidth`
+    /// (relative) of the coarse depth, with `hypotheses` depths. The fine pass sees texture the
+    /// coarse one averages away, at a cost close to the coarse pass because it searches few depths.
+    public struct BandRefinement: Sendable, Equatable {
+        public var factor: Int
+        public var hypotheses: Int
+        public var halfWidth: Float
+        public init(factor: Int = 2, hypotheses: Int = 16, halfWidth: Float = 0.04) {
+            precondition(factor >= 2 && hypotheses >= 3 && halfWidth > 0 && halfWidth < 0.5)
+            self.factor = factor
+            self.hypotheses = hypotheses
+            self.halfWidth = halfWidth
+        }
+
+        /// Depth factors around the center, evenly spaced in inverse depth (as the depth filter
+        /// interpolates).
+        var factors: [Float] {
+            let invLo = 1 / (1 + halfWidth), invHi = 1 / (1 - halfWidth)
+            return (0..<hypotheses).map { k in
+                1 / (invLo + Float(k) / Float(hypotheses - 1) * (invHi - invLo))
+            }
+        }
+    }
+
     public struct Parameters: Sendable {
         public var refSelection: ReferenceSelection.Parameters
+        /// Coarse-to-fine search (nil: one pass at the input resolution).
+        public var bandRefinement: BandRefinement? = nil
         public var depthHypotheses: Int          // K
         public var sgmPenalties: SGMAggregation.Penalties
         public var confidenceThreshold: Float
@@ -203,6 +230,24 @@ public enum CostVolumeMVS {
             cachedCensus[i] = c
             return c
         }
+        // Coarse inputs of the band refinement: box-averaged images and their census.
+        let band = parameters.bandRefinement
+        let coarseIntrinsics: [Intrinsics] = band.map { b in
+            let f = Float(b.factor)
+            return inputs.intrinsics.map { (fx: $0.fx / f, fy: $0.fy / f, cx: $0.cx / f, cy: $0.cy / f) }
+        } ?? []
+        var cachedCoarseCensus: [MLXArray?] = Array(repeating: nil, count: frameCount)
+        func coarseCensus(for i: Int) -> MLXArray {
+            if let c = cachedCoarseCensus[i] { return c }
+            let f = band!.factor
+            let img = inputs.rgbImages[i]
+            let h = img.shape[0] / f, w = img.shape[1] / f
+            let reduced = img[0..<(h * f), 0..<(w * f)].reshaped([h, f, w, f, 3]).mean(axes: [1, 3])
+            let c = CensusTransform.compute(luma: CensusTransform.rgbToLuma(reduced),
+                                            variant: parameters.censusVariant)
+            cachedCoarseCensus[i] = c
+            return c
+        }
 
         // With `baselineToDepth` set, per frame the median depth z of the sparse points determines
         // the gaze point (center + optical axis·z) and bTarget = r·z.
@@ -298,12 +343,31 @@ public enum CostVolumeMVS {
                 range: depthRange, count: parameters.depthHypotheses)
 
             let intrT = inputs.intrinsics[targetIdx]
-            let depthHost = runMultiViewCostMVS(
-                targetIdx: targetIdx, refIndices: refIndices, depths: depths,
-                census: census, viewmats: inputs.viewmats,
-                intrinsics: inputs.intrinsics, parameters: parameters,
-                confidence: { fusionConfidences[targetIdx] = $0 }
-            )
+            let depthHost: [Float]
+            if let band {
+                // Coarse pass over the whole range, unfiltered: its depth is only the center of
+                // the fine search, which filters on its own confidence.
+                var coarseParameters = parameters
+                coarseParameters.confidenceThreshold = 0
+                let coarse = runMultiViewCostMVS(
+                    targetIdx: targetIdx, refIndices: refIndices, depths: depths,
+                    census: coarseCensus, viewmats: inputs.viewmats,
+                    intrinsics: coarseIntrinsics, parameters: coarseParameters)
+                let cs = coarseCensus(for: targetIdx).shape
+                let center = upsampleNearest(coarse, width: cs[1], height: cs[0], factor: band.factor,
+                                             toWidth: w, toHeight: h)
+                depthHost = runBandMVS(
+                    targetIdx: targetIdx, refIndices: refIndices, center: center, band: band,
+                    census: census, viewmats: inputs.viewmats, intrinsics: inputs.intrinsics,
+                    parameters: parameters, confidence: { fusionConfidences[targetIdx] = $0 })
+            } else {
+                depthHost = runMultiViewCostMVS(
+                    targetIdx: targetIdx, refIndices: refIndices, depths: depths,
+                    census: census, viewmats: inputs.viewmats,
+                    intrinsics: inputs.intrinsics, parameters: parameters,
+                    confidence: { fusionConfidences[targetIdx] = $0 }
+                )
+            }
             depthFilterKept.append(depthHost.lazy.filter { $0 > 0 }.count)
 
             precondition(intrT.fx > 0 && intrT.fy > 0,
@@ -334,7 +398,8 @@ public enum CostVolumeMVS {
                 filteredDepths: depthMaps != nil ? { emitDepthView($0, $1) } : nil,
                 pixelConfidences: fusionConfidences,
                 pointConfidences: { confidences = MLXArray($0) },
-                pointDepths: { observedDepths = MLXArray($0) }
+                pointDepths: { observedDepths = MLXArray($0) },
+                pointStride: band?.factor ?? 1
             )
             if profiling { profile["fusionConsistency(CPU)", default: 0] += Date().timeIntervalSince(tFuse) }
             log(String(format:
@@ -528,6 +593,60 @@ public enum CostVolumeMVS {
     /// then runs SGM once. Out-of-view hypotheses get the max cost 25, so hypotheses seen from more
     /// refs tend to win; the median (unlike the mean) keeps the true depth winning when some refs
     /// do not see it.
+    /// Nearest-neighbor upsampling of a [height, width] map by `factor`, cropped or edge-padded to
+    /// [toHeight, toWidth].
+    static func upsampleNearest(_ map: [Float], width: Int, height: Int, factor: Int,
+                                toWidth: Int, toHeight: Int) -> [Float] {
+        var out = [Float](repeating: 0, count: toWidth * toHeight)
+        for y in 0..<toHeight {
+            let sy = min(height - 1, y / factor)
+            for x in 0..<toWidth {
+                out[y * toWidth + x] = map[sy * width + min(width - 1, x / factor)]
+            }
+        }
+        return out
+    }
+
+    /// The fine pass of `BandRefinement`: per pixel, depths `center·factors` (median cost over the
+    /// references, SGM over the factor index, peak-ratio filter); <= 0 where rejected.
+    static func runBandMVS(
+        targetIdx: Int, refIndices: [Int], center: [Float], band: BandRefinement,
+        census: (Int) -> MLXArray, viewmats: [[Float]], intrinsics: [Intrinsics],
+        parameters: Parameters, confidence: (([Float]) -> Void)? = nil
+    ) -> [Float] {
+        guard !refIndices.isEmpty else { return [] }
+        let targetCensus = census(targetIdx)
+        let intrT = intrinsics[targetIdx]
+        let refs = Array(refIndices.prefix(PlaneSweepCostVolume.medianMaxRefs))
+        let factors = band.factors
+        let fused = timed("costVolume+median(band)") { () -> MLXArray in
+            let f = PlaneSweepCostVolume.computeMedianBand(
+                targetCensus: targetCensus, refCensuses: refs.map { census($0) },
+                intrinsicsTarget: [intrT.fx, intrT.fy, intrT.cx, intrT.cy],
+                intrinsicsRefs: refs.map {
+                    [intrinsics[$0].fx, intrinsics[$0].fy, intrinsics[$0].cx, intrinsics[$0].cy]
+                },
+                relativeRTs: refs.map {
+                    PlaneSweepCostVolume.relativePose(targetViewmat: viewmats[targetIdx], refViewmat: viewmats[$0])
+                },
+                centerDepth: MLXArray(center, [targetCensus.shape[0], targetCensus.shape[1]]),
+                factors: factors)
+            if profiling { eval(f) }
+            return f }
+        let agg = timed("sgm(band)") { () -> MLXArray in
+            let a = SGMAggregation.aggregate(costVolume: fused, penalties: parameters.sgmPenalties)
+            if profiling { eval(a) }; return a }
+        return timed("depthFilter+readback(band)") {
+            let filt = DepthFilter.filter(
+                aggregatedCost: agg, depths: factors,
+                threshold: parameters.confidenceThreshold,
+                excludeRadius: parameters.secondMinExcludeRadius)
+            confidence?(filt.confidence.asArray(Float.self))
+            let factor = filt.depthMap.asArray(Float.self)
+            return zip(factor, center).map { $0 > 0 && $1 > 0 ? $0 * $1 : -1 }
+        }
+    }
+
     static func runMultiViewCostMVS(
         targetIdx: Int, refIndices: [Int], depths: [Float],
         census: (Int) -> MLXArray,
@@ -619,7 +738,10 @@ public enum CostVolumeMVS {
         pixelConfidences: [Int: [Float]]? = nil,
         pointConfidences: (([Float]) -> Void)? = nil,
         // Receives each emitted point's accepted depth in its frame, in point order.
-        pointDepths: (([Float]) -> Void)? = nil
+        pointDepths: (([Float]) -> Void)? = nil,
+        // Points come from every pointStride-th pixel in each direction (the filtered depth maps
+        // keep every pixel), so a finer depth map does not multiply the point cloud.
+        pointStride: Int = 1
     ) -> (positions: MLXArray, colors: MLXArray, kept: Int, total: Int) {
         let frames = (targets ?? depths.keys.sorted()).filter { dims[$0] != nil && depths[$0] != nil }
         let k = fusion.neighborCount
@@ -697,6 +819,7 @@ public enum CostVolumeMVS {
                     if filteredDepths != nil { filtered[pix] = z }
                     guard emitPoints else { continue }
                     let x = pix % w, y = pix / w
+                    if pointStride > 1, x % pointStride != 0 || y % pointStride != 0 { continue }
                     let ax = (Float(x) + 0.5 - intr.cx) / intr.fx * z - vm[3]
                     let ay = (Float(y) + 0.5 - intr.cy) / intr.fy * z - vm[7]
                     let az = z - vm[11]

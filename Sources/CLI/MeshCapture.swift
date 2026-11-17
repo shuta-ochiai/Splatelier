@@ -70,6 +70,8 @@ func writeCaptureMesh(
 //                             the fill may add, as a fraction of MESH_MAX_VOXELS, default 0.25)
 //   MESH_GOF=<path.obj>       level set of the opacity field (GOF idea, GaussianOpacityField)
 //   MESH_GS_TSDF=<path.obj>   TSDF fusion of the Gaussian depth maps alone
+//   MESH_APP=<path.obj>       (gs-mesh) the app's mesh: CaptureMeshing.reconstruct with the app's
+//                             parameters over the app's training views
 //   GS_CONSISTENCY=0          fill with the raw Gaussian depth instead of its multi-view consistent pixels
 //   GS_DEPTH_CLIP=<f>         TSDF grids are placed from depths <= f × the median Gaussian depth
 //                             (default 2.5, 0 = no limit)
@@ -259,6 +261,26 @@ func runGaussianMeshCommand(valsetURL: URL, plyURL: URL, log: (String) -> Void) 
        !(try writeCaptureMesh(geometry: geometry, sourceName: valsetURL.lastPathComponent, to: meshOBJ,
                               excluding: excluded, log: log)) {
         log("mesh: no surface reconstructed")
+    }
+    // MESH_APP=<path.obj>: the app's mesh after training: CaptureMeshing.reconstruct with the app's
+    // parameters over the training views the app selects (coverage selection, no views held out).
+    if let appOBJ = env["MESH_APP"].map({ URL(fileURLWithPath: $0) }) {
+        let views = CaptureTraining.evaluationSplit(geometry: geometry, holdoutEvery: 0).training
+        let cameras = views.map { f in
+            Camera(viewmat: MLXArray(f.viewmat, [16]),
+                   intrinsics: MLXArray([f.intrinsics.fx, f.intrinsics.fy, f.intrinsics.cx, f.intrinsics.cy], [4]),
+                   width: f.width, height: f.height, background: MLXArray.zeros([3]))
+        }
+        let parameters = CaptureTraining.AppPreset.meshParameters
+        if let mesh = try CaptureMeshing.reconstruct(
+            model: model, cameras: cameras, shDegree: GaussianModel.maxShDegree, parameters: parameters, log: log) {
+            try MeshOBJWriter.write(mesh, to: appOBJ,
+                                    comment: "source: \(valsetURL.lastPathComponent) + \(plyURL.lastPathComponent) "
+                                        + "(app mesh: Gaussian surface depth over \(cameras.count) views)")
+            print("mesh: wrote \(mesh.vertexCount) vertices, \(mesh.triangleCount) triangles to \(appOBJ.path)")
+        } else {
+            log("app mesh: no surface reconstructed")
+        }
     }
     // GOF_RES is applied by writeGaussianMeshes.
     let background = MLXArray.zeros([3])

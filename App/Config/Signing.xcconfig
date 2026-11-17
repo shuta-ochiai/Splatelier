@@ -1,4 +1,4 @@
-// Signing of the Splatelier app target (project.yml's configFiles, for every configuration).
+// Signing of the Splatelier app target, for every configuration (included by App.xcconfig).
 //
 // The team and bundle identifier are not in the repository. Copy Local.xcconfig.example to
 // Local.xcconfig (ignored by git) next to this file and put your own in it. Without it the app

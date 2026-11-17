@@ -63,8 +63,8 @@ public final class LiveMVSReconstructor: @unchecked Sendable {
     ///     get closer) whenever points are added (called from the background queue). Coarse surfels
     ///     floating in front of surfaces captured up close are removed before returning.
     public init(
-        parameters: CostVolumeMVS.Parameters = CaptureTraining.MVSMode.mvsParameters,
-        targetLongSide: Int = CaptureTraining.mvsTargetLongSide,
+        parameters: CostVolumeMVS.Parameters = CaptureTraining.MVSMode.liveParameters,
+        targetLongSide: Int = CaptureTraining.liveMVSTargetLongSide,
         maxBacklog: Int = 2,
         accumulator: CaptureCoverageAccumulator
             = CaptureCoverageAccumulator(

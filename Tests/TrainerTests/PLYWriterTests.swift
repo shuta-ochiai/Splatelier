@@ -79,6 +79,10 @@ func plyWriterRoundTrips() throws {
     defer { try? FileManager.default.removeItem(at: url) }
     try PLYWriter.writeGaussianPLY(model: model, to: url)
 
+    // The header names the version that wrote it.
+    let header = try #require(PLYAxes.header(of: url))
+    #expect(header.split(separator: "\n").contains { $0 == PLYWriter.versionComment })
+
     let data = try Data(contentsOf: url)
     guard let (props, count, recs) = parseBinaryPLY(data) else {
         Issue.record("failed to parse written PLY")
