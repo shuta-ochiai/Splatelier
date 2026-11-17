@@ -110,10 +110,10 @@ public final class GaussianModel {
     public func appendBakedBackgroundSphere(
         coeffs: MLXArray, degree: Int,
         center: SIMD3<Float>, radius: Float, count m: Int,
-        opacity: Float, scaleFactor: Float = 1.2
+        opacity: Float, scaleFactor: Float = 1.2, jitter: Float = 0
     ) {
         guard m > 0, radius > 0 else { return }
-        let (pos, dir) = Self.fibonacciSphere(center: center, radius: radius, count: m)
+        let (pos, dir) = Self.fibonacciSphere(center: center, radius: radius, count: m, jitter: jitter)
         // Convert the raw SH color C_i = basis(dir_i)·coeffs into viewer-convention sh0.
         let dirs = MLXArray(dir, [m, 3])
         let colors = BackgroundSH.colors(dirs: dirs, coeffs: coeffs, degree: degree)   // [m,3]
@@ -122,9 +122,10 @@ public final class GaussianModel {
     }
 
     /// Positions and unit directions (each [m*3]) of `m` points on a Fibonacci sphere with center
-    /// `center` and radius `radius`.
-    private static func fibonacciSphere(
-        center: SIMD3<Float>, radius: Float, count m: Int
+    /// `center` and radius `radius`. `jitter` moves each point by up to that fraction of the point
+    /// spacing, in a direction fixed by its index, so the points do not form a regular lattice.
+    static func fibonacciSphere(
+        center: SIMD3<Float>, radius: Float, count m: Int, jitter: Float = 0
     ) -> (pos: [Float], dir: [Float]) {
         var pos = [Float](); pos.reserveCapacity(m * 3)
         var dir = [Float](); dir.reserveCapacity(m * 3)
@@ -133,12 +134,22 @@ public final class GaussianModel {
             let y = 1.0 - 2.0 * (Double(i) + 0.5) / Double(m)   // [-1, 1]
             let rxy = (Swift.max(0.0, 1.0 - y * y)).squareRoot()
             let theta = golden * Double(i)
-            let x = Foundation.cos(theta) * rxy
-            let z = Foundation.sin(theta) * rxy
-            pos.append(center.x + radius * Float(x))
-            pos.append(center.y + radius * Float(y))
-            pos.append(center.z + radius * Float(z))
-            dir.append(Float(x)); dir.append(Float(y)); dir.append(Float(z))
+            var p = SIMD3<Double>(Foundation.cos(theta) * rxy, y, Foundation.sin(theta) * rxy)
+            if jitter > 0 {
+                // A hash of the index (SplitMix64) gives the offset, so the bake is deterministic.
+                var h = UInt64(i &+ 1) &* 0x9E37_79B9_7F4A_7C15
+                func next() -> Double {
+                    h ^= h >> 31; h = h &* 0xBF58_476D_1CE4_E5B9; h ^= h >> 29
+                    return Double(h >> 11) / Double(UInt64(1) << 53) * 2 - 1
+                }
+                let spacing = (4.0 * Double.pi / Double(m)).squareRoot()
+                p += Double(jitter) * spacing * SIMD3(next(), next(), next())
+                p /= (p * p).sum().squareRoot()
+            }
+            pos.append(center.x + radius * Float(p.x))
+            pos.append(center.y + radius * Float(p.y))
+            pos.append(center.z + radius * Float(p.z))
+            dir.append(Float(p.x)); dir.append(Float(p.y)); dir.append(Float(p.z))
         }
         return (pos, dir)
     }

@@ -454,7 +454,11 @@ extension TrainingDriver {
     ) throws {
         // bg-SH is baked into environment-sphere Gaussians for viewers. Appending to the training
         // model would duplicate the bake on continued training and mismatch the optimizer state and
-        // shapes, so it is baked into a shallowCopy (bake-on-copy).
+        // shapes, so it is baked into a shallowCopy (bake-on-copy). The splats are faint (0.3) and
+        // three spacings wide, so about a dozen blend at every point of the sky, and their points
+        // are moved off the Fibonacci lattice by half a spacing: nearly opaque splats one lattice
+        // apart (0.9, 1.2 spacings) let the nearest one show through as a mottled, moiré-like
+        // pattern when the viewer moves. The count, and so the file size, stays the same.
         let exportModel: GaussianModel
         if enableBackgroundSH {
             let centroidArr = model.means.mean(axis: 0)
@@ -466,7 +470,7 @@ extension TrainingDriver {
             copy.appendBakedBackgroundSphere(
                 coeffs: trainer.bgCoeffs, degree: backgroundSHDegree,
                 center: SIMD3<Float>(cc[0], cc[1], cc[2]),
-                radius: bakedRadius, count: bakedCount, opacity: 0.9)
+                radius: bakedRadius, count: bakedCount, opacity: 0.3, scaleFactor: 3, jitter: 0.5)
             log(String(format: "baked bg-SH → %d env gaussians for viewer (R=%.3f, %.1f×scene)",
                        bakedCount, bakedRadius, 24.0))
             exportModel = copy
