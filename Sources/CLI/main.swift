@@ -79,7 +79,7 @@ func usage() {
     print("         gpu energy= in the training log is the IOReport GPU energy (system-wide value)")
     print("")
     print("  splatelier gs-mesh <dataset.valset> <trained.ply>")
-    print("    The MESH_OBJ (MVS depth) / MESH_HYBRID / MESH_GOF / MESH_GS_TSDF meshes from a PLY that")
+    print("    The MESH_OBJ (MVS depth) / MESH_HYBRID / MESH_GOF / MESH_GS_TSDF / MESH_APP (the app's mesh) meshes from a PLY that")
     print("    train-capture wrote, without training (BA/MVS are redone from the valset).")
     print("    GS_DEPTH_PROFILE=gof,solid compares profiles.")
     print("")
