@@ -129,6 +129,11 @@ All are marked `LOCAL PATCH` in the source.
     flicker. GPU energy per frame at 60 fps: no measurable change at 1179x2556, +2 to +13% at
     1180x1280.
 
+12. `MetalSplatter/Sources/SplatChunk+sortByLocality.swift`: `sortByLocality()` is public and returns
+    the order it put the splats in (slot `i` holds the splat that was at index `result[i]`). The
+    app's viewer sorts its foreground chunk itself, keeps that order, and recolours single splats
+    in place (the crop selection highlight) instead of rebuilding the whole chunk.
+
 Result of patches 1–4: the blend space follows the render target format. An sRGB target keeps upstream
 behaviour (linear blending). A non-sRGB target such as `.bgra8Unorm` blends sRGB-encoded
 colors, which matches training. Our viewers use `.bgra8Unorm`.

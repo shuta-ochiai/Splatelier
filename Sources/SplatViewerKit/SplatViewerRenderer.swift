@@ -16,7 +16,8 @@
 // floater mode cast against the foreground for the first thing along the ray and select the splats
 // within the brush there (`SplatViewerFloaterBrush`); Detect adds the small clusters apart from the
 // scene (`SplatViewerFloaterDetector`). The selection is baked into the foreground chunk as a
-// highlight.
+// highlight; when only the selection changed, just the splats that changed are recoloured in the
+// chunk's buffers, so the highlight follows a tap or a Lasso loop at once.
 
 #if os(iOS) || os(macOS)
 
@@ -72,6 +73,8 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
     // Keep the chunks for measurement tap hit tests (only reads GPU buffers, no copy). The
     // background is not a surface, so it is not kept.
     private var gsChunk: SplatChunk?
+    /// What the foreground chunk was built from.
+    private var gsChunkBuild: GSChunkBuild?
     private var seedChunk: SplatChunk?
     /// A ray test is in flight. Don't stack another; taps until it finishes are dropped.
     private var isPicking = false
@@ -315,18 +318,21 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
                 }
 
                 if let chunk = scene.gs.chunk {
-                    self.gsChunkID = await renderer.addChunk(chunk)
+                    self.gsChunkID = await renderer.addChunk(chunk, sortByLocality: false)
                     self.gsChunk = chunk
+                    self.gsChunkBuild = GSChunkBuild(
+                        kept: self.cropEdits.kept, grade: .identity, tinted: false, highlighted: [],
+                        slotOfKept: scene.gs.slots)
                 }
                 if let chunk = scene.background.chunk {
-                    self.backgroundChunkID = await renderer.addChunk(chunk)
+                    self.backgroundChunkID = await renderer.addChunk(chunk, sortByLocality: false)
                 }
                 if let chunk = scene.seed.chunk {
-                    self.seedChunkID = await renderer.addChunk(chunk)
+                    self.seedChunkID = await renderer.addChunk(chunk, sortByLocality: false)
                     self.seedChunk = chunk
                 }
                 if let chunk = scene.camera.chunk {
-                    self.cameraChunkID = await renderer.addChunk(chunk)
+                    self.cameraChunkID = await renderer.addChunk(chunk, sortByLocality: false)
                 }
 
                 // Initially show GS only. Without GS show seed to avoid an empty view, and if
@@ -373,11 +379,24 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
     /// One layer's splats and the chunk built from them (nil when there are none).
     private struct PreparedSplats: Sendable {
         let points: [SplatPoint]
+        /// Sorted by locality here, so it is added without sorting again.
         let chunk: SplatChunk?
+        /// Chunk slot of each point, in the order of `points`.
+        let slots: [Int32]
 
         init(_ points: [SplatPoint], device: MTLDevice) throws {
             self.points = points
-            chunk = points.isEmpty ? nil : try SplatChunk(device: device, from: points)
+            var slots = (0..<Int32(points.count)).map { $0 }
+            if points.isEmpty {
+                chunk = nil
+            } else {
+                let chunk = try SplatChunk(device: device, from: points)
+                if let order = chunk.sortByLocality() {
+                    for (slot, i) in order.enumerated() { slots[i] = Int32(slot) }
+                }
+                self.chunk = chunk
+            }
+            self.slots = slots
         }
     }
 
@@ -993,51 +1012,114 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
                 export: model.cropExport, name: sourceName)
             : nil
         model.setCropState(edited: cropEdits.isEdited, canUndo: cropEdits.canUndo, shareItem: shareItem)
-        var highlighted: [Bool]?
-        if !floaterSelection.isEmpty {
-            var mask = [Bool](repeating: false, count: kept.count)
-            for i in floaterSelection { mask[Int(i)] = true }
-            highlighted = mask
-        }
         updateFloaterState()
-        rebuildGSChunk(kept: kept, source: source, grade: grade, highlighted: highlighted)
+        rebuildGSChunk(kept: kept, source: source, grade: grade, highlighted: floaterSelection)
     }
 
-    /// Replaces the foreground chunk with the kept splats, graded, and the selected floaters
-    /// highlighted (`highlighted` is in the order of `kept`). Rebuilds run one after another.
-    /// The new chunk is built off the main actor and added before the old one is removed, so the
-    /// Apply doesn't stall the view and the splats don't drop out while it builds.
+    /// The splats, grade and highlight a foreground chunk was built from, and where each kept splat
+    /// sits in it (the chunk is sorted by locality).
+    private struct GSChunkBuild {
+        var kept: [UInt32]
+        var grade: SplatViewerColorGrade
+        var tinted: Bool
+        var highlighted: Set<Int32>
+        /// Chunk slot of each kept splat, in the order of `kept`.
+        var slotOfKept: [Int32]
+    }
+
+    /// A kept splat as the foreground shows it: graded, and highlighted if it is selected (Lasso
+    /// tints the selection; floaters paint it flat).
+    private nonisolated static func displayed(
+        _ point: SplatPoint, grade: SplatViewerColorGrade, highlighted: Bool, tinted: Bool
+    ) -> SplatPoint {
+        let graded = grade.apply(to: point)
+        guard highlighted else { return graded }
+        return tinted ? SplatViewerFloaterHighlight.tint(graded) : SplatViewerFloaterHighlight.apply(to: graded)
+    }
+
+    /// Rewrites the given kept splats in the chunk's buffers with how they show now. The renderer
+    /// may be drawing the chunk meanwhile; positions don't change, so the sort stays valid and at
+    /// worst one frame mixes old and new colours.
+    private nonisolated static func recolor(
+        _ chunk: SplatChunk, build: GSChunkBuild, source: [SplatPoint], splats: Set<Int32>
+    ) {
+        let perSplat = chunk.shDegree.extraCoefficientCount * 3
+        for k in splats {
+            let slot = Int(build.slotOfKept[Int(k)])
+            let point = displayed(
+                source[Int(build.kept[Int(k)])], grade: build.grade,
+                highlighted: build.highlighted.contains(k), tinted: build.tinted)
+            chunk.splats.values[slot] = EncodedSplatPoint(point)
+            guard let sh = chunk.shCoefficients, perSplat > 0 else { continue }
+            let coefficients = point.color.higherOrderSHCoefficients
+            let base = slot * perSplat
+            for j in 0..<perSplat {
+                sh.values[base + j] = j < coefficients.count ? Float16(coefficients[j]) : 0
+            }
+        }
+    }
+
+    /// Brings the foreground chunk to the kept splats, graded, with the selected ones (indices into
+    /// `kept`) highlighted. Updates run one after another. When only the highlight differs from
+    /// what the chunk was built from, the splats that changed are recoloured in place. Otherwise a
+    /// new chunk is built off the main actor and added before the old one is removed, so the Apply
+    /// doesn't stall the view and the splats don't drop out while it builds.
     private func rebuildGSChunk(
-        kept: [UInt32], source: [SplatPoint], grade: SplatViewerColorGrade, highlighted: [Bool]?
+        kept: [UInt32], source: [SplatPoint], grade: SplatViewerColorGrade, highlighted: Set<Int32>
     ) {
         guard let renderer else { return }
         let previous = cropRebuild
         let device = self.device
-        // Lasso tints the selection; floaters paint it flat.
         let tinted = model.isCropping
         cropRebuild = Task { [weak self] in
             await previous?.value
             guard let self else { return }
+            if var build = self.gsChunkBuild, let chunk = self.gsChunk,
+               build.kept == kept, build.grade == grade,
+               // The style only matters for splats that stay highlighted.
+               build.tinted == tinted || build.highlighted.isDisjoint(with: highlighted) {
+                let changed = build.highlighted.symmetricDifference(highlighted)
+                build.tinted = tinted
+                build.highlighted = highlighted
+                self.gsChunkBuild = build
+                guard !changed.isEmpty else { return }
+                await Task.detached(priority: .userInitiated) { [build] in
+                    Self.recolor(chunk, build: build, source: source, splats: changed)
+                }.value
+                self.requestRedraw()
+                return
+            }
             let enabled = self.appliedGS
-            let built = await Task.detached(priority: .userInitiated) { () -> Result<SplatChunk, Error> in
+            let built = await Task.detached(priority: .userInitiated) {
+                () -> Result<(SplatChunk, [Int32]), Error> in
                 Result {
-                    try SplatChunk(device: device, from: kept.indices.map { i in
-                        let point = grade.apply(to: source[Int(kept[i])])
-                        guard highlighted?[i] == true else { return point }
-                        return tinted ? SplatViewerFloaterHighlight.tint(point) : SplatViewerFloaterHighlight.apply(to: point)
+                    let chunk = try SplatChunk(device: device, from: kept.indices.map { i in
+                        Self.displayed(
+                            source[Int(kept[i])], grade: grade,
+                            highlighted: highlighted.contains(Int32(i)), tinted: tinted)
                     })
+                    // Sorted here rather than in addChunk, to keep where each splat went.
+                    var slotOfKept = (0..<Int32(kept.count)).map { $0 }
+                    if let order = chunk.sortByLocality() {
+                        for (slot, i) in order.enumerated() { slotOfKept[i] = Int32(slot) }
+                    }
+                    return (chunk, slotOfKept)
                 }
             }.value
             switch built {
-            case .success(let chunk):
-                let newID = await renderer.addChunk(chunk, enabled: enabled)
+            case .success(let (chunk, slotOfKept)):
+                let newID = await renderer.addChunk(chunk, sortByLocality: false, enabled: enabled)
                 let oldID = self.gsChunkID
                 self.gsChunk = chunk
+                self.gsChunkBuild = GSChunkBuild(
+                    kept: kept, grade: grade, tinted: tinted, highlighted: highlighted,
+                    slotOfKept: slotOfKept)
                 self.gsChunkID = newID
                 if let oldID { await renderer.removeChunk(oldID) }
             case .failure:
                 if let oldID = self.gsChunkID { await renderer.removeChunk(oldID) }
                 self.gsChunk = nil
+                self.gsChunkBuild = nil
                 self.gsChunkID = nil
                 self.model.showCropNotice("Couldn't rebuild the splats")
             }
