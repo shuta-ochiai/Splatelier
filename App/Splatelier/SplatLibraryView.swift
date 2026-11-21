@@ -198,15 +198,15 @@ struct SplatLibraryView: View {
         }
     }
 
-    private var selectModeTitle: String { selectMode ? "Done" : "Select" }
-    private var selectAllTitle: String { selection.count == items.count ? "Deselect all" : "Select all" }
+    private var selectModeTitle: LocalizedStringKey { selectMode ? "Done" : "Select" }
+    private var selectAllTitle: LocalizedStringKey { selection.count == items.count ? "Deselect all" : "Select all" }
 
     /// What the viewer's Share menu offers: the GS, the mesh, and the training log if the capture
     /// folder has one.
     private func shareItems(for item: CaptureItem) -> [SplatViewerShareItem] {
         var items = [SplatExportShare.item(for: item.mainURL)]
         if let mesh = item.meshURL {
-            items.append(SplatViewerShareItem(title: "Mesh (OBJ)", systemImage: "triangle", url: mesh))
+            items.append(SplatViewerShareItem(title: String(localized: "Mesh (OBJ)"), systemImage: "triangle", url: mesh))
         }
         // The training log and the mesh log go out together as "Log".
         guard AppFeatures.developerInfo else { return items }
@@ -214,7 +214,7 @@ struct SplatLibraryView: View {
         let logs = [base.appendingPathExtension("log"), URL(fileURLWithPath: base.path + "_mesh.log")]
             .filter { FileManager.default.fileExists(atPath: $0.path) }
         if !logs.isEmpty {
-            items.append(SplatViewerShareItem(title: "Log", systemImage: "doc.text", urls: logs))
+            items.append(SplatViewerShareItem(title: String(localized: "Log"), systemImage: "doc.text", urls: logs))
         }
         return items
     }
@@ -453,7 +453,7 @@ struct SplatLibraryView: View {
     }
 
     /// What deleting a capture removes, as the delete confirmations list it.
-    private static let relatedFiles = AppFeatures.meshGeneration ? "PLY, mesh, logs, etc." : "PLY, logs, etc."
+    private static let relatedFiles = AppFeatures.meshGeneration ? String(localized: "PLY, mesh, logs, etc.") : String(localized: "PLY, logs, etc.")
 
     // MARK: - Selection bar
 

@@ -68,8 +68,8 @@ private struct TrainingHelp: Identifiable {
 
     static let cap = TrainingHelp(
         id: "cap",
-        title: "Gaussian cap",
-        message: "Maximum number of Gaussians. Training starts from 5/6 of it (initial points beyond that are thinned out) and grows to it by splitting along edges. Lower is lighter and runs cooler; higher keeps more detail."
+        title: String(localized: "Gaussian cap"),
+        message: String(localized: "Maximum number of Gaussians. Training starts from 5/6 of it (initial points beyond that are thinned out) and grows to it by splitting along edges. Lower is lighter and runs cooler; higher keeps more detail.")
     )
 }
 
@@ -121,7 +121,7 @@ struct TrainingView: View {
             .cardBackground()
     }
 
-    private func thermalBanner(icon: String, text: String, tint: Color) -> some View {
+    private func thermalBanner(icon: String, text: LocalizedStringKey, tint: Color) -> some View {
         HStack(spacing: 8) {
             Image(systemName: icon)
             Text(text)
@@ -212,12 +212,12 @@ struct TrainingView: View {
         var shareItems = [SplatExportShare.item(for: target.plyURL)]
         if let mesh = vm.meshOBJURL {
             shareItems.append(SplatViewerShareItem(
-                title: "Mesh (OBJ)", systemImage: "triangle", url: mesh))
+                title: String(localized: "Mesh (OBJ)"), systemImage: "triangle", url: mesh))
         }
         // The training log and the mesh log go out together as "Log".
         let logs = AppFeatures.developerInfo ? [target.logURL, vm.meshLogURL].compactMap { $0 } : []
         if !logs.isEmpty {
-            shareItems.append(SplatViewerShareItem(title: "Log", systemImage: "doc.text", urls: logs))
+            shareItems.append(SplatViewerShareItem(title: String(localized: "Log"), systemImage: "doc.text", urls: logs))
         }
         return SplatViewerScreen(
             url: target.plyURL,
@@ -235,8 +235,8 @@ struct TrainingView: View {
                 vm.continueTraining()
             } : nil,
             trainMoreMessage: AppFeatures.meshGeneration
-                ? "Trains \(TrainingViewModel.continueIterationCount) more iterations on this result, then rebuilds the mesh. It takes a minute or two, and the result is replaced."
-                : "Trains \(TrainingViewModel.continueIterationCount) more iterations on this result. It takes a minute or two, and the result is replaced.",
+                ? String(localized: "Trains \(TrainingViewModel.continueIterationCount) more iterations on this result, then rebuilds the mesh. It takes a minute or two, and the result is replaced.")
+                : String(localized: "Trains \(TrainingViewModel.continueIterationCount) more iterations on this result. It takes a minute or two, and the result is replaced."),
             onRename: { newName in
                 vm.captureName = newName
                 vm.saveCaptureName()
@@ -306,7 +306,7 @@ struct TrainingView: View {
         .frame(maxWidth: .infinity)
     }
 
-    private func metricItem(_ title: String, _ value: String, isMet: Bool = true) -> some View {
+    private func metricItem(_ title: LocalizedStringKey, _ value: String, isMet: Bool = true) -> some View {
         HStack(spacing: 4) {
             Text(title).foregroundStyle(.secondary)
             // Ternary inference between HierarchicalShapeStyle and Color fails, so make Color
@@ -443,7 +443,7 @@ struct TrainingView: View {
             .cardBackground()
     }
 
-    private func settingHeader(_ title: String, help: TrainingHelp) -> some View {
+    private func settingHeader(_ title: LocalizedStringKey, help: TrainingHelp) -> some View {
         HStack(spacing: 6) {
             Text(title).foregroundStyle(.secondary)
             helpButton(help)
@@ -471,7 +471,7 @@ struct TrainingView: View {
     }
 
     @ViewBuilder
-    private func presetButton(label: String, value: Int) -> some View {
+    private func presetButton(label: LocalizedStringKey, value: Int) -> some View {
         let button = Button(label) { vm.iterations = value }
             .controlSize(.small)
             .disabled(!isIdle)
@@ -487,7 +487,7 @@ struct TrainingView: View {
         VStack(alignment: .leading, spacing: 8) {
             if vm.isBusy {
                 // One bar for the preprocessing, the training and the mesh.
-                Label(vm.progressLabel.isEmpty ? "Working" : vm.progressLabel, systemImage: "hourglass")
+                Label(vm.progressLabel.isEmpty ? String(localized: "Working") : vm.progressLabel, systemImage: "hourglass")
                     .font(.headline).foregroundStyle(.orange)
                 ProgressView(value: vm.overallProgress)
                 HStack {
@@ -574,7 +574,7 @@ struct TrainingView: View {
     /// and starts over with a new capture once the result is saved.
     private var closeButton: some View {
         let finished: Bool = { if case .completed = vm.phase { return true }; return false }()
-        let title = finished ? "New capture" : (closeDiscards ? "Discard capture" : "Close")
+        let title: LocalizedStringKey = finished ? "New capture" : (closeDiscards ? "Discard capture" : "Close")
         let symbol = finished ? "camera.viewfinder" : (closeDiscards ? "trash" : "xmark")
         let destructive = !finished && closeDiscards
         return Group {

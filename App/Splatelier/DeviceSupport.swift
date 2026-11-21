@@ -16,8 +16,9 @@ enum DeviceSupport {
         return MTLCreateSystemDefaultDevice()?.supportsFamily(.apple7) ?? false
     }()
 
-    static let unsupportedMessage =
-        "Training needs an A14 chip or newer: iPhone 12 or later, or iPad Air (4th generation), "
-        + "iPad (10th generation), iPad mini (6th generation), an iPad with an M chip, or later. "
-        + "You can still open splat files in the Library."
+    static let unsupportedMessage = String(localized: """
+        Training needs an A14 chip or newer: iPhone 12 or later, or iPad Air (4th generation), \
+        iPad (10th generation), iPad mini (6th generation), an iPad with an M chip, or later. \
+        You can still open splat files in the Library.
+        """)
 }

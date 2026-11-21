@@ -279,15 +279,15 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
                     }
                 }
                 if let cadError {
-                    self.model.setCADLoadError("Couldn't load the CAD model: \(cadError)")
+                    self.model.setCADLoadError(String(localized: "Couldn't load the CAD model: \(String(describing: cadError))"))
                 }
 
                 guard !gsPoints.isEmpty || !seedPoints.isEmpty || !cameraPoints.isEmpty
                         || self.meshLayer != nil || self.cadLayer != nil else {
                     if let cadError {
-                        self.model.setLoadState(.failed("Couldn't load the CAD model: \(cadError)"))
+                        self.model.setLoadState(.failed(String(localized: "Couldn't load the CAD model: \(String(describing: cadError))")))
                     } else if let meshError {
-                        self.model.setLoadState(.failed("Couldn't load the mesh: \(meshError)"))
+                        self.model.setLoadState(.failed(String(localized: "Couldn't load the mesh: \(String(describing: meshError))")))
                     } else {
                         self.model.setLoadState(.empty)
                     }
@@ -611,7 +611,7 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
                 self.requestRedraw()
             } catch {
                 self?.model.setLoadingCAD(false)
-                self?.model.setCADLoadError("Couldn't load the CAD model: \(error)")
+                self?.model.setCADLoadError(String(localized: "Couldn't load the CAD model: \(String(describing: error))"))
             }
         }
     }
@@ -767,7 +767,7 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
     func measureTap(normalized point: SIMD2<Float>) {
         guard model.isMeasuring, isLoaded, !isPicking else { return }
         guard let caster = visibleRayCaster() else {
-            model.showMeasureNotice("Show GS, Seed or Mesh first")
+            model.showMeasureNotice(String(localized: "Show GS, Seed or Mesh first"))
             return
         }
         pickSurface(normalized: point, caster: caster) { [weak self] hit in
@@ -776,7 +776,7 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
             if let hit {
                 self.model.addMeasurePoint(hit)
             } else {
-                self.model.showMeasureNotice("No surface here")
+                self.model.showMeasureNotice(String(localized: "No surface here"))
             }
         }
     }
@@ -895,7 +895,7 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
         let isInside: (UInt32) -> Bool
         if model.cropShape == .lasso {
             guard !floaterSelection.isEmpty else {
-                model.showCropNotice("Draw a loop around what to crop")
+                model.showCropNotice(String(localized: "Draw a loop around what to crop"))
                 return
             }
             let kept = cropEdits.kept
@@ -909,9 +909,9 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
         case .applied:
             commitCropEdits()
         case .unchanged:
-            model.showCropNotice("Nothing to remove here")
+            model.showCropNotice(String(localized: "Nothing to remove here"))
         case .emptied:
-            model.showCropNotice("That would remove every splat")
+            model.showCropNotice(String(localized: "That would remove every splat"))
         }
     }
 
@@ -922,7 +922,7 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
         let test = SplatViewerLasso.test(polygon: loop, camera: camera())
         let selection = Set(kept.indices.lazy.filter { test(source[Int(kept[$0])].position) }.map(Int32.init))
         guard !selection.isEmpty else {
-            model.showCropNotice("No splats inside the loop")
+            model.showCropNotice(String(localized: "No splats inside the loop"))
             return
         }
         floaterSelection = selection
@@ -1039,7 +1039,7 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
                 if let oldID = self.gsChunkID { await renderer.removeChunk(oldID) }
                 self.gsChunk = nil
                 self.gsChunkID = nil
-                self.model.showCropNotice("Couldn't rebuild the splats")
+                self.model.showCropNotice(String(localized: "Couldn't rebuild the splats"))
             }
             self.requestRedraw()
         }
@@ -1063,7 +1063,7 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
                 return try await export.convert(try await writePLY(), format.fileExtension)
             }))
         }
-        return SplatViewerShareItem(title: "Edited splats", systemImage: "slider.horizontal.3", options: options)
+        return SplatViewerShareItem(title: String(localized: "Edited splats"), systemImage: "slider.horizontal.3", options: options)
     }
 
     // MARK: - Floaters
@@ -1129,14 +1129,14 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
     func floaterTap(normalized point: SIMD2<Float>) {
         guard model.isRemovingFloaters, isLoaded, !isPicking else { return }
         guard model.showGS, let gsChunk else {
-            model.showCropNotice("Show the splats first")
+            model.showCropNotice(String(localized: "Show the splats first"))
             return
         }
         let caster = SplatViewerRayCaster(splatChunks: [gsChunk], mesh: nil)
         pickSurface(normalized: point, caster: caster, frontOpacity: Self.floaterPickOpacity) { [weak self] hit in
             guard let self, self.model.isRemovingFloaters else { return }
             guard let hit else {
-                self.model.showCropNotice("No splats here")
+                self.model.showCropNotice(String(localized: "No splats here"))
                 return
             }
             self.brush(at: hit)
@@ -1161,7 +1161,7 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
             floaterSceneSize = sceneSize
             guard model.isRemovingFloaters, keptGeneration == generation else { return }
             guard !splats.isEmpty else {
-                model.showCropNotice("No splats here")
+                model.showCropNotice(String(localized: "No splats here"))
                 return
             }
             setFloaterSelection(SplatViewerFloaterBrush.toggled(floaterSelection, by: splats))
@@ -1198,7 +1198,7 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
             guard let detector = await detectorForKept(), model.isRemovingFloaters else { return }
             let selection = floaterSelection.union(detector.floaterSplats)
             guard selection.count > floaterSelection.count else {
-                model.showCropNotice("No more floaters found")
+                model.showCropNotice(String(localized: "No more floaters found"))
                 return
             }
             setFloaterSelection(selection)
@@ -1221,9 +1221,9 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
             floaterUndo.append((selection, true))
             commitEdits()
         case .unchanged:
-            model.showCropNotice("Nothing to remove here")
+            model.showCropNotice(String(localized: "Nothing to remove here"))
         case .emptied:
-            model.showCropNotice("That would remove every splat")
+            model.showCropNotice(String(localized: "That would remove every splat"))
         }
     }
 

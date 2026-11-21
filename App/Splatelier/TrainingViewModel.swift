@@ -782,10 +782,10 @@ final class TrainingViewModel: ObservableObject {
                     outcome = .completed(
                         objURL: objURL, vertexCount: mesh.vertexCount, triangleCount: mesh.triangleCount)
                 } catch {
-                    outcome = .failed("Couldn't write the OBJ: \(error)")
+                    outcome = .failed(String(localized: "Couldn't write the OBJ: \(String(describing: error))"))
                 }
             } else {
-                outcome = .failed("Couldn't reconstruct a surface")
+                outcome = .failed(String(localized: "Couldn't reconstruct a surface"))
             }
             logHandler(String(format: "[timing] mesh(app) = %.2fs", Date().timeIntervalSince(startTime)))
             try? logHandle?.close()
@@ -986,10 +986,10 @@ final class TrainingViewModel: ObservableObject {
     /// timings: intake 18%, poses 47%, depth 33%), `label` the stage that follows, `seconds` its
     /// usual length.
     private static let preStages: [(marker: String, fraction: Double, label: String, seconds: Double)] = [
-        ("[timing] intake(", 0.18, "Estimating camera poses", 10),
-        ("[timing] BA+geomrefine", 0.65, "Building depth maps", 8),
-        ("[timing] MVS(total)", 0.97, "Preparing to train", 2),
-        ("[timing] === pre-training total", 1.0, "Training", 1),
+        ("[timing] intake(", 0.18, String(localized: "Estimating camera poses"), 10),
+        ("[timing] BA+geomrefine", 0.65, String(localized: "Building depth maps"), 8),
+        ("[timing] MVS(total)", 0.97, String(localized: "Preparing to train"), 2),
+        ("[timing] === pre-training total", 1.0, String(localized: "Training"), 1),
     ]
 
     private func beginProgress(includesPreprocessing: Bool) {
@@ -1038,13 +1038,13 @@ final class TrainingViewModel: ObservableObject {
             // Mesh: creeps toward the end over its usual ten seconds.
             let dt = Date().timeIntervalSince(start)
             overallProgress = trainEnd + (1 - trainEnd) * 0.95 * (1 - exp(-dt / 6))
-            progressLabel = "Generating mesh"
+            progressLabel = String(localized: "Generating mesh")
             progressDetail = ""
         } else if case .running(let iter, _) = phase {
             if trainingStarted {
                 let total = Double(Swift.max(1, runningTotalIterations))
                 overallProgress = preEnd + (trainEnd - preEnd) * Swift.min(1, Double(iter) / total)
-                progressLabel = "Training"
+                progressLabel = String(localized: "Training")
                 // The App Store build shows the percentage alone; the iteration count is for development.
                 progressDetail = AppFeatures.developerInfo ? "iter \(iter) / \(runningTotalIterations)" : ""
             } else {
@@ -1056,7 +1056,7 @@ final class TrainingViewModel: ObservableObject {
                 let inStage = 0.9 * (1 - exp(-dt / Swift.max(1, usual)))
                 overallProgress = preEnd * (floor + (ceil - floor) * inStage)
                 progressLabel = preMarkersSeen == 0
-                    ? "Reading the frames" : Self.preStages[preMarkersSeen - 1].label
+                    ? String(localized: "Reading the frames") : Self.preStages[preMarkersSeen - 1].label
                 progressDetail = ""
             }
         }

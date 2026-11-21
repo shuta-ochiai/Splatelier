@@ -24,9 +24,9 @@ enum SplatViewerCropShape: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .box: "Box"
-        case .sphere: "Sphere"
-        case .lasso: "Lasso"
+        case .box: String(localized: "Box")
+        case .sphere: String(localized: "Sphere")
+        case .lasso: String(localized: "Lasso")
         }
     }
 

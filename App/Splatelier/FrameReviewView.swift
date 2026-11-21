@@ -127,7 +127,7 @@ private struct EnlargedPagerView: View {
             .ignoresSafeArea()
 
             HStack {
-                Text("frame \(currentReview.index)" + (currentReview.kept ? "" : " (excluded)"))
+                Text(currentReview.kept ? "frame \(currentReview.index)" : "frame \(currentReview.index) (excluded)")
                     .font(.headline)
                     .foregroundStyle(currentReview.kept ? .white : .red)
                 Text("\(selection + 1)/\(reviews.count)")
@@ -150,10 +150,10 @@ private struct EnlargedPagerView: View {
 private func blurReasonLabels(_ reasons: [String]) -> String {
     reasons.map {
         switch $0 {
-        case "blur": return "Blur"
-        case "localblur": return "Local blur"
-        case "motionblur": return "Motion blur"
-        case "exposure": return "Exposure"
+        case "blur": return String(localized: "Blur")
+        case "localblur": return String(localized: "Local blur")
+        case "motionblur": return String(localized: "Motion blur")
+        case "exposure": return String(localized: "Exposure")
         default: return $0
         }
     }.joined(separator: "+")
