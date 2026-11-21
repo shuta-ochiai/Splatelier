@@ -24,6 +24,16 @@ struct GuideSequence {
         ["loop", "cool", "angles", "subjects", "turn", "light", "slow", "pivot"],
     ]
 
+    /// The clip's video in the app's language: guide_<name>_ja.mp4 when the app runs in Japanese
+    /// (the captions are drawn into the videos), else guide_<name>.mp4.
+    static func url(for clip: String, bundle: Bundle = .main) -> URL? {
+        if bundle.preferredLocalizations.first == "ja",
+           let url = bundle.url(forResource: "guide_\(clip)_ja", withExtension: "mp4") {
+            return url
+        }
+        return bundle.url(forResource: "guide_\(clip)", withExtension: "mp4")
+    }
+
     private static let lastSetKey = "guideLastSet"
     private static let lastClipKey = "guideLastClip"
 
@@ -184,8 +194,7 @@ private struct GuideSequencePlayer: UIViewRepresentable {
         }
 
         private func makeItem(at i: Int) -> AVPlayerItem? {
-            guard let url = Bundle.main.url(forResource: "guide_\(clip(at: i))", withExtension: "mp4")
-            else { return nil }
+            guard let url = GuideSequence.url(for: clip(at: i)) else { return nil }
             let item = AVPlayerItem(url: url)
             entry[ObjectIdentifier(item)] = i
             return item

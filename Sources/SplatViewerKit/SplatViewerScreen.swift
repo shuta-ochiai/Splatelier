@@ -114,7 +114,7 @@ public struct SplatViewerScreen: View {
         shareItems: [SplatViewerShareItem] = [],
         cropExport: SplatViewerCropExport? = nil,
         onTrainMore: (() -> Void)? = nil,
-        trainMoreMessage: String = "Training continues from this result.",
+        trainMoreMessage: String = String(localized: "Training continues from this result."),
         onRename: ((String) -> Void)? = nil
     ) {
         _model = StateObject(wrappedValue: SplatViewerModel(cropExport: cropExport, sceneRotation: sceneRotation))
@@ -135,7 +135,7 @@ public struct SplatViewerScreen: View {
     }
 
     private static func fileName(_ url: URL?) -> String {
-        url?.deletingPathExtension().lastPathComponent ?? "Viewer"
+        url?.deletingPathExtension().lastPathComponent ?? String(localized: "Viewer")
     }
 
     public var body: some View {
@@ -210,7 +210,7 @@ public struct SplatViewerScreen: View {
                 guard let stored = try onImportCAD?(result.get()) else { return }
                 model.onLoadCAD?(stored)
             } catch {
-                model.setCADLoadError("Couldn't import the CAD model: \(error.localizedDescription)")
+                model.setCADLoadError(String(localized: "Couldn't import the CAD model: \(error.localizedDescription)"))
             }
         }
         .confirmationDialog("Remove the CAD model?", isPresented: $confirmingCADRemoval, titleVisibility: .visible) {
@@ -367,10 +367,13 @@ public struct SplatViewerScreen: View {
             #endif
         }
         .padding(16)
-        .frame(minWidth: 260)
+        // A set width, with the details wrapping below it: sized to its text alone, the popover
+        // grows to the longest line (a Japanese sentence has no spaces to break at), then cuts
+        // the lines off at the screen's edge.
+        .frame(width: 320, alignment: .leading)
     }
 
-    private func hintRow(_ symbol: String, _ title: String, _ detail: String) -> some View {
+    private func hintRow(_ symbol: String, _ title: LocalizedStringKey, _ detail: LocalizedStringKey) -> some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: symbol)
                 .frame(width: 22)
@@ -378,6 +381,7 @@ public struct SplatViewerScreen: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(title).font(.subheadline.weight(.semibold))
                 Text(detail).font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -413,7 +417,7 @@ public struct SplatViewerScreen: View {
                 .padding(16)
                 .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
         case .empty:
-            status(symbol: "cube.transparent", title: "No splats", detail: "This file has no Gaussians to show")
+            status(symbol: "cube.transparent", title: "No splats", detail: String(localized: "This file has no Gaussians to show"))
         case .failed(let msg):
             status(symbol: "exclamationmark.triangle", title: "Couldn't load", detail: msg)
         case .loaded:
@@ -667,7 +671,7 @@ public struct SplatViewerScreen: View {
                 .opacity(disabled ? 0.35 : 1)
                 Divider().frame(height: 18)
             }
-            cadIconButton("Remove", systemImage: "trash", tint: .red) {
+            cadIconButton(String(localized: "Remove"), systemImage: "trash", tint: .red) {
                 confirmingCADRemoval = true
             }
         }
@@ -686,7 +690,7 @@ public struct SplatViewerScreen: View {
                 }
                 Divider().frame(height: 18)
             }
-            cadIconButton("Reset orientation", systemImage: "arrow.uturn.backward") {
+            cadIconButton(String(localized: "Reset orientation"), systemImage: "arrow.uturn.backward") {
                 model.resetSceneRotation()
             }
             .disabled(!model.isSceneTurned)
@@ -699,10 +703,10 @@ public struct SplatViewerScreen: View {
 
     private static func title(of turn: SplatViewerSceneTurn) -> String {
         switch turn {
-        case .rotateLeft: "Rotate left 90°"
-        case .rotateRight: "Rotate right 90°"
-        case .tipForward: "Tip toward you 90°"
-        case .tipBack: "Tip away 90°"
+        case .rotateLeft: String(localized: "Rotate left 90°")
+        case .rotateRight: String(localized: "Rotate right 90°")
+        case .tipForward: String(localized: "Tip toward you 90°")
+        case .tipBack: String(localized: "Tip away 90°")
         }
     }
 
@@ -737,10 +741,10 @@ public struct SplatViewerScreen: View {
 
     private static func title(of turn: SplatViewerCADTurn) -> String {
         switch turn {
-        case .left: "Turn left 90°"
-        case .right: "Turn right 90°"
-        case .layDown: "Lay on side"
-        case .resetRotation: "Reset rotation"
+        case .left: String(localized: "Turn left 90°")
+        case .right: String(localized: "Turn right 90°")
+        case .layDown: String(localized: "Lay on side")
+        case .resetRotation: String(localized: "Reset rotation")
         }
     }
 
@@ -787,13 +791,13 @@ public struct SplatViewerScreen: View {
 
     private var measureHint: String {
         #if os(iOS)
-        let action = "Tap"
+        let start = String(localized: "Tap to place the start point")
+        let end = String(localized: "Tap to place the end point")
         #else
-        let action = "Click"
+        let start = String(localized: "Click to place the start point")
+        let end = String(localized: "Click to place the end point")
         #endif
-        return model.measurePoints.count.isMultiple(of: 2)
-            ? "\(action) to place the start point"
-            : "\(action) to place the end point"
+        return model.measurePoints.count.isMultiple(of: 2) ? start : end
     }
 
     /// Crop-mode controls: the hint, the shape and keep/remove pickers, and Apply with Undo and
@@ -811,8 +815,8 @@ public struct SplatViewerScreen: View {
                 selection: Binding(get: { model.cropShape }, set: { model.setCropShape($0) }))
             SplatViewerSegmentedChoice(
                 options: [
-                    (true, "Keep inside", "square.dashed.inset.filled"),
-                    (false, "Remove inside", "square.dashed"),
+                    (true, String(localized: "Keep inside"), "square.dashed.inset.filled"),
+                    (false, String(localized: "Remove inside"), "square.dashed"),
                 ],
                 selection: $model.cropKeepsInside)
             if let notice = model.cropNotice {
@@ -971,9 +975,9 @@ public struct SplatViewerScreen: View {
 
     private var floaterHint: String {
         #if os(iOS)
-        "Tap a floater to select it"
+        String(localized: "Tap a floater to select it")
         #else
-        "Click a floater to select it"
+        String(localized: "Click a floater to select it")
         #endif
     }
 
@@ -982,7 +986,7 @@ public struct SplatViewerScreen: View {
 
     /// On / off capsule button (filled = on). Used for measure mode.
     private func toggleCapsule(
-        _ title: String, systemImage: String, isOn: Bool, action: @escaping () -> Void
+        _ title: LocalizedStringKey, systemImage: String, isOn: Bool, action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
             Label(title, systemImage: systemImage)
@@ -997,7 +1001,7 @@ public struct SplatViewerScreen: View {
         .buttonStyle(.plain)
     }
 
-    private func status(symbol: String, title: String, detail: String) -> some View {
+    private func status(symbol: String, title: LocalizedStringKey, detail: String) -> some View {
         VStack(spacing: 8) {
             Image(systemName: symbol).font(.largeTitle).foregroundStyle(.secondary)
             Text(title).font(.headline)

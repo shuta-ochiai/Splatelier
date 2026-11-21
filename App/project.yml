@@ -1,6 +1,10 @@
 name: Splatelier
 options:
-  developmentLanguage: ja
+  # The app is written in English (the source strings), with a Japanese translation in
+  # Splatelier/Localizable.xcstrings and Splatelier/InfoPlist.xcstrings. SplatViewerKit's strings
+  # are looked up in the main bundle, so they are in the app's catalog too (Xcode does not add them
+  # there by itself). The capture guide clips have Japanese versions, guide_*_ja.mp4.
+  developmentLanguage: en
   createIntermediateGroups: true
   deploymentTarget:
     iOS: "18.0"

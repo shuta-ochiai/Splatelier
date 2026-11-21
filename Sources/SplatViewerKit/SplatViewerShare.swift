@@ -93,7 +93,7 @@ final class SplatViewerSharePreparer: ObservableObject {
             } catch is CancellationError {
                 // The user cancelled; the result, if any, is dropped.
             } catch {
-                self?.errorMessage = "Couldn't prepare \(title): \(error.localizedDescription)"
+                self?.errorMessage = String(localized: "Couldn't prepare \(title): \(error.localizedDescription)")
             }
             self?.preparing = nil
         }

@@ -184,7 +184,7 @@ struct CaptureView: View {
         }
         return AnyView(
             VStack(alignment: .leading, spacing: 8) {
-                Label(storedName.isEmpty ? "Saved capture" : storedName, systemImage: "flask")
+                Label(storedName.isEmpty ? String(localized: "Saved capture") : storedName, systemImage: "flask")
                     .font(.headline)
                 FrameQualityLine(trainer: trainer, frameCount: storedFrameCount)
             }
@@ -259,7 +259,7 @@ struct CaptureView: View {
 
     private var liveHUD: some View {
         HStack(spacing: 16) {
-            hudItem(label: "Tracking", value: vm.diagnostics.trackingStateDescription)
+            hudItem(label: "Tracking", value: Self.trackingLabel(vm.diagnostics.trackingStateDescription))
             hudItem(label: "Frames", value: "\(vm.diagnostics.keptFrameCount)/\(vm.maxFrames)",
                     highlight: vm.diagnostics.keptFrameCount >= vm.maxFrames)
             hudItem(label: "Time", value: formatCaptureTime(vm.captureElapsedSec))
@@ -280,7 +280,7 @@ struct CaptureView: View {
 
     /// `highlight` colors the value orange (e.g. the frame cap is reached and new frames are no
     /// longer kept).
-    private func hudItem(label: String, value: String, highlight: Bool = false) -> some View {
+    private func hudItem(label: LocalizedStringKey, value: String, highlight: Bool = false) -> some View {
         VStack(spacing: 2) {
             Text(label).font(.caption2).foregroundStyle(.secondary)
             Text(value).font(.caption.monospacedDigit().bold())
@@ -350,18 +350,32 @@ struct CaptureView: View {
     /// fine. The state strings come from ARKitCaptureSession: "normal", "notAvailable",
     /// "limited(.excessiveMotion)", "limited(.insufficientFeatures)", "limited(.initializing)",
     /// "limited(.relocalizing)", "limited(.other)", and "idle" before any frame.
+    /// The live HUD's short word for the tracking state (the same strings as `trackingWarning`).
+    static func trackingLabel(_ state: String) -> String {
+        switch state {
+        case "normal": return String(localized: "Normal")
+        case "idle": return String(localized: "Idle")
+        case "notAvailable": return String(localized: "Not available")
+        case "limited(.excessiveMotion)": return String(localized: "Too fast")
+        case "limited(.insufficientFeatures)": return String(localized: "Low detail")
+        case "limited(.initializing)": return String(localized: "Starting")
+        case "limited(.relocalizing)": return String(localized: "Relocating")
+        default: return state.hasPrefix("limited") ? String(localized: "Limited") : state
+        }
+    }
+
     static func trackingWarning(_ state: String) -> String? {
         switch state {
         case "normal", "idle": return nil
-        case "notAvailable": return "Tracking was not available when you stopped"
-        case "limited(.excessiveMotion)": return "Tracking was limited by fast motion when you stopped"
+        case "notAvailable": return String(localized: "Tracking was not available when you stopped")
+        case "limited(.excessiveMotion)": return String(localized: "Tracking was limited by fast motion when you stopped")
         case "limited(.insufficientFeatures)":
-            return "Tracking was limited by too little detail when you stopped"
-        case "limited(.initializing)": return "Tracking was still starting when you stopped"
-        case "limited(.relocalizing)": return "Tracking was recovering its position when you stopped"
+            return String(localized: "Tracking was limited by too little detail when you stopped")
+        case "limited(.initializing)": return String(localized: "Tracking was still starting when you stopped")
+        case "limited(.relocalizing)": return String(localized: "Tracking was recovering its position when you stopped")
         default:
             // "limited(.other)", or a message the capture session reported in this field.
-            return state.hasPrefix("limited") ? "Tracking was limited when you stopped" : nil
+            return state.hasPrefix("limited") ? String(localized: "Tracking was limited when you stopped") : nil
         }
     }
 
@@ -605,11 +619,11 @@ struct CaptureView: View {
     /// button, SwiftUI adds a system Cancel button, and the prompt must be answered either way.
     private func presentResumePrompt() {
         let alert = UIAlertController(
-            title: "Unfinished capture found",
-            message: "The last training run stopped before finishing. The capture data is still here, so you can train it again from the start.",
+            title: String(localized: "Unfinished capture found"),
+            message: String(localized: "The last training run stopped before finishing. The capture data is still here, so you can train it again from the start."),
             preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "Restart", style: .default) { _ in resumePendingDataset() })
-        alert.addAction(UIAlertAction(title: "Discard", style: .destructive) { _ in discardPendingDataset() })
+        alert.addAction(UIAlertAction(title: String(localized: "Restart"), style: .default) { _ in resumePendingDataset() })
+        alert.addAction(UIAlertAction(title: String(localized: "Discard"), style: .destructive) { _ in discardPendingDataset() })
         let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
         var top = scene?.windows.first(where: \.isKeyWindow)?.rootViewController
         while let presented = top?.presentedViewController { top = presented }
@@ -766,7 +780,7 @@ struct CaptureView: View {
             } catch {
                 await MainActor.run {
                     zippingValsetURL = nil
-                    recoveryError = "Couldn't compress for sharing: \(error)"
+                    recoveryError = String(localized: "Couldn't compress for sharing: \(String(describing: error))")
                 }
             }
         }
@@ -796,7 +810,7 @@ struct CaptureView: View {
         case .failure(let err): throw err
         case .none:
             throw NSError(domain: "splatelier", code: -1,
-                          userInfo: [NSLocalizedDescriptionKey: "Couldn't create the zip file"])
+                          userInfo: [NSLocalizedDescriptionKey: String(localized: "Couldn't create the zip file")])
         }
     }
 
@@ -845,21 +859,21 @@ private struct FrameQualityLine: View {
     }
 
     static func headline(_ quality: TrainingViewModel.FrameQualitySummary?, frameCount: Int) -> String {
-        guard let quality else { return "\(frameCount.formatted()) frames · checking them…" }
-        guard quality.checked else { return "\(quality.total.formatted()) frames" }
+        guard let quality else { return String(localized: "\(frameCount.formatted()) frames · checking them…") }
+        guard quality.checked else { return String(localized: "\(quality.total.formatted()) frames") }
         if quality.kept == quality.total {
-            return "All \(quality.total.formatted()) frames are sharp and well exposed"
+            return String(localized: "All \(quality.total.formatted()) frames are sharp and well exposed")
         }
-        return "\(quality.kept.formatted()) of \(quality.total.formatted()) frames are sharp and well exposed"
+        return String(localized: "\(quality.kept.formatted()) of \(quality.total.formatted()) frames are sharp and well exposed")
     }
 
     /// Why frames are left out, or nil when none are. A frame can count under both reasons.
     static func detail(_ quality: TrainingViewModel.FrameQualitySummary?) -> String? {
         guard let quality, quality.checked, quality.kept < quality.total else { return nil }
         var reasons: [String] = []
-        if quality.blurred > 0 { reasons.append("\(quality.blurred.formatted()) blurred") }
-        if quality.badlyExposed > 0 { reasons.append("\(quality.badlyExposed.formatted()) too dark or bright") }
-        return reasons.isEmpty ? nil : "Left out of training: " + reasons.joined(separator: " · ")
+        if quality.blurred > 0 { reasons.append(String(localized: "\(quality.blurred.formatted()) blurred")) }
+        if quality.badlyExposed > 0 { reasons.append(String(localized: "\(quality.badlyExposed.formatted()) too dark or bright")) }
+        return reasons.isEmpty ? nil : String(localized: "Left out of training: \(reasons.joined(separator: " · "))")
     }
 }
 

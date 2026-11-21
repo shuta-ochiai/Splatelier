@@ -1,0 +1,2723 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "%@ and all its files (%@) will be deleted. This can't be undone." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ と関連ファイル（%2$@）をすべて削除します。この操作は取り消せません。"
+          }
+        }
+      }
+    },
+    "%@ blurred" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ブレ %@ 枚"
+          }
+        }
+      }
+    },
+    "%@ frames" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ フレーム"
+          }
+        }
+      }
+    },
+    "%@ frames · checking them…" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ フレーム · 確認中…"
+          }
+        }
+      }
+    },
+    "%@ of %@ frames are sharp and well exposed" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%2$@ フレーム中 %1$@ フレームがブレがなく適正露出です"
+          }
+        }
+      }
+    },
+    "%@ splats selected" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 個のスプラットを選択中"
+          }
+        }
+      }
+    },
+    "%@ too dark or bright" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暗すぎ・明るすぎ %@ 枚"
+          }
+        }
+      }
+    },
+    "%@ will be permanently deleted. This can't be undone." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ を完全に削除します。この操作は取り消せません。"
+          }
+        }
+      }
+    },
+    "%@ · %lld frames" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ · %2$lld フレーム"
+          }
+        }
+      }
+    },
+    "%lld" : {
+      "shouldTranslate" : false
+    },
+    "%lld ARKit points" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ARKit 点 %lld 個"
+          }
+        }
+      }
+    },
+    "%lld frames" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld フレーム"
+          }
+        }
+      }
+    },
+    "%lld frames / %lld used for training · %lld excluded" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld フレーム / 学習に使用 %2$lld · 除外 %3$lld"
+          }
+        }
+      }
+    },
+    "%lld gaussians" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld ガウシアン"
+          }
+        }
+      }
+    },
+    "%lld of %lld captures have a mesh." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%2$lld 件中 %1$lld 件のキャプチャにメッシュがあります。"
+          }
+        }
+      }
+    },
+    "%lld selected" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 件選択中"
+          }
+        }
+      }
+    },
+    "%lld · %lldk" : {
+      "shouldTranslate" : false
+    },
+    "%lld%%" : {
+      "shouldTranslate" : false
+    },
+    "%lld/%lld" : {
+      "shouldTranslate" : false
+    },
+    "100k" : {
+      "shouldTranslate" : false
+    },
+    "150k" : {
+      "shouldTranslate" : false
+    },
+    "300k" : {
+      "shouldTranslate" : false
+    },
+    "600k" : {
+      "shouldTranslate" : false
+    },
+    "About" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このアプリについて"
+          }
+        }
+      }
+    },
+    "About %@" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ について"
+          }
+        }
+      }
+    },
+    "Add CAD model" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CAD モデルを追加"
+          }
+        }
+      }
+    },
+    "All %@ frames are sharp and well exposed" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ フレームすべてがブレがなく適正露出です"
+          }
+        }
+      }
+    },
+    "All related files (%@) will also be deleted. This can't be undone." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "関連ファイル（%@）もすべて削除します。この操作は取り消せません。"
+          }
+        }
+      }
+    },
+    "Apply" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "適用"
+          }
+        }
+      }
+    },
+    "Auto Detect" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自動検出"
+          }
+        }
+      }
+    },
+    "Background" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "背景"
+          }
+        }
+      }
+    },
+    "Black point" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "黒レベル"
+          }
+        }
+      }
+    },
+    "Blur" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ブレ"
+          }
+        }
+      }
+    },
+    "Box" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ボックス"
+          }
+        }
+      }
+    },
+    "Brightness" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "明るさ"
+          }
+        }
+      }
+    },
+    "Building depth maps" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "深度マップを作成中"
+          }
+        }
+      }
+    },
+    "CAD model" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CAD モデル"
+          }
+        }
+      }
+    },
+    "Cameras" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "カメラ"
+          }
+        }
+      }
+    },
+    "Cancel" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "キャンセル"
+          }
+        }
+      }
+    },
+    "Capture" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "撮影"
+          }
+        }
+      }
+    },
+    "Capture complete" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "撮影完了"
+          }
+        }
+      }
+    },
+    "Capture, train and view 3D Gaussian splats on your %@." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この %@ で 3D ガウシアンスプラッティングを撮影・学習・表示できます。"
+          }
+        }
+      }
+    },
+    "Change the tint, temperature, saturation, brightness, levels and opacity. The splats update as you move a slider. Reset returns to the original colours." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "色味、色温度、彩度、明るさ、レベル、不透明度を変更します。スライダーを動かすとスプラットに反映されます。「リセット」で元の色に戻ります。"
+          }
+        }
+      }
+    },
+    "Checking…" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "確認中…"
+          }
+        }
+      }
+    },
+    "Clear all" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "すべて消去"
+          }
+        }
+      }
+    },
+    "Clear selection" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選択を解除"
+          }
+        }
+      }
+    },
+    "Close" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "閉じる"
+          }
+        }
+      }
+    },
+    "Color" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "色"
+          }
+        }
+      }
+    },
+    "Couldn't compress for sharing: %@" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "共有用に圧縮できませんでした: %@"
+          }
+        }
+      }
+    },
+    "Couldn't create the zip file" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "zip ファイルを作成できませんでした"
+          }
+        }
+      }
+    },
+    "Couldn't import the CAD model: %@" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CAD モデルを読み込めませんでした: %@"
+          }
+        }
+      }
+    },
+    "Couldn't load" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "読み込めませんでした"
+          }
+        }
+      }
+    },
+    "Couldn't load the CAD model: %@" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CAD モデルを読み込めませんでした: %@"
+          }
+        }
+      }
+    },
+    "Couldn't load the mesh: %@" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "メッシュを読み込めませんでした: %@"
+          }
+        }
+      }
+    },
+    "Couldn't prepare %@: %@" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ を準備できませんでした: %2$@"
+          }
+        }
+      }
+    },
+    "Couldn't rebuild the splats" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スプラットを再構築できませんでした"
+          }
+        }
+      }
+    },
+    "Couldn't reconstruct a surface" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "表面を再構成できませんでした"
+          }
+        }
+      }
+    },
+    "Couldn't resume" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "再開できませんでした"
+          }
+        }
+      }
+    },
+    "Couldn't save: %@" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存できませんでした: %@"
+          }
+        }
+      }
+    },
+    "Couldn't share" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "共有できませんでした"
+          }
+        }
+      }
+    },
+    "Couldn't start the capture: %@" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "撮影を開始できませんでした: %@"
+          }
+        }
+      }
+    },
+    "Couldn't stop the capture: %@" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "撮影を停止できませんでした: %@"
+          }
+        }
+      }
+    },
+    "Couldn't write the OBJ: %@" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OBJ を書き出せませんでした: %@"
+          }
+        }
+      }
+    },
+    "Crop" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切り抜き"
+          }
+        }
+      }
+    },
+    "Default name" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "日時のまま"
+          }
+        }
+      }
+    },
+    "Delete" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "削除"
+          }
+        }
+      }
+    },
+    "Delete %lld captures?" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 件のキャプチャを削除しますか？"
+          }
+        }
+      }
+    },
+    "Delete this capture?" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このキャプチャを削除しますか？"
+          }
+        }
+      }
+    },
+    "Delete this validation dataset?" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この検証データセットを削除しますか？"
+          }
+        }
+      }
+    },
+    "Deselect all" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "すべて選択解除"
+          }
+        }
+      }
+    },
+    "Discard" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "破棄"
+          }
+        }
+      }
+    },
+    "Discard and go back" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "破棄して戻る"
+          }
+        }
+      }
+    },
+    "Discard capture" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "キャプチャを破棄"
+          }
+        }
+      }
+    },
+    "Discard this capture?" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このキャプチャを破棄しますか？"
+          }
+        }
+      }
+    },
+    "Display" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "表示"
+          }
+        }
+      }
+    },
+    "Display, then Orient, then turn the model until it stands upright" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「表示」→「向き」の順に選び、モデルがまっすぐ立つまで回します"
+          }
+        }
+      }
+    },
+    "Done" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "完了"
+          }
+        }
+      }
+    },
+    "Double-tap a point to zoom in and orbit around it" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "点をダブルタップするとズームしてその点を中心に回ります"
+          }
+        }
+      }
+    },
+    "Draft" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "簡易検証"
+          }
+        }
+      }
+    },
+    "Drag a handle to resize or move the box or sphere, or a ring to turn the box about one axis. Drag anywhere else to rotate the view. Keep inside or remove inside decides which splats are kept." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ハンドルをドラッグするとボックスや球の大きさ・位置を変え、リングをドラッグするとボックスを1軸まわりに回します。それ以外の場所をドラッグすると視点が回ります。「内側を残す」「内側を削除」でどちらのスプラットを残すかを決めます。"
+          }
+        }
+      }
+    },
+    "Drag it to move it; it settles on floors and tables. Twist with 2 fingers or drag a ring to turn it; the buttons below turn it by quarter turns" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ドラッグで移動し、床や机の上に置かれます。2本指でひねるかリングをドラッグすると回転し、下のボタンで90°ずつ回せます"
+          }
+        }
+      }
+    },
+    "Drag with 1 finger" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1本指でドラッグ"
+          }
+        }
+      }
+    },
+    "Drag with 2 fingers" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "2本指でドラッグ"
+          }
+        }
+      }
+    },
+    "Draw a loop around what to crop" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切り抜く範囲を囲んでください"
+          }
+        }
+      }
+    },
+    "Edit" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "編集"
+          }
+        }
+      }
+    },
+    "Edit, then Crop, then drag a handle of the box or sphere" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「編集」→「切り抜き」の順に選び、ボックスか球のハンドルをドラッグします"
+          }
+        }
+      }
+    },
+    "Edit, then Floaters, then tap a floater or Auto Detect" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「編集」→「浮遊ノイズ」の順に選び、浮遊ノイズをタップするか「自動検出」を押します"
+          }
+        }
+      }
+    },
+    "Edited splats" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "編集したスプラット"
+          }
+        }
+      }
+    },
+    "Elapsed" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "経過"
+          }
+        }
+      }
+    },
+    "Estimating camera poses" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "カメラ位置を推定中"
+          }
+        }
+      }
+    },
+    "Excluded: %@" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "除外: %@"
+          }
+        }
+      }
+    },
+    "Exposure" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "露出"
+          }
+        }
+      }
+    },
+    "Finalising…" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仕上げ中…"
+          }
+        }
+      }
+    },
+    "Finish" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "終了"
+          }
+        }
+      }
+    },
+    "Floaters" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "浮遊ノイズ"
+          }
+        }
+      }
+    },
+    "Focus" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "注視"
+          }
+        }
+      }
+    },
+    "Format" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "形式"
+          }
+        }
+      }
+    },
+    "Frames" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "フレーム"
+          }
+        }
+      }
+    },
+    "GPU active" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "GPU 使用中"
+          }
+        }
+      }
+    },
+    "GPU peak" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "GPU ピーク"
+          }
+        }
+      }
+    },
+    "Gaussian cap" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ガウシアン上限"
+          }
+        }
+      }
+    },
+    "Gaussian splats" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ガウシアンスプラッティング"
+          }
+        }
+      }
+    },
+    "Generating mesh" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "メッシュを生成中"
+          }
+        }
+      }
+    },
+    "High" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "高品質"
+          }
+        }
+      }
+    },
+    "Hint" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ヒント"
+          }
+        }
+      }
+    },
+    "Idle" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "待機中"
+          }
+        }
+      }
+    },
+    "If left empty, the date and time are used." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "空欄の場合は日時が名前になります。"
+          }
+        }
+      }
+    },
+    "If you haven't trained it or used \"Save for validation\", the capture data will be lost. This can't be undone." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "学習や「検証用に保存」をしていない場合、撮影データは失われます。この操作は取り消せません。"
+          }
+        }
+      }
+    },
+    "If you haven't trained it, the capture data will be lost. This can't be undone." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "学習していない場合、撮影データは失われます。この操作は取り消せません。"
+          }
+        }
+      }
+    },
+    "Import" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "読み込む"
+          }
+        }
+      }
+    },
+    "Imported files that are not a PLY are shared as they are." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "読み込んだ PLY 以外のファイルはそのまま共有されます。"
+          }
+        }
+      }
+    },
+    "It leaves this scene. Import can bring a CAD model in again." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このシーンから外れます。「読み込む」でまた CAD モデルを追加できます。"
+          }
+        }
+      }
+    },
+    "Iterations" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "反復回数"
+          }
+        }
+      }
+    },
+    "Iterations and Gaussian cap" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "反復回数とガウシアン上限"
+          }
+        }
+      }
+    },
+    "Keep inside" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "内側を残す"
+          }
+        }
+      }
+    },
+    "Keep moving around the subject" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "被写体のまわりを動き続けてください"
+          }
+        }
+      }
+    },
+    "Keep the app open" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アプリを開いたままにしてください"
+          }
+        }
+      }
+    },
+    "Lasso" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "なげなわ"
+          }
+        }
+      }
+    },
+    "Lay on side" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "横に倒す"
+          }
+        }
+      }
+    },
+    "Left out of training: %@" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "学習から除外: %@"
+          }
+        }
+      }
+    },
+    "LiDAR depth (experimental)" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "LiDAR 深度（実験的な機能）"
+          }
+        }
+      }
+    },
+    "Library" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ライブラリ"
+          }
+        }
+      }
+    },
+    "License text not found." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ライセンス文が見つかりません。"
+          }
+        }
+      }
+    },
+    "Limited" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "制限あり"
+          }
+        }
+      }
+    },
+    "Loading the CAD model…" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CAD モデルを読み込み中…"
+          }
+        }
+      }
+    },
+    "Loading…" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "読み込み中…"
+          }
+        }
+      }
+    },
+    "Local blur" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "部分的なブレ"
+          }
+        }
+      }
+    },
+    "Log" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ログ"
+          }
+        }
+      }
+    },
+    "Low Power Mode is on, which slows training down. Turn it off in Settings > Battery." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "低電力モードがオンのため学習が遅くなります。「設定」>「バッテリー」でオフにしてください。"
+          }
+        }
+      }
+    },
+    "Low detail" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "特徴が少ない"
+          }
+        }
+      }
+    },
+    "Maximum number of Gaussians. Training starts from 5/6 of it (initial points beyond that are thinned out) and grows to it by splitting along edges. Lower is lighter and runs cooler; higher keeps more detail." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ガウシアンの最大数です。学習はこの 5/6 から始まり（それを超える初期点は間引かれます）、エッジに沿った分割で上限まで増えます。少ないほど軽く発熱も抑えられ、多いほど細部が残ります。"
+          }
+        }
+      }
+    },
+    "Measure" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "計測"
+          }
+        }
+      }
+    },
+    "Mesh" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "メッシュ"
+          }
+        }
+      }
+    },
+    "Mesh (OBJ)" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "メッシュ（OBJ）"
+          }
+        }
+      }
+    },
+    "Mesh generation failed: %@" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "メッシュの生成に失敗しました: %@"
+          }
+        }
+      }
+    },
+    "Mesh: %lld triangles (open View to see it or share it)" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "メッシュ: %lld 三角形（「表示」で確認・共有できます）"
+          }
+        }
+      }
+    },
+    "More actions" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "その他の操作"
+          }
+        }
+      }
+    },
+    "Motion blur" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "モーションブラー"
+          }
+        }
+      }
+    },
+    "Name" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "名前"
+          }
+        }
+      }
+    },
+    "Name (optional)" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "名前（任意）"
+          }
+        }
+      }
+    },
+    "Name this capture" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "キャプチャに名前を付ける"
+          }
+        }
+      }
+    },
+    "New capture" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新しく撮影"
+          }
+        }
+      }
+    },
+    "No captures yet" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "キャプチャはまだありません"
+          }
+        }
+      }
+    },
+    "No more floaters found" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "これ以上の浮遊ノイズは見つかりません"
+          }
+        }
+      }
+    },
+    "No splats" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スプラットがありません"
+          }
+        }
+      }
+    },
+    "No splats here" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ここにスプラットはありません"
+          }
+        }
+      }
+    },
+    "No splats inside the loop" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "囲んだ範囲にスプラットがありません"
+          }
+        }
+      }
+    },
+    "No surface here" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ここに表面がありません"
+          }
+        }
+      }
+    },
+    "None of these captures has a mesh." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "どのキャプチャにもメッシュがありません。"
+          }
+        }
+      }
+    },
+    "None selected" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未選択"
+          }
+        }
+      }
+    },
+    "Normal" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "良好"
+          }
+        }
+      }
+    },
+    "Not available" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "利用不可"
+          }
+        }
+      }
+    },
+    "Nothing to remove here" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ここに削除するものはありません"
+          }
+        }
+      }
+    },
+    "OK" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OK"
+          }
+        }
+      }
+    },
+    "Opacity" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不透明度"
+          }
+        }
+      }
+    },
+    "Open source licenses" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "オープンソースライセンス"
+          }
+        }
+      }
+    },
+    "Orient" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "向き"
+          }
+        }
+      }
+    },
+    "PLY (as trained)" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PLY（学習結果のまま）"
+          }
+        }
+      }
+    },
+    "PLY as trained (.ply)" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "学習結果のままの PLY（.ply）"
+          }
+        }
+      }
+    },
+    "PLY, logs, etc." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PLY、ログなど"
+          }
+        }
+      }
+    },
+    "PLY, mesh, logs, etc." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PLY、メッシュ、ログなど"
+          }
+        }
+      }
+    },
+    "Pan" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移動"
+          }
+        }
+      }
+    },
+    "Paused until the device cools down" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本体が冷えるまで一時停止中"
+          }
+        }
+      }
+    },
+    "Pinch" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ピンチ"
+          }
+        }
+      }
+    },
+    "Preparing %@…" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ を準備中…"
+          }
+        }
+      }
+    },
+    "Preparing %lld of %lld…" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "準備中 %1$lld / %2$lld…"
+          }
+        }
+      }
+    },
+    "Preparing to train" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "学習の準備中"
+          }
+        }
+      }
+    },
+    "Preparing…" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "準備中…"
+          }
+        }
+      }
+    },
+    "Preview of the model" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "モデルのプレビュー"
+          }
+        }
+      }
+    },
+    "Reading the frames" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "フレームを読み込み中"
+          }
+        }
+      }
+    },
+    "Red = excluded (with reason) · Yellow = rescued%@ (kept to meet the minimum frame count)" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "赤 = 除外（理由付き）· 黄 = 救済%@（最低フレーム数を満たすため残したもの）"
+          }
+        }
+      }
+    },
+    "Rejected" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "除外"
+          }
+        }
+      }
+    },
+    "Relocalization observed" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "再ローカライズが発生しました"
+          }
+        }
+      }
+    },
+    "Relocating" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "位置を復帰中"
+          }
+        }
+      }
+    },
+    "Remove" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "外す"
+          }
+        }
+      }
+    },
+    "Remove CAD model" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CAD モデルを外す"
+          }
+        }
+      }
+    },
+    "Remove inside" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "内側を削除"
+          }
+        }
+      }
+    },
+    "Remove the CAD model?" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CAD モデルを外しますか？"
+          }
+        }
+      }
+    },
+    "Rename" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "名前を変更"
+          }
+        }
+      }
+    },
+    "Replace CAD model" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CAD モデルを置き換え"
+          }
+        }
+      }
+    },
+    "Report a problem" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "問題を報告"
+          }
+        }
+      }
+    },
+    "Rescued" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "救済"
+          }
+        }
+      }
+    },
+    "Rescued (flagged %@, kept to meet the minimum frame count)" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "救済（%@ と判定、最低フレーム数を満たすため残しました）"
+          }
+        }
+      }
+    },
+    "Reset" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "リセット"
+          }
+        }
+      }
+    },
+    "Reset orientation" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "向きをリセット"
+          }
+        }
+      }
+    },
+    "Reset rotation" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "回転をリセット"
+          }
+        }
+      }
+    },
+    "Restart" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "やり直す"
+          }
+        }
+      }
+    },
+    "Retry" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "やり直す"
+          }
+        }
+      }
+    },
+    "Review frames" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "フレームを確認"
+          }
+        }
+      }
+    },
+    "Rotate" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "回転"
+          }
+        }
+      }
+    },
+    "Rotate left 90°" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "左に90°回転"
+          }
+        }
+      }
+    },
+    "Rotate right 90°" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "右に90°回転"
+          }
+        }
+      }
+    },
+    "Saturation" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "彩度"
+          }
+        }
+      }
+    },
+    "Save" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存"
+          }
+        }
+      }
+    },
+    "Save for validation" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "検証用に保存"
+          }
+        }
+      }
+    },
+    "Saved" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存しました"
+          }
+        }
+      }
+    },
+    "Saved capture" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存したキャプチャ"
+          }
+        }
+      }
+    },
+    "Saving…" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存中…"
+          }
+        }
+      }
+    },
+    "Seed points" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "シード点"
+          }
+        }
+      }
+    },
+    "Select" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選択"
+          }
+        }
+      }
+    },
+    "Select all" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "すべて選択"
+          }
+        }
+      }
+    },
+    "Selection size" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選択範囲の大きさ"
+          }
+        }
+      }
+    },
+    "Set name" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "名前を設定"
+          }
+        }
+      }
+    },
+    "Shaded" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "陰影"
+          }
+        }
+      }
+    },
+    "Share" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "共有"
+          }
+        }
+      }
+    },
+    "Share %lld captures" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 件のキャプチャを共有"
+          }
+        }
+      }
+    },
+    "Show GS, Seed or Mesh first" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "先に GS、シード、メッシュのいずれかを表示してください"
+          }
+        }
+      }
+    },
+    "Show the splats first" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "先にスプラットを表示してください"
+          }
+        }
+      }
+    },
+    "Slowed down: the device is hot" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本体が熱いため速度を落としています"
+          }
+        }
+      }
+    },
+    "Source code on GitHub" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "GitHub のソースコード"
+          }
+        }
+      }
+    },
+    "Sphere" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "球"
+          }
+        }
+      }
+    },
+    "Splatelier" : {
+      "shouldTranslate" : false
+    },
+    "Splats" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スプラット"
+          }
+        }
+      }
+    },
+    "Standard" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "標準"
+          }
+        }
+      }
+    },
+    "Start capture" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "撮影を開始"
+          }
+        }
+      }
+    },
+    "Start training" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "学習を開始"
+          }
+        }
+      }
+    },
+    "Starting" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "開始中"
+          }
+        }
+      }
+    },
+    "Stop" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止"
+          }
+        }
+      }
+    },
+    "Tap a floater to select it" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "浮遊ノイズをタップして選択"
+          }
+        }
+      }
+    },
+    "Tap a floater to select the splats around it (orange); Selection size sets how far. Tap orange to unselect, or ⊗ to clear. Auto Detect selects the small floaters apart from the scene for you. Delete removes the orange splats. Undo takes back the last step, a selection or a delete; Reset brings back every splat." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "浮遊ノイズをタップすると周囲のスプラットが選択されます（オレンジ）。範囲は「選択範囲の大きさ」で決まります。オレンジをタップすると選択解除、⊗ で全解除です。「自動検出」はシーンから離れた小さな浮遊ノイズを選択します。「削除」でオレンジのスプラットを消します。「取り消す」は直前の選択や削除を戻し、「リセット」ですべてのスプラットが戻ります。"
+          }
+        }
+      }
+    },
+    "Tap to place the end point" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タップして終点を置く"
+          }
+        }
+      }
+    },
+    "Tap to place the start point" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タップして始点を置く"
+          }
+        }
+      }
+    },
+    "Temperature" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "色温度"
+          }
+        }
+      }
+    },
+    "That would remove every splat" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "すべてのスプラットが消えてしまいます"
+          }
+        }
+      }
+    },
+    "The last training run stopped before finishing. The capture data is still here, so you can train it again from the start." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "前回の学習は完了前に止まりました。撮影データは残っているので、最初から学習し直せます。"
+          }
+        }
+      }
+    },
+    "The picture appears when training starts" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "学習が始まると画像が表示されます"
+          }
+        }
+      }
+    },
+    "The result is already saved. Name it now, or keep the date and time as its name. You can rename it any time in the viewer or the Library." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "結果は保存済みです。ここで名前を付けるか、日時のままにできます。名前はビューアやライブラリでいつでも変更できます。"
+          }
+        }
+      }
+    },
+    "The wide-angle loop closure's models include DINOv3, used under the DINOv3 License. Extracting, decompiling or reverse-engineering the bundled models is not permitted." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "広角ループクロージャのモデルには DINOv3 が含まれており、DINOv3 License のもとで使用しています。同梱モデルの抽出、逆コンパイル、リバースエンジニアリングは禁止されています。"
+          }
+        }
+      }
+    },
+    "There is nothing to share." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "共有するものがありません。"
+          }
+        }
+      }
+    },
+    "This capture has no mesh." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このキャプチャにはメッシュがありません。"
+          }
+        }
+      }
+    },
+    "This file has no Gaussians to show" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このファイルには表示できるガウシアンがありません"
+          }
+        }
+      }
+    },
+    "Time" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "時間"
+          }
+        }
+      }
+    },
+    "Tint" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "色味"
+          }
+        }
+      }
+    },
+    "Tip away 90°" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "奥に90°倒す"
+          }
+        }
+      }
+    },
+    "Tip toward you 90°" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "手前に90°倒す"
+          }
+        }
+      }
+    },
+    "Too fast" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "動きが速い"
+          }
+        }
+      }
+    },
+    "Total %lld iter" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "合計 %lld 反復"
+          }
+        }
+      }
+    },
+    "Tracking" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "トラッキング"
+          }
+        }
+      }
+    },
+    "Tracking was limited by fast motion when you stopped" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止時、動きが速すぎてトラッキングが制限されていました"
+          }
+        }
+      }
+    },
+    "Tracking was limited by too little detail when you stopped" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止時、特徴が少なくトラッキングが制限されていました"
+          }
+        }
+      }
+    },
+    "Tracking was limited when you stopped" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止時、トラッキングが制限されていました"
+          }
+        }
+      }
+    },
+    "Tracking was not available when you stopped" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止時、トラッキングが利用できませんでした"
+          }
+        }
+      }
+    },
+    "Tracking was recovering its position when you stopped" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止時、トラッキングが位置を復帰中でした"
+          }
+        }
+      }
+    },
+    "Tracking was still starting when you stopped" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止時、トラッキングがまだ開始中でした"
+          }
+        }
+      }
+    },
+    "Train" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "学習"
+          }
+        }
+      }
+    },
+    "Train more" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "追加で学習"
+          }
+        }
+      }
+    },
+    "Train more?" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "追加で学習しますか？"
+          }
+        }
+      }
+    },
+    "Train on saved captures as often as you like (for comparing settings)." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存したキャプチャで何度でも学習できます（設定の比較用）。"
+          }
+        }
+      }
+    },
+    "Trained scenes appear here.\nTap Import at the top right to add .ply / .splat / .spz files." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "学習したシーンがここに表示されます。\n右上の「読み込む」から .ply / .splat / .spz ファイルを追加できます。"
+          }
+        }
+      }
+    },
+    "Training" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "学習中"
+          }
+        }
+      }
+    },
+    "Training complete" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "学習完了"
+          }
+        }
+      }
+    },
+    "Training continues from this result." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この結果から学習を続けます。"
+          }
+        }
+      }
+    },
+    "Training failed" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "学習に失敗しました"
+          }
+        }
+      }
+    },
+    "Training needs an A14 chip or newer: iPhone 12 or later, or iPad Air (4th generation), iPad (10th generation), iPad mini (6th generation), an iPad with an M chip, or later. You can still open splat files in the Library." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "学習には A14 チップ以降が必要です（iPhone 12 以降、iPad Air（第4世代）、iPad（第10世代）、iPad mini（第6世代）、M チップ搭載の iPad、またはそれ以降）。スプラットファイルはライブラリで開けます。"
+          }
+        }
+      }
+    },
+    "Training settings" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "学習の設定"
+          }
+        }
+      }
+    },
+    "Trains %lld more iterations on this result, then rebuilds the mesh. It takes a minute or two, and the result is replaced." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この結果をさらに %lld 反復学習し、メッシュを作り直します。1〜2分かかり、結果は置き換わります。"
+          }
+        }
+      }
+    },
+    "Trains %lld more iterations on this result. It takes a minute or two, and the result is replaced." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この結果をさらに %lld 反復学習します。1〜2分かかり、結果は置き換わります。"
+          }
+        }
+      }
+    },
+    "Turn left 90°" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "左に90°回す"
+          }
+        }
+      }
+    },
+    "Turn on Measure, then tap 2 points" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「計測」をオンにして2点をタップします"
+          }
+        }
+      }
+    },
+    "Turn right 90°" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "右に90°回す"
+          }
+        }
+      }
+    },
+    "Undo" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り消す"
+          }
+        }
+      }
+    },
+    "Unfinished capture found" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未完了のキャプチャがあります"
+          }
+        }
+      }
+    },
+    "Validation dataset name" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "検証データセットの名前"
+          }
+        }
+      }
+    },
+    "Validation datasets" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "検証データセット"
+          }
+        }
+      }
+    },
+    "View" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "表示"
+          }
+        }
+      }
+    },
+    "View training settings" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "学習の設定を表示"
+          }
+        }
+      }
+    },
+    "Viewer" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ビューア"
+          }
+        }
+      }
+    },
+    "White point" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "白レベル"
+          }
+        }
+      }
+    },
+    "White point must be above black point. The grade is not applied until it is." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "白レベルは黒レベルより上にしてください。そうなるまで補正は適用されません。"
+          }
+        }
+      }
+    },
+    "Wide-angle loop closure (experimental)" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "広角ループクロージャ（実験的な機能）"
+          }
+        }
+      }
+    },
+    "Working" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "処理中"
+          }
+        }
+      }
+    },
+    "Your captured frames" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "撮影したフレーム"
+          }
+        }
+      }
+    },
+    "Zoom" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ズーム"
+          }
+        }
+      }
+    },
+    "e.g. Sofa test (optional)" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "例: ソファのテスト（任意）"
+          }
+        }
+      }
+    },
+    "final loss %@" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最終 loss %@"
+          }
+        }
+      }
+    },
+    "frame %lld" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "フレーム %lld"
+          }
+        }
+      }
+    },
+    "frame %lld (excluded)" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "フレーム %lld（除外）"
+          }
+        }
+      }
+    },
+    "loss %@" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "loss %@"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

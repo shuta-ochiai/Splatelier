@@ -4,7 +4,8 @@
 # Renders the app's animations and writes them where the app bundles them:
 #
 #   launch  App/Splatelier/launch.mp4          shown after the OS launch screen
-#   guides  App/Splatelier/Guides/guide_*.mp4  capture tips on the Capture screen
+#   guides  App/Splatelier/Guides/guide_*.mp4  capture tips on the Capture screen (guide_<scene>.mp4
+#           in English, guide_<scene>_ja.mp4 in Japanese)
 #
 # Usage: scripts/media/build_media.sh [launch|guides|all]   (default: all)
 #
@@ -48,8 +49,11 @@ fi
 if [ "$TARGET" = guides ] || [ "$TARGET" = all ]; then
     mkdir -p "$APP_DIR/Guides"
     for scene in slow turn angles pivot loop light subjects cool; do
-        mkdir -p "$WORK/$scene"
-        "$PYTHON" "$SCRIPT_DIR/render_guides.py" "$WORK/$scene" "$scene"
-        encode "$WORK/$scene" 60 16 "$APP_DIR/Guides/guide_$scene.mp4"
+        for lang in en ja; do
+            suffix=""; [ "$lang" = en ] || suffix="_$lang"
+            mkdir -p "$WORK/$scene$suffix"
+            "$PYTHON" "$SCRIPT_DIR/render_guides.py" "$WORK/$scene$suffix" "$scene" --lang "$lang"
+            encode "$WORK/$scene$suffix" 60 16 "$APP_DIR/Guides/guide_$scene$suffix.mp4"
+        done
     done
 fi

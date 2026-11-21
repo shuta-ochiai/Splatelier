@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
-"""Splatelier capture-guide loops. The English title and captions are drawn into the frames.
+"""Splatelier capture-guide loops. The title and captions are drawn into the frames, in English or
+(--lang ja) in Japanese.
 
   slow   : move slowly  (fast pass = sparse, blurred captures / slow = dense)
   turn   : avoid sudden turns (jerk = tracking lost / smooth orbit = locked)
   angles : capture from many heights (low -> mid -> high orbit)
   cool   : keep the phone cool for training (close other apps / unplug / take the case off)
 
-usage: python3 render_guides.py OUT_DIR {slow,turn,angles,pivot,loop,light,subjects,cool} [--only N]
+usage: python3 render_guides.py OUT_DIR {slow,turn,angles,pivot,loop,light,subjects,cool} [--lang ja] [--only N]
 """
 import argparse, math, os, random
 import numpy as np
@@ -17,6 +18,7 @@ ap = argparse.ArgumentParser()
 ap.add_argument("out"); ap.add_argument("scene")
 ap.add_argument("--fps", type=int, default=60)
 ap.add_argument("--only", type=float, default=-1, help="render a single time (s)")
+ap.add_argument("--lang", choices=["en", "ja"], default="en", help="language of the title and captions")
 args = ap.parse_args()
 os.makedirs(args.out, exist_ok=True)
 
@@ -57,11 +59,53 @@ F_TITLE = _vf("Lora-VF.ttf", 64, 600)
 F_CAP = _vf("NotoSansJP-VF.ttf", 37, 500)
 F_SUB = _vf("NotoSansJP-VF.ttf", 30, 500)
 F_LAB = _vf("NotoSansJP-VF.ttf", 25, 500)
+# Lora has no Japanese glyphs, so Japanese titles are set in a bold Noto Sans JP.
+F_TITLE_JA = _vf("NotoSansJP-VF.ttf", 54, 700)
+
+# The Japanese text, keyed by the English it replaces (--lang ja). Every string drawn with
+# text_abs must be here.
+JA = {
+    "Move slowly": "ゆっくり動かす",
+    "Moving fast leaves blurry gaps": "速く動かすとブレや画像の重なりが少なくなり\nモデルの見た目が悪化します",
+    "Slow passes overlap every frame": "ゆっくりならフレームが重なり合います",
+    "No sudden turns": "急に向きを変えない",
+    "A quick swing makes tracking lose its place": "急に振ると位置を見失います",
+    "Keep the subject centered as you circle": "被写体を中央に保ったまま回りましょう",
+    "Look up": "見上げる", "Eye level": "真っ直ぐ", "Look down": "見下ろす", "Overhead": "真上",
+    "Cover every angle": "あらゆる角度から撮る",
+    "Light up every dot around the subject": "満遍なく撮影しましょう",
+    "Walk around, don't pivot": "その場で回らず、歩いて回る",
+    "Turning in place adds no depth": "その場で回っても奥行きは得られません",
+    "Walk around so each shot sees a new side": "歩いて回り、毎回違う面を撮影しましょう",
+    "Start": "スタート",
+    "Finish where you started": "撮影開始地点に戻って終了する",
+    "Small errors add up as you go around": "一周するうちに小さなずれが積み重なります",
+    "Closing the loop snaps errors back into place": "輪を閉じるとずれが元に戻ります",
+    "Soft, even light": "やわらかく均一な光で",
+    "Harsh sun and your own shadow leave blotches": "強い日差しや自分の影はムラになります",
+    "Overcast or indirect light keeps colors even": "曇りや間接光なら色が均一になります",
+    "Transparent": "透明", "Plain": "無地", "Textured": "模様あり",
+    "Some subjects are harder": "苦手な被写体もあります",
+    "Glass and mirrors confuse tracking": "ガラスや鏡はトラッキングを惑わせます",
+    "Plain, featureless surfaces give nothing to track": "無地で特徴のない面は追う手がかりがありません",
+    "Pick subjects with texture and detail": "模様や凹凸のある被写体を選びましょう",
+    "Keep it cool": "本体を熱くしない",
+    "Close other apps before training": "学習の前にほかのアプリを閉じる",
+    "Unplug the charger while it trains": "学習中は充電器を外す",
+    "Take the case off to shed heat": "ケースを外して熱を逃がす",
+}
 
 def text_abs(d, x, y, txt, font, c, a):
     """y in final-frame pixels (no OY offset)"""
     if a <= 0: return
-    d.text((x * SS, y * SS), txt, font=font, fill=col(c, a), anchor="mm")
+    if args.lang == "ja":
+        txt = JA[txt]
+        if font is F_TITLE: font = F_TITLE_JA
+    # A "\n" splits the text into lines, centered as a block on y.
+    lines = txt.split("\n")
+    for i, line in enumerate(lines):
+        ly = y + (i - (len(lines) - 1) / 2) * font.size / SS * 1.4
+        d.text((x * SS, ly * SS), line, font=font, fill=col(c, a), anchor="mm")
 def col(c, a): return tuple(c) + (int(255 * clamp(a)),)
 
 

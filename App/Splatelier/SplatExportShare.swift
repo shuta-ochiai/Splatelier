@@ -14,14 +14,14 @@ enum SplatExportShare {
 
     /// The Share entry for the capture's GS file. Only a PLY can be converted (it is read back in
     /// full); anything else, such as an imported .spz, is shared as it is.
-    static func item(for url: URL, title: String = "Gaussian splats") -> SplatViewerShareItem {
+    static func item(for url: URL, title: String = String(localized: "Gaussian splats")) -> SplatViewerShareItem {
         guard url.pathExtension.lowercased() == "ply" else {
             return SplatViewerShareItem(title: title, systemImage: "cube.fill", url: url)
         }
         // A capture written Y-up before captures were turned goes out turned, like newer ones.
         var options = PLYAxes.isLegacyYUp(url)
-            ? [SplatViewerShareItem.Option(title: "PLY (as trained)") { try await export(url, as: .ply) }]
-            : [SplatViewerShareItem.Option(title: "PLY (as trained)", url: url)]
+            ? [SplatViewerShareItem.Option(title: String(localized: "PLY (as trained)")) { try await export(url, as: .ply) }]
+            : [SplatViewerShareItem.Option(title: String(localized: "PLY (as trained)"), url: url)]
         for format in convertedFormats {
             options.append(SplatViewerShareItem.Option(title: format.displayName) {
                 try await export(url, as: format)
@@ -36,7 +36,7 @@ enum SplatExportShare {
     /// The picker's wording: the format and the file extension it gives.
     static func label(for format: SplatExportFormat) -> String {
         switch format {
-        case .ply: return "PLY as trained (.ply)"
+        case .ply: return String(localized: "PLY as trained (.ply)")
         default: return "\(format.displayName) (.\(format.fileExtension))"
         }
     }

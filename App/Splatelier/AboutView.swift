@@ -94,8 +94,7 @@ struct AboutView: View {
                     Text("Open source licenses")
                 } footer: {
                     if TrainingViewModel.bundledWideLoopModels != nil {
-                        Text("The wide-angle loop closure's models include DINOv3, used under the DINOv3 License. "
-                             + "Extracting, decompiling or reverse-engineering the bundled models is not permitted.")
+                        Text("The wide-angle loop closure's models include DINOv3, used under the DINOv3 License. Extracting, decompiling or reverse-engineering the bundled models is not permitted.")
                     }
                 }
             }
@@ -137,7 +136,7 @@ private struct LicenseTextView: View {
             .flatMap { try? String(contentsOf: $0, encoding: .utf8) }
             ?? Bundle.main.url(forResource: entry.file, withExtension: "txt")
                 .flatMap { try? String(contentsOf: $0, encoding: .utf8) }
-            ?? "License text not found."
+            ?? String(localized: "License text not found.")
     }
 
     var body: some View {

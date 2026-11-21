@@ -80,7 +80,7 @@ struct ShareOptionsSheet: View {
                     Button(action: start) {
                         HStack(spacing: 8) {
                             if preparing != nil { ProgressView() }
-                            Text(preparing ?? "Share")
+                            Text(preparing ?? String(localized: "Share"))
                                 .fontWeight(.semibold)
                         }
                         .frame(maxWidth: .infinity)
@@ -94,7 +94,7 @@ struct ShareOptionsSheet: View {
                 }
             }
             .appBackground()
-            .navigationTitle(entries.count == 1 ? entries[0].name : "Share \(entries.count) captures")
+            .navigationTitle(entries.count == 1 ? entries[0].name : String(localized: "Share \(entries.count) captures"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -124,14 +124,14 @@ struct ShareOptionsSheet: View {
         guard canShare else { return }
         let format = format, withSplats = includeSplats, withMesh = includeMesh
         let entries = entries
-        preparing = "Preparing…"
+        preparing = String(localized: "Preparing…")
         task = Task {
             do {
                 let dir = try SplatExportShare.makeExportDirectory()
                 var urls: [URL] = []
                 for (i, entry) in entries.enumerated() {
                     try Task.checkCancellation()
-                    if entries.count > 1 { preparing = "Preparing \(i + 1) of \(entries.count)…" }
+                    if entries.count > 1 { preparing = String(localized: "Preparing \(i + 1) of \(entries.count)…") }
                     if withSplats {
                         urls.append(try await SplatExportShare.file(for: entry.splatURL, as: format, in: dir))
                     }
@@ -140,7 +140,7 @@ struct ShareOptionsSheet: View {
                 try Task.checkCancellation()
                 preparing = nil
                 if urls.isEmpty {
-                    errorMessage = "There is nothing to share."
+                    errorMessage = String(localized: "There is nothing to share.")
                 } else {
                     prepared = PreparedFiles(urls: urls)
                 }

@@ -77,7 +77,7 @@ final class CaptureViewModel: ObservableObject {
             startPolling()
             refresh()
         } catch {
-            errorMessage = "start failed: \(error)"
+            errorMessage = String(localized: "Couldn't start the capture: \(String(describing: error))")
         }
     }
 
@@ -88,7 +88,7 @@ final class CaptureViewModel: ObservableObject {
             let scene = try await session.stopCapture()
             self.capturedScene = scene
         } catch {
-            errorMessage = "stop failed: \(error)"
+            errorMessage = String(localized: "Couldn't stop the capture: \(String(describing: error))")
         }
         refresh()
     }
