@@ -796,12 +796,13 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
     }
 
     /// Start of a drag (normalized coordinates). Grabs the nearest handle within reach. false leaves
-    /// the drag to the camera. In Lasso every drag draws a new loop, so the camera is moved with two
-    /// fingers there.
+    /// the drag to the camera. In Lasso a drag draws a new loop until one selects something; then
+    /// it turns the view (see `SplatViewerModel.lassoDraws`).
     func beginCropDrag(normalized point: SIMD2<Float>) -> Bool {
         if beginCADDrag(normalized: point) { return true }
         guard model.isCropping, isLoaded else { return false }
         if model.cropShape == .lasso {
+            guard model.lassoDraws else { return false }
             lassoTouch = point
             model.cropProjection.setLasso([point])
             return true
@@ -908,6 +909,7 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
         switch cropEdits.apply({ isInside($0) == keepsInside }) {
         case .applied:
             commitCropEdits()
+            model.lassoDraws = true
         case .unchanged:
             model.showCropNotice(String(localized: "Nothing to remove here"))
         case .emptied:
@@ -926,6 +928,7 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
             return
         }
         floaterSelection = selection
+        model.lassoDraws = false
         commitEdits()
     }
 
@@ -1073,10 +1076,16 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
     private static let floaterPickOpacity: Float = 0.05
 
     /// Opening floater mode works out the scene size, so the brush circle can be drawn before the
-    /// first tap. Leaving it drops the selection and its Undo steps (a delete stays undoable from the
-    /// Crop panel, as a crop is).
+    /// first tap. Opening and leaving it both drop the selection and its Undo steps (a delete stays
+    /// undoable from the Crop panel, as a crop is): Crop's orange selection, which shares
+    /// `floaterSelection`, isn't carried over into floater mode.
     private func floaterModeChanged(isOn: Bool) {
         guard isLoaded else { return }
+        if !floaterSelection.isEmpty || !floaterUndo.isEmpty {
+            floaterUndo = []
+            floaterSelection = []
+            commitEdits()
+        }
         if isOn {
             guard floaterSceneSize == nil else { return }
             let source = gsSourcePoints
@@ -1087,10 +1096,6 @@ final class SplatViewerRenderer: NSObject, MTKViewDelegate {
                 floaterSceneSize = size
                 requestRedraw()
             }
-        } else {
-            floaterUndo = []
-            floaterSelection = []
-            commitEdits()
         }
     }
 

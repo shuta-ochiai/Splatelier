@@ -411,6 +411,7 @@ final class SplatViewerModel: ObservableObject {
         didSet {
             if isCropping { isMeasuring = false; isColoring = false; isRemovingFloaters = false; isCADSelected = false; isOrienting = false }
             if !isCropping { cropProjection.setLasso([]) }
+            lassoDraws = true
             onCropSelectionRefresh?()
             onNeedsRedraw?()
         }
@@ -419,6 +420,10 @@ final class SplatViewerModel: ObservableObject {
     @Published private(set) var cropShape: SplatViewerCropShape = .box
     /// true keeps the splats inside the region; false removes them.
     @Published var cropKeepsInside = true
+    /// In Lasso, whether a one-finger drag draws a loop (true) or turns the view (false). A loop
+    /// that selects something switches to turning, so the selection can be checked from the side;
+    /// picking Lasso again, Draw again, or applying the crop switches back to drawing.
+    @Published var lassoDraws = true
     /// Colour panel open. Measure, Color, Crop and Floaters are never on together: opening one
     /// closes the others, so only one panel sits over the view.
     @Published var isColoring = false {
@@ -454,6 +459,7 @@ final class SplatViewerModel: ObservableObject {
 
     /// Changes the shape of the region, keeping its center and size.
     func setCropShape(_ shape: SplatViewerCropShape) {
+        if shape == .lasso { lassoDraws = true }
         guard shape != cropShape else { return }
         cropShape = shape
         cropRegion = cropRegion?.converted(to: shape)

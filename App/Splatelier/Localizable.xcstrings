@@ -755,6 +755,16 @@
         }
       }
     },
+    "Drag to turn the view and check the selection. To draw another loop, tap Draw again." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ドラッグで視点を回して、選択範囲を確認できます。もう一度囲むときは「囲み直す」を押してください。"
+          }
+        }
+      }
+    },
     "Drag with 1 finger" : {
       "localizations" : {
         "ja" : {
@@ -781,6 +791,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "切り抜く範囲を囲んでください"
+          }
+        }
+      }
+    },
+    "Draw a loop around what to crop. Then a drag turns the view, so you can check it from the side." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切り抜く範囲を指でなぞって囲んでください。囲んだあとはドラッグで視点を回して確認できます。"
+          }
+        }
+      }
+    },
+    "Draw again" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "囲み直す"
           }
         }
       }
