@@ -474,10 +474,20 @@ public struct SplatViewerScreen: View {
     /// covers the view, so a switch couldn't be seen taking effect.
     private var displayButton: some View {
         toggleCapsule("Display", systemImage: "eye", isOn: showDisplayOptions) {
-            showDisplayOptions.toggle()
-            // Closing Display closes Orient with it, so its band isn't left behind without its row.
-            if !showDisplayOptions { model.isOrienting = false }
+            if showDisplayOptions {
+                closeDisplay()
+            } else {
+                closeEdit()
+                model.isMeasuring = false
+                showDisplayOptions = true
+            }
         }
+    }
+
+    /// Closing Display closes Orient with it, so its band isn't left behind without its row.
+    private func closeDisplay() {
+        showDisplayOptions = false
+        model.isOrienting = false
     }
 
     /// One line: Orient, then the layer switches, so the model stays in view while they are
@@ -567,6 +577,11 @@ public struct SplatViewerScreen: View {
                 editButton
             }
             toggleCapsule("Measure", systemImage: "ruler", isOn: model.isMeasuring) {
+                // Display, Edit and Measure open one at a time: opening one closes the others.
+                if !model.isMeasuring {
+                    closeDisplay()
+                    closeEdit()
+                }
                 model.isMeasuring.toggle()
             }
             Button {
@@ -586,14 +601,22 @@ public struct SplatViewerScreen: View {
     /// bar. A plain button rather than a Menu: the menu's list opened offset from the button.
     private var editButton: some View {
         toggleCapsule("Edit", systemImage: "slider.horizontal.3", isOn: showEditOptions) {
-            showEditOptions.toggle()
-            // Closing Edit closes what it opened, so no panel is left behind without its row.
-            if !showEditOptions {
-                model.isCropping = false
-                model.isColoring = false
-                model.isRemovingFloaters = false
+            if showEditOptions {
+                closeEdit()
+            } else {
+                closeDisplay()
+                model.isMeasuring = false
+                showEditOptions = true
             }
         }
+    }
+
+    /// Closing Edit closes what it opened, so no panel is left behind without its row.
+    private func closeEdit() {
+        showEditOptions = false
+        model.isCropping = false
+        model.isColoring = false
+        model.isRemovingFloaters = false
     }
 
     /// Color, Crop and Floaters, shown once Edit is on. Color opens its panel; Crop turns on the
@@ -819,6 +842,9 @@ public struct SplatViewerScreen: View {
                     (false, String(localized: "Remove inside"), "square.dashed"),
                 ],
                 selection: $model.cropKeepsInside)
+            if model.cropShape == .lasso {
+                lassoHint
+            }
             if let notice = model.cropNotice {
                 Text(notice)
                     .font(.caption)
@@ -971,6 +997,28 @@ public struct SplatViewerScreen: View {
         }
         .font(.caption)
         .lineLimit(1)
+    }
+
+    /// What a one-finger drag does in Lasso now, with Draw again once a loop has selected something.
+    private var lassoHint: some View {
+        HStack(spacing: 6) {
+            Text(model.lassoDraws
+                 ? "Draw a loop around what to crop. Then a drag turns the view, so you can check it from the side."
+                 : "Drag to turn the view and check the selection. To draw another loop, tap Draw again.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if !model.lassoDraws {
+                Button {
+                    model.lassoDraws = true
+                } label: {
+                    Label("Draw again", systemImage: "lasso")
+                }
+                .buttonStyle(SplatViewerPanelButtonStyle())
+                .fixedSize()
+            }
+        }
     }
 
     private var floaterHint: String {
