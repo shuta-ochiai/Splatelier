@@ -11,14 +11,18 @@ fileprivate enum SplatChunk_sortByLocality_Constants {
 extension SplatChunk {
     /// Sorts splats (and SH coefficients) by their position's Morton code to improve memory locality: adjacent splats in memory will tend to be
     /// nearby in space as well. This helps improve the tiling/cache performance of the vertex shader.
-    func sortByLocality() {
+    ///
+    /// LOCAL PATCH: public, and returns the order: slot `i` now holds the splat that was at index
+    /// `result[i]`, or nil when nothing moved. Lets a caller update single splats in place later.
+    @discardableResult
+    public func sortByLocality() -> [Int]? {
         let splatBuffer = splats
-        guard splatBuffer.count > 3 else { return }
+        guard splatBuffer.count > 3 else { return nil }
 
         let (minBounds, maxBounds) = splatBuffer.bounds(withinSigmaMultiple: SplatChunk_sortByLocality_Constants.boundsStdDeviationsForLocalitySort)
         let boundsSize = maxBounds - minBounds
         guard boundsSize.x > 0 && boundsSize.y > 0 && boundsSize.z > 0 else {
-            return
+            return nil
         }
         let invBoundsSize = 1/boundsSize
 
@@ -64,6 +68,7 @@ extension SplatChunk {
             let coeffsPerSplat = shDegree.extraCoefficientCount * 3  // RGB per coefficient
             shBuffer.values.reorderGroupsInPlace(fromSourceIndices: sorted, groupSize: coeffsPerSplat)
         }
+        return sorted
     }
 }
 
